@@ -1,0 +1,15 @@
+# FRONTEND
+frontend/node_modules/
+frontend/dist/
+
+# BACKEND
+backend/target/
+backend/*.log
+backend/*.class
+
+# GENERAL
+.env
+
+# IDEs
+.vscode/
+.idea/
