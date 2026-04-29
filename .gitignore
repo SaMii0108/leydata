@@ -9,7 +9,19 @@ backend/*.class
 
 # GENERAL
 .env
+.env.local
+backend/.mvn/
+backend/*.jar
+backend/.classpath
+backend/.project
+backend/.settings/
 
 # IDEs
 .vscode/
 .idea/
+
+# SISTEMAS OPERATIVOS 
+.DS_Store
+
+# BBDD
+postgres_data/
