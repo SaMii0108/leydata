@@ -1,0 +1,28 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.activo    { background: var(--color-success-bg); color: var(--color-success); }
+.activo    .dot { background: var(--color-success); }
+
+.revocado  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.revocado  .dot { background: var(--color-danger); }
+
+.pendiente { background: var(--color-warning-bg); color: var(--color-warning); }
+.pendiente .dot { background: var(--color-warning); }
+
+.expirado  { background: var(--color-border);     color: var(--color-text-secondary); }
+.expirado  .dot { background: var(--color-text-muted); }

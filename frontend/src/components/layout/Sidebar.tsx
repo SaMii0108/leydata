@@ -1,0 +1,147 @@
+import type { ReactElement } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../features/auth/AuthContext';
+import type { Role } from '../../features/auth/mockUsers';
+import styles from './Sidebar.module.css';
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: ReactElement;
+  roles: Role[];
+}
+
+const IconGrid = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+    <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+  </svg>
+);
+const IconList = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+  </svg>
+);
+const IconUsers = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>
+);
+const IconPalette = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/>
+    <circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/>
+    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+  </svg>
+);
+const IconAudit = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+    <polyline points="10 9 9 9 8 9"/>
+  </svg>
+);
+const IconShield = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+  </svg>
+);
+const IconUser = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+    <circle cx="12" cy="7" r="4"/>
+  </svg>
+);
+
+const navItems: NavItem[] = [
+  { to: '/',               label: 'Métricas Generales', icon: <IconGrid />,    roles: ['ADMIN', 'DPO'] },
+  { to: '/consentimientos', label: 'Consentimientos',   icon: <IconList />,    roles: ['ADMIN', 'DPO', 'USER'] },
+  { to: '/usuarios',       label: 'Usuarios',           icon: <IconUsers />,   roles: ['ADMIN'] },
+  { to: '/auditoria',      label: 'Auditoría',          icon: <IconAudit />,   roles: ['ADMIN', 'DPO'] },
+  { to: '/cumplimiento',   label: 'Cumplimiento Legal', icon: <IconShield />,  roles: ['ADMIN', 'DPO'] },
+  { to: '/plantillas',     label: 'Plantillas',         icon: <IconPalette />, roles: ['DPO'] },
+  { to: '/perfil',         label: 'Mi Perfil',          icon: <IconUser />,    roles: ['ADMIN', 'DPO', 'USER'] },
+];
+
+const ROLE_LABEL: Record<Role, string> = {
+  ADMIN: 'Administrador',
+  DPO: 'DPO',
+  USER: 'Usuario',
+};
+
+const ROLE_COLOR: Record<Role, string> = {
+  ADMIN: '#4361ee',
+  DPO: '#7c3aed',
+  USER: '#059669',
+};
+
+const initials = (name: string) =>
+  name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+
+const Sidebar = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const visible = navItems.filter((item) => user && item.roles.includes(user.role));
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  return (
+    <aside className={styles.sidebar}>
+      {/* Brand */}
+      <div className={styles.brand}>
+        <span className={styles.brandName}>Ley Data</span>
+        <span className={styles.brandSub}>Gestión de Privacidad</span>
+      </div>
+
+      {/* Nav */}
+      <nav className={styles.nav}>
+        {visible.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
+            className={({ isActive }) =>
+              [styles.navItem, isActive ? styles.active : ''].join(' ')
+            }
+          >
+            <span className={styles.icon}>{item.icon}</span>
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* User info */}
+      {user && (
+        <div className={styles.userPanel}>
+          <div className={styles.userRow}>
+            <span
+              className={styles.userAvatar}
+              style={{ background: ROLE_COLOR[user.role] + '22', color: ROLE_COLOR[user.role] }}
+            >
+              {initials(user.name)}
+            </span>
+            <div className={styles.userInfo}>
+              <span className={styles.userName}>{user.name}</span>
+              <span className={styles.userRole} style={{ color: ROLE_COLOR[user.role] }}>
+                {ROLE_LABEL[user.role]}
+                {user.area && ` · ${user.area}`}
+              </span>
+            </div>
+          </div>
+          <button className={styles.logoutBtn} onClick={handleLogout}>
+            Cerrar sesión
+          </button>
+        </div>
+      )}
+    </aside>
+  );
+};
+
+export default Sidebar;
