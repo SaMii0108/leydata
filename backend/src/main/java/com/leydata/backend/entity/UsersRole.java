@@ -2,10 +2,12 @@ package com.leydata.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.io.Serializable;
+import java.util.UUID;
 
 @Entity
 @Table(name = "users_role")
@@ -16,7 +18,7 @@ import java.io.Serializable;
 public class UsersRole {
 
     @EmbeddedId
-    private UsersRoleId id;
+    private UsersRoleId id = new UsersRoleId();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("userId")
@@ -29,8 +31,17 @@ public class UsersRole {
     private Role role;
 
     @Embeddable
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @EqualsAndHashCode
     public static class UsersRoleId implements Serializable {
-        private java.util.UUID userId;
-        private Integer roleId;
+
+        @Column(name = "user_id")
+        private UUID userId;
+
+        @Column(name = "role_id")
+        private UUID roleId;
     }
 }
