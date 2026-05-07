@@ -9,6 +9,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,26 +18,29 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
-    private final UsersRepository usersRepository;
+        private final UsersRepository usersRepository;
 
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        Users user = usersRepository.findByEmail(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + username));
+        @Override
+        @Transactional
+        public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+                Users user = usersRepository.findByEmail(username)
+                                .orElseThrow(() -> new UsernameNotFoundException(
+                                                "User not found with email: " + username));
 
-        List<SimpleGrantedAuthority> authorities = user.getUserRoles() == null ? List.of()
-                : user.getUserRoles().stream()
-                        .map(usersRole -> new SimpleGrantedAuthority("ROLE_" + usersRole.getRole().getCode()))
-                        .collect(Collectors.toList());
+                List<SimpleGrantedAuthority> authorities = user.getUserRoles() == null ? List.of()
+                                : user.getUserRoles().stream()
+                                                .map(usersRole -> new SimpleGrantedAuthority(
+                                                                "ROLE_" + usersRole.getRole().getCode()))
+                                                .collect(Collectors.toList());
 
-        return User.builder()
-                .username(user.getEmail())
-                .password(user.getPassword())
-                .authorities(authorities)
-                .accountExpired(false)
-                .accountLocked(false)
-                .credentialsExpired(false)
-                .disabled(!user.getActive())
-                .build();
-    }
+                return User.builder()
+                                .username(user.getEmail())
+                                .password(user.getPassword())
+                                .authorities(authorities)
+                                .accountExpired(false)
+                                .accountLocked(false)
+                                .credentialsExpired(false)
+                                .disabled(!user.getActive())
+                                .build();
+        }
 }

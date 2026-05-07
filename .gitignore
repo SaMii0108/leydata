@@ -25,3 +25,6 @@ backend/.settings/
 
 # BBDD
 postgres_data/
+
+# Git Hub
+.github/

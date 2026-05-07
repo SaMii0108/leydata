@@ -1,0 +1,17 @@
+                                                       Table "public.domains"
+   Column    |              Type              | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+-------------+--------------------------------+-----------+----------+---------+----------+-------------+--------------+-------------
+ id          | uuid                           |           | not null |         | plain    |             |              | 
+ code        | character varying(255)         |           | not null |         | extended |             |              | 
+ description | text                           |           |          |         | extended |             |              | 
+ name        | character varying(255)         |           | not null |         | extended |             |              | 
+ created_at  | timestamp(6) without time zone |           | not null |         | plain    |             |              | 
+Indexes:
+    "domains_pkey" PRIMARY KEY, btree (id)
+    "domains_code_key" UNIQUE CONSTRAINT, btree (code)
+Referenced by:
+    TABLE "user_domains" CONSTRAINT "fkc1ksynw7ga78xtxjcrff3t4dn" FOREIGN KEY (domain_id) REFERENCES domains(id)
+    TABLE "purposes" CONSTRAINT "fkhegjv30wbacykav32tbf31xem" FOREIGN KEY (domain_id) REFERENCES domains(id)
+    TABLE "purpose_requests" CONSTRAINT "fkoa2wapcy67io5cugyvscxaa7g" FOREIGN KEY (domain_id) REFERENCES domains(id)
+Access method: heap
+
