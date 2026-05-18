@@ -1,0 +1,117 @@
+.drawer {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--color-border);
+  gap: 12px;
+}
+
+.recordId {
+  font-size: var(--text-xs);
+  font-family: monospace;
+  color: var(--color-text-muted);
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.titularName {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.closeBtn:hover {
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+/* Status banner */
+.statusBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.statusHint {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Body */
+.body {
+  flex: 1;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.section {}
+
+.sectionTitle {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-muted);
+  margin: 0 0 12px;
+}
+
+/* Definition list grid */
+.grid {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px 16px;
+  margin: 0;
+}
+
+.fieldLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  align-self: start;
+  padding-top: 1px;
+}
+
+.fieldValue {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  margin: 0;
+  word-break: break-word;
+}
+
+/* Footer */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+  position: sticky;
+  bottom: 0;
+}

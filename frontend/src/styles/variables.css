@@ -1,0 +1,61 @@
+:root {
+  /* Primary — azul vívido del Figma */
+  --color-primary: #4361ee;
+  --color-primary-dark: #3451d1;
+  --color-primary-light: #eef1fd;
+
+  /* Backgrounds */
+  --color-bg: #f8f9fc;
+  --color-surface: #ffffff;
+  --color-border: #e8ecf0;
+
+  /* Text */
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+
+  /* Status */
+  --color-success: #16a34a;
+  --color-success-bg: #dcfce7;
+  --color-warning: #d97706;
+  --color-warning-bg: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-info: #0284c7;
+  --color-info-bg: #e0f2fe;
+
+  /* Chart */
+  --color-chart-granted: #22c55e;
+  --color-chart-rejected: #ef4444;
+  --color-chart-revoked: #f97316;
+
+  /* Sidebar */
+  --sidebar-width: 256px;
+  --sidebar-bg: #0f172a;
+  --sidebar-text: #94a3b8;
+  --sidebar-text-active: #ffffff;
+
+  /* Header */
+  --header-height: 72px;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+}
