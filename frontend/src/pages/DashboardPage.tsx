@@ -89,15 +89,46 @@ const ConsentChart = () => {
   );
 };
 
-// ── Card icon ──────────────────────────────────────────────────────────────
-const CardIcon = () => (
-  <div className={styles.cardIcon}>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-      <polyline points="22 4 12 14.01 9 11.01"/>
-    </svg>
-  </div>
-);
+// ── Card icons ─────────────────────────────────────────────────────────────
+const CARD_COLORS = [
+  { color: '#4361ee', bg: '#eef1fd' }, // Total — azul
+  { color: '#16a34a', bg: '#dcfce7' }, // Otorgados — verde
+  { color: '#dc2626', bg: '#fee2e2' }, // Rechazados — rojo
+  { color: '#d97706', bg: '#fef3c7' }, // Revocados — naranja
+];
+
+const CARD_ICONS = [
+  // Total — lista
+  <svg key="total" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+  </svg>,
+  // Otorgados — check
+  <svg key="otorgados" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+    <polyline points="22 4 12 14.01 9 11.01"/>
+  </svg>,
+  // Rechazados — X circle
+  <svg key="rechazados" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+  </svg>,
+  // Revocados — ban
+  <svg key="revocados" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+  </svg>,
+];
+
+const CardIcon = ({ index }: { index: number }) => {
+  const { color, bg } = CARD_COLORS[index] ?? CARD_COLORS[0];
+  return (
+    <div className={styles.cardIcon} style={{ background: bg, color }}>
+      {CARD_ICONS[index] ?? CARD_ICONS[0]}
+    </div>
+  );
+};
 
 // ── Page ───────────────────────────────────────────────────────────────────
 const DashboardPage = () => {
@@ -120,11 +151,11 @@ const DashboardPage = () => {
 
     {/* Summary cards */}
     <section className={styles.cardsGrid}>
-      {summaryCards.map((card) => (
+      {summaryCards.map((card, i) => (
         <div key={card.label} className={styles.card}>
           <div className={styles.cardTop}>
             <p className={styles.cardLabel}>{card.label}</p>
-            <CardIcon />
+            <CardIcon index={i} />
           </div>
           <p className={styles.cardValue}>{card.value.toLocaleString('es-CL')}</p>
           <div className={styles.cardBottom}>

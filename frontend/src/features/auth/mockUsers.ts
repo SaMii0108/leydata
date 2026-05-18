@@ -27,3 +27,14 @@ export type Area = typeof AREAS[number];
 
 export const findUser = (email: string, password: string): AppUser | undefined =>
   MOCK_USERS.find((u) => u.email === email && u.password === password);
+
+/** Actualiza campos de un usuario en el array (persiste durante la sesión) */
+export const updateMockUser = (id: string, updates: Partial<AppUser>) => {
+  const idx = MOCK_USERS.findIndex((u) => u.id === id);
+  if (idx !== -1) Object.assign(MOCK_USERS[idx], updates);
+};
+
+/** Agrega un nuevo usuario al array para que pueda iniciar sesión */
+export const addMockUser = (user: AppUser) => {
+  MOCK_USERS.push(user);
+};

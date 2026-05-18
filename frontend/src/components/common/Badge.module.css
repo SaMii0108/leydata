@@ -8,21 +8,13 @@
   border-radius: 20px;
 }
 
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+.icon {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
 }
 
 .activo    { background: var(--color-success-bg); color: var(--color-success); }
-.activo    .dot { background: var(--color-success); }
-
 .revocado  { background: var(--color-danger-bg);  color: var(--color-danger); }
-.revocado  .dot { background: var(--color-danger); }
-
 .pendiente { background: var(--color-warning-bg); color: var(--color-warning); }
-.pendiente .dot { background: var(--color-warning); }
-
 .expirado  { background: var(--color-border);     color: var(--color-text-secondary); }
-.expirado  .dot { background: var(--color-text-muted); }

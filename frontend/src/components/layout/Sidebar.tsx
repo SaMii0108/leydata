@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthContext';
 import type { Role } from '../../features/auth/mockUsers';
 import styles from './Sidebar.module.css';
@@ -9,6 +10,11 @@ interface NavItem {
   label: string;
   icon: ReactElement;
   roles: Role[];
+}
+
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 const IconGrid = () => (
@@ -58,7 +64,7 @@ const IconUser = () => (
 
 const navItems: NavItem[] = [
   { to: '/',               label: 'Métricas Generales', icon: <IconGrid />,    roles: ['ADMIN', 'DPO'] },
-  { to: '/consentimientos', label: 'Consentimientos',   icon: <IconList />,    roles: ['ADMIN', 'DPO', 'USER'] },
+  { to: '/consentimientos', label: 'Consentimientos',   icon: <IconList />,    roles: ['DPO', 'USER'] },
   { to: '/usuarios',       label: 'Usuarios',           icon: <IconUsers />,   roles: ['ADMIN'] },
   { to: '/auditoria',      label: 'Auditoría',          icon: <IconAudit />,   roles: ['ADMIN', 'DPO'] },
   { to: '/cumplimiento',   label: 'Cumplimiento Legal', icon: <IconShield />,  roles: ['ADMIN', 'DPO'] },
@@ -81,9 +87,17 @@ const ROLE_COLOR: Record<Role, string> = {
 const initials = (name: string) =>
   name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  // Cerrar sidebar al cambiar de ruta (móvil)
+  useEffect(() => {
+    onClose();
+    setConfirmLogout(false);
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visible = navItems.filter((item) => user && item.roles.includes(user.role));
 
@@ -93,7 +107,9 @@ const Sidebar = () => {
   };
 
   return (
-    <aside className={styles.sidebar}>
+    <>
+      {isOpen && <div className={styles.overlay} onClick={onClose} />}
+      <aside className={[styles.sidebar, isOpen ? styles.sidebarOpen : ''].join(' ')}>
       {/* Brand */}
       <div className={styles.brand}>
         <span className={styles.brandName}>Ley Data</span>
@@ -135,12 +151,23 @@ const Sidebar = () => {
               </span>
             </div>
           </div>
-          <button className={styles.logoutBtn} onClick={handleLogout}>
-            Cerrar sesión
-          </button>
+          {!confirmLogout ? (
+            <button className={styles.logoutBtn} onClick={() => setConfirmLogout(true)}>
+              Cerrar sesión
+            </button>
+          ) : (
+            <div className={styles.logoutConfirm}>
+              <span className={styles.logoutConfirmText}>¿Cerrar sesión?</span>
+              <div className={styles.logoutConfirmBtns}>
+                <button className={styles.logoutConfirmYes} onClick={handleLogout}>Sí</button>
+                <button className={styles.logoutConfirmNo} onClick={() => setConfirmLogout(false)}>No</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </aside>
+    </>
   );
 };
 

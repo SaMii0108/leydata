@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Badge from '../components/common/Badge';
 import Button from '../components/common/Button';
@@ -13,6 +13,7 @@ type SortField = Extract<keyof ConsentRecord, 'area' | 'finalidad' | 'estado' | 
 type SortDir = 'asc' | 'desc';
 
 const ALL_STATUSES: ConsentStatus[] = ['activo', 'revocado', 'pendiente', 'expirado'];
+const PAGE_SIZE = 10;
 
 const ConsentimientosPage = () => {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ const ConsentimientosPage = () => {
   const [sortField, setSortField] = useState<SortField>('fechaOtorgamiento');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [drawerRecord, setDrawerRecord] = useState<ConsentRecord | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -46,6 +48,12 @@ const ConsentimientosPage = () => {
         return sortDir === 'asc' ? cmp : -cmp;
       });
   }, [baseRecords, search, statusFilter, areaFilter, sortField, sortDir]);
+
+  // Resetear página al cambiar filtros
+  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, areaFilter, sortField, sortDir]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated  = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -146,57 +154,95 @@ const ConsentimientosPage = () => {
         </div>
 
         <div className={styles.tableWrapper}>
-          {filtered.length === 0 ? (
+          {baseRecords.length === 0 ? (
             <div className={styles.empty}>
-              <span className={styles.emptyIcon}>📭</span>
+              <svg className={styles.emptyIcon} width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                <line x1="10" y1="9" x2="8" y2="9"/>
+              </svg>
+              <p className={styles.emptyTitle}>No hay consentimientos en tu área</p>
+              <p className={styles.emptyHint}>Cuando se registren consentimientos para tu área aparecerán aquí.</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className={styles.empty}>
+              <svg className={styles.emptyIcon} width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                <line x1="8" y1="11" x2="14" y2="11"/>
+              </svg>
               <p>No se encontraron registros con los filtros aplicados.</p>
               <button className={styles.clearAll} onClick={clearFilters}>Limpiar filtros</button>
             </div>
           ) : (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th className={styles.sortable} onClick={() => handleSort('area')}>
-                    Área {sortIcon('area')}
-                  </th>
-                  <th className={styles.sortable} onClick={() => handleSort('finalidad')}>
-                    Finalidad {sortIcon('finalidad')}
-                  </th>
-                  <th className={styles.sortable} onClick={() => handleSort('estado')}>
-                    Estado {sortIcon('estado')}
-                  </th>
-                  <th className={styles.sortable} onClick={() => handleSort('fechaOtorgamiento')}>
-                    Otorgamiento {sortIcon('fechaOtorgamiento')}
-                  </th>
-                  <th className={styles.sortable} onClick={() => handleSort('fechaExpiracion')}>
-                    Expiración {sortIcon('fechaExpiracion')}
-                  </th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((record) => (
-                  <tr key={record.id}>
-                    <td className={styles.cellId}>{record.id}</td>
-                    <td>
-                      <span className={styles.areaBadge}>{record.area}</span>
-                    </td>
-                    <td className={styles.cellFinalidad}>{record.finalidad}</td>
-                    <td><Badge status={record.estado} /></td>
-                    <td className={styles.cellDate}>{formatDate(record.fechaOtorgamiento)}</td>
-                    <td className={styles.cellDate}>{formatDate(record.fechaExpiracion)}</td>
-                    <td>
-                      {canViewDetail && (
-                        <Button variant="ghost" size="sm" onClick={() => setDrawerRecord(record)}>
-                          Ver
-                        </Button>
-                      )}
-                    </td>
+            <>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th className={styles.sortable} onClick={() => handleSort('area')}>
+                      Área {sortIcon('area')}
+                    </th>
+                    <th className={styles.sortable} onClick={() => handleSort('finalidad')}>
+                      Finalidad {sortIcon('finalidad')}
+                    </th>
+                    <th className={styles.sortable} onClick={() => handleSort('estado')}>
+                      Estado {sortIcon('estado')}
+                    </th>
+                    <th className={styles.sortable} onClick={() => handleSort('fechaOtorgamiento')}>
+                      Otorgamiento {sortIcon('fechaOtorgamiento')}
+                    </th>
+                    <th className={styles.sortable} onClick={() => handleSort('fechaExpiracion')}>
+                      Expiración {sortIcon('fechaExpiracion')}
+                    </th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paginated.map((record) => (
+                    <tr key={record.id}>
+                      <td className={styles.cellId}>{record.id}</td>
+                      <td>
+                        <span className={styles.areaBadge}>{record.area}</span>
+                      </td>
+                      <td className={styles.cellFinalidad}>{record.finalidad}</td>
+                      <td><Badge status={record.estado} /></td>
+                      <td className={styles.cellDate}>{formatDate(record.fechaOtorgamiento)}</td>
+                      <td className={styles.cellDate}>{formatDate(record.fechaExpiracion)}</td>
+                      <td>
+                        {canViewDetail && (
+                          <Button variant="ghost" size="sm" onClick={() => setDrawerRecord(record)}>
+                            Ver
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {totalPages > 1 && (
+                <div className={styles.pagination}>
+                  <button
+                    className={styles.pageBtn}
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                  >
+                    ← Anterior
+                  </button>
+                  <span className={styles.pageInfo}>
+                    Página {currentPage} de {totalPages}
+                    <span className={styles.pageTotal}> · {filtered.length} registros</span>
+                  </span>
+                  <button
+                    className={styles.pageBtn}
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>

@@ -14,6 +14,7 @@ import TemplatesPage from './pages/TemplatesPage';
 import CompliancePage from './pages/CompliancePage';
 import PerfilPage from './pages/PerfilPage';
 import TitularPortalPage from './pages/TitularPortalPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 const App = () => (
   <AuthProvider>
@@ -90,7 +91,7 @@ const App = () => (
           <Route path="perfil"              element={<PerfilPage />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   </AuthProvider>

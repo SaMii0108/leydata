@@ -2,6 +2,15 @@
   display: flex;
   flex-direction: column;
   gap: 28px;
+  animation: fadeInUp 0.18s ease;
+}
+
+.greeting {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 0 0 4px;
+  letter-spacing: 0.01em;
 }
 
 .pageHeader {
@@ -13,11 +22,12 @@
 }
 
 .title {
-  font-size: var(--text-3xl);
-  font-weight: 700;
+  font-size: var(--text-4xl);
+  font-weight: 800;
   color: var(--color-text-primary);
   margin: 0 0 6px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
 .subtitle {
@@ -55,6 +65,37 @@
 .statLabel {
   font-size: 11px;
   color: var(--color-text-muted);
+}
+
+/* Filter row */
+.filterRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filterPill {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.15s;
+}
+
+.filterPill:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.filterPillActive {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
 }
 
 /* Card grid */
@@ -168,6 +209,8 @@
   flex-direction: column;
   gap: 8px;
 }
+
+.emptyIcon  { color: var(--color-text-muted); opacity: 0.5; }
 
 .emptyTitle {
   font-size: var(--text-lg);

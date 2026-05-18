@@ -1,72 +1,7 @@
-.page {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
-.card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: 40px;
-  width: 100%;
-  max-width: 420px;
+.wrap {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  position: relative;
-  overflow: hidden;
-}
-
-.card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--color-primary), #7c3aed);
-}
-
-.brand {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.brandName {
-  font-size: var(--text-2xl);
-  font-weight: 800;
-  color: var(--color-primary);
-  letter-spacing: -0.03em;
-}
-
-.brandSub {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-weight: 500;
-}
-
-.divider {
-  height: 1px;
-  background: var(--color-border);
-}
-
-.title {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin: 0;
-  letter-spacing: -0.02em;
-}
-
-.portalHint {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  margin: -12px 0 0;
-  line-height: 1.5;
+  gap: 16px;
 }
 
 .form {
@@ -158,7 +93,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: -10px;
+  margin-top: -8px;
 }
 
 .hintTitle {
@@ -206,19 +141,3 @@
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
-
-/* Titular link */
-.titularLink {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  text-align: center;
-  margin: 0;
-}
-
-.link {
-  color: var(--color-primary);
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.link:hover { text-decoration: underline; }
