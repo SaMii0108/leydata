@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Button from './Button';
+import { ROLE_LABEL } from '../../constants/labels';
 import styles from './PerfilForm.module.css';
 
 interface PerfilFormProps {
@@ -11,13 +12,6 @@ interface PerfilFormProps {
   onSaveProfile: (name: string, email: string) => void;
   onSavePassword: (current: string, next: string) => string | null;
 }
-
-const ROLE_LABEL: Record<string, string> = {
-  ADMIN:   'Administrador',
-  DPO:     'DPO',
-  USER:    'Usuario',
-  TITULAR: 'Titular de datos',
-};
 
 const PerfilForm = ({
   initialName,

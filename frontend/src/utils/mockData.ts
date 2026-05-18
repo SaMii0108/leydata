@@ -37,6 +37,7 @@ export interface ConsentRecord {
   estado: ConsentStatus;
   fechaOtorgamiento: string;
   fechaExpiracion: string;
+  motivoRevocacion?: string;
 }
 
 export interface SummaryCard {

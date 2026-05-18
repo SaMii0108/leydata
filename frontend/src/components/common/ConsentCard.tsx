@@ -1,4 +1,5 @@
 import type { ConsentRecord } from '../../utils/mockData';
+import { formatDate } from '../../utils/formatters';
 import Badge from './Badge';
 import styles from './ConsentCard.module.css';
 
@@ -46,8 +47,5 @@ const Row = ({ label, value }: { label: string; value: string }) => (
     <span className={styles.fieldVal}>{value}</span>
   </div>
 );
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
 
 export default ConsentCard;

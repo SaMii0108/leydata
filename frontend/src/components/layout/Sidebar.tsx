@@ -3,6 +3,8 @@ import type { ReactElement } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthContext';
 import type { Role } from '../../features/auth/mockUsers';
+import { ROLE_LABEL } from '../../constants/labels';
+import { initials } from '../../utils/formatters';
 import styles from './Sidebar.module.css';
 
 interface NavItem {
@@ -72,20 +74,11 @@ const navItems: NavItem[] = [
   { to: '/perfil',         label: 'Mi Perfil',          icon: <IconUser />,    roles: ['ADMIN', 'DPO', 'USER'] },
 ];
 
-const ROLE_LABEL: Record<Role, string> = {
-  ADMIN: 'Administrador',
-  DPO: 'DPO',
-  USER: 'Usuario',
-};
-
 const ROLE_COLOR: Record<Role, string> = {
   ADMIN: '#4361ee',
   DPO: '#7c3aed',
   USER: '#059669',
 };
-
-const initials = (name: string) =>
-  name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { user, logout } = useAuth();
@@ -93,11 +86,10 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const location = useLocation();
   const [confirmLogout, setConfirmLogout] = useState(false);
 
-  // Cerrar sidebar al cambiar de ruta (móvil)
   useEffect(() => {
     onClose();
     setConfirmLogout(false);
-  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location.pathname, onClose]);
 
   const visible = navItems.filter((item) => user && item.roles.includes(user.role));
 

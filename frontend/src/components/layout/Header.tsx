@@ -1,21 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthContext';
+import { ROLE_LABEL } from '../../constants/labels';
+import { initials } from '../../utils/formatters';
 import styles from './Header.module.css';
 
 interface HeaderProps {
   onMenuToggle: () => void;
 }
-
-const ROLE_LABEL: Record<string, string> = {
-  ADMIN:   'Administrador',
-  DPO:     'DPO',
-  USER:    'Usuario',
-  TITULAR: 'Titular de datos',
-};
-
-const initials = (name: string) =>
-  name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
 const IconMenu = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

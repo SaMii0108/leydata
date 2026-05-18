@@ -22,9 +22,9 @@ const TitularPortalPage = () => {
   const [revokeTarget, setRevokeTarget] = useState<ConsentRecord | null>(null);
   const [statusFilter, setStatusFilter] = useState<ConsentStatus | 'todos'>('todos');
 
-  const handleConfirmRevoke = (recordId: string) => {
+  const handleConfirmRevoke = (recordId: string, reason: string) => {
     setRecords((prev) =>
-      prev.map((r) => r.id === recordId ? { ...r, estado: 'revocado' } : r),
+      prev.map((r) => r.id === recordId ? { ...r, estado: 'revocado', motivoRevocacion: reason } : r),
     );
     setRevokeTarget(null);
   };

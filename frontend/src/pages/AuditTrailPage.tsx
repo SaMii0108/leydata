@@ -2,23 +2,16 @@ import { useState, useMemo } from 'react';
 import { auditEvents } from '../utils/mockData';
 import type { AuditAction, AuditEvent } from '../utils/mockData';
 import Button from '../components/common/Button';
+import { ACTION_LABEL } from '../constants/labels';
+import { formatDate, formatTime } from '../utils/formatters';
 import styles from './AuditTrailPage.module.css';
 
 const ALL_ACTIONS: AuditAction[] = ['granted', 'revoked', 'updated', 'viewed', 'exported', 'deleted'];
 
-const ACTION_LABELS: Record<AuditAction, string> = {
-  granted:  'Otorgado',
-  revoked:  'Revocado',
-  updated:  'Actualizado',
-  viewed:   'Consultado',
-  exported: 'Exportado',
-  deleted:  'Eliminado',
-};
-
 const ActionBadge = ({ action }: { action: AuditAction }) => (
   <span className={[styles.badge, styles[`badge_${action}`]].join(' ')}>
     <span className={styles.badgeDot} />
-    {ACTION_LABELS[action]}
+    {ACTION_LABEL[action]}
   </span>
 );
 
@@ -56,16 +49,16 @@ const AuditTrailPage = () => {
 
   return (
     <div className={styles.page}>
-      {/* Page title */}
       <div className={styles.pageHeader}>
         <div>
           <h2 className={styles.title}>Registro de Auditoría</h2>
           <p className={styles.subtitle}>Registro completo de actividad para cumplimiento normativo — Ley 21.719</p>
         </div>
-        <Button variant="ghost" size="sm">Exportar registro</Button>
+        <Button variant="ghost" size="sm" onClick={() => console.warn('Exportar registro: pendiente integración backend')}>
+          Exportar registro
+        </Button>
       </div>
 
-      {/* Stats row */}
       <div className={styles.statsRow}>
         {ALL_ACTIONS.map((action) => {
           const count = auditEvents.filter((e) => e.action === action).length;
@@ -76,14 +69,13 @@ const AuditTrailPage = () => {
               onClick={() => setActionFilter(actionFilter === action ? 'all' : action)}
             >
               <span className={[styles.statDot, styles[`dot_${action}`]].join(' ')} />
-              <span className={styles.statLabel}>{ACTION_LABELS[action]}</span>
+              <span className={styles.statLabel}>{ACTION_LABEL[action]}</span>
               <span className={styles.statCount}>{count}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Filter bar */}
       <div className={styles.filterBar}>
         <div className={styles.searchBox}>
           <svg className={styles.searchIcon} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -113,7 +105,6 @@ const AuditTrailPage = () => {
         </div>
       </div>
 
-      {/* Table */}
       <section className={styles.tableSection}>
         <div className={styles.tableWrapper}>
           {filtered.length === 0 ? (
@@ -176,11 +167,5 @@ const EventRow = ({ event }: { event: AuditEvent }) => (
     </td>
   </tr>
 );
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-
-const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export default AuditTrailPage;

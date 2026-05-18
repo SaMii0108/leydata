@@ -2,6 +2,7 @@ import Modal from './Modal';
 import Badge from './Badge';
 import Button from './Button';
 import type { ConsentRecord } from '../../utils/mockData';
+import { formatDateLong } from '../../utils/formatters';
 import styles from './ConsentDrawer.module.css';
 
 interface ConsentDrawerProps {
@@ -37,8 +38,8 @@ const ConsentDrawer = ({ record, onClose }: ConsentDrawerProps) => (
             <dl className={styles.grid}>
               <Field label="Área"          value={record.area} />
               <Field label="Finalidad"     value={record.finalidad} />
-              <Field label="Otorgamiento"  value={formatDate(record.fechaOtorgamiento)} />
-              <Field label="Expiración"    value={formatDate(record.fechaExpiracion)} />
+              <Field label="Otorgamiento"  value={formatDateLong(record.fechaOtorgamiento)} />
+              <Field label="Expiración"    value={formatDateLong(record.fechaExpiracion)} />
             </dl>
           </section>
 
@@ -65,8 +66,5 @@ const Field = ({ label, value }: { label: string; value: string }) => (
     <dd className={styles.fieldValue}>{value}</dd>
   </>
 );
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
 
 export default ConsentDrawer;
