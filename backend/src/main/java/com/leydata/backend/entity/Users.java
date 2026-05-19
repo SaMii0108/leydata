@@ -1,5 +1,11 @@
 package com.leydata.backend.entity;
 
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import java.util.Collection;
+import java.util.stream.Collectors;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -16,7 +22,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Users {
+public class Users implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -25,19 +31,25 @@ public class Users {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
+    @Column(name = "password", nullable = false)
+    private String password;
+
     @Column(name = "name", nullable = false)
     private String name;
 
     @Column(name = "active", nullable = false)
     private Boolean active;
 
+    @Column(name = "blocked", nullable = false)
+    private Boolean blocked = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<UsersRole> userRoles;
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<UserDomains> userDomains;
 
     @OneToMany(mappedBy = "requester", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
@@ -60,4 +72,39 @@ public class Users {
 
     @OneToMany(mappedBy = "actorId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<SystemAuditLog> auditLogs;
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        if (userRoles == null || userRoles.isEmpty()) {
+            return List.of();
+        }
+        return userRoles.stream()
+                .map(usersRole -> new SimpleGrantedAuthority("ROLE_" + usersRole.getRole().getCode()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public String getUsername() {
+        return this.email;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return this.blocked == null || !this.blocked;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return this.active != null && this.active;
+    }
 }

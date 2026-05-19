@@ -1,11 +1,9 @@
 package com.leydata.backend.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import java.io.Serializable;
+import java.util.UUID;
 
 @Entity
 @Table(name = "template_purposes")
@@ -16,7 +14,7 @@ import java.io.Serializable;
 public class TemplatePurposes {
 
     @EmbeddedId
-    private TemplatePurposesId id;
+    private TemplatePurposesId id = new TemplatePurposesId();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("templateId")
@@ -32,11 +30,16 @@ public class TemplatePurposes {
     private Integer orderPosition;
 
     @Column(name = "is_visible", nullable = false)
-    private Boolean isVisible;
+    private Boolean isVisible = true;
 
     @Embeddable
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @EqualsAndHashCode
     public static class TemplatePurposesId implements Serializable {
-        private java.util.UUID templateId;
-        private java.util.UUID purposeId;
+        private UUID templateId;
+        private UUID purposeId;
     }
 }
