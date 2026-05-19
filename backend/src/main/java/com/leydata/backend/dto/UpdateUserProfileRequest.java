@@ -9,6 +9,8 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateAdminProfileRequest {
+public class UpdateUserProfileRequest {
+
     private String password;
+    private String name;
 }

@@ -12,10 +12,12 @@ import java.util.UUID;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class CreateUserRequest {
+public class UserSummaryDto {
+    private UUID id;
     private String email;
-    private String password;
     private String name;
-    private String roleCode;
-    private List<UUID> domainIds; // Lista de IDs de dominios a asignar
+    private Boolean active;
+    private Boolean blocked;
+    private List<String> roles;
+    private List<String> domains;
 }

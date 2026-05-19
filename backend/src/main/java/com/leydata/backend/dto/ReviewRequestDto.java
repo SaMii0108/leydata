@@ -9,6 +9,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateAdminProfileRequest {
-    private String password;
+public class ReviewRequestDto {
+    private String status; // APPROVED o REJECTED
+    private String reviewNotes; // obligatorio si REJECTED (Ley 21.719)
 }

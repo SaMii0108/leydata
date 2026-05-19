@@ -15,26 +15,38 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final AuthenticationManager authenticationManager;
-    private final UsersRepository usersRepository;
-    private final CustomUserDetailsService userDetailsService;
-    private final JwtService jwtService;
+        private final AuthenticationManager authenticationManager;
+        private final UsersRepository usersRepository;
+        private final CustomUserDetailsService userDetailsService;
+        private final JwtService jwtService;
 
-    public AuthResponse authenticate(AuthRequest request) {
-        // Autenticar usuario
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+        public AuthResponse authenticate(AuthRequest request) {
 
-        // Buscar usuario
-        Users user = usersRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+                // Buscar usuario
+                Users user = usersRepository.findByEmail(request.getEmail())
+                                .orElseThrow(() -> new IllegalArgumentException("Credenciales inválidas"));
 
-        // Generar JWT
-        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String token = jwtService.generateToken(userDetails);
+                // Verificar si la cuenta está bloqueada permanentemente
+                if (Boolean.TRUE.equals(user.getBlocked())) {
+                        throw new IllegalStateException(
+                                        "Esta cuenta ha sido bloqueada permanentemente. Contacte al administrador.");
+                }
 
-        return new AuthResponse(token, user.getEmail(), userDetails.getAuthorities().stream()
-                .map(Object::toString)
-                .toList());
-    }
+                // Verificar si no tiene bloqueo temporal
+                if (!user.getActive()) {
+                        throw new IllegalStateException("Esta cuenta ha sido desactivada por el administrador.");
+                }
+
+                // Autenticar usuario
+                authenticationManager.authenticate(
+                                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+
+                // Generar JWT
+                UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+                String token = jwtService.generateToken(userDetails);
+
+                return new AuthResponse(token, user.getEmail(), userDetails.getAuthorities().stream()
+                                .map(Object::toString)
+                                .toList());
+        }
 }

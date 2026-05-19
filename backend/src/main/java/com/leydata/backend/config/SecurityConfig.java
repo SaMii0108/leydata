@@ -53,7 +53,8 @@ public class SecurityConfig {
 
                         // Rutas protegidas (Primera Capa)
                         .requestMatchers(HttpMethod.POST, "/api/users").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/users/profile").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/users/profile").authenticated()
+                        .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/domains/**").hasRole("ADMIN")
                         // del slash final
                         .requestMatchers(HttpMethod.POST, "/api/purpose-requests").hasRole("JEFE_DOMINIO")

@@ -16,5 +16,5 @@ public class CreateDomainRequest {
     private String code;
     private String name;
     private String description;
-    private UUID jefeId; // UUID del usuario que será jefe del dominio
+    private UUID jefeId; // UUID del usuario que será jefe del dominio //Puede ser null
 }

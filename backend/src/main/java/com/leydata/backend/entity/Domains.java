@@ -33,6 +33,9 @@ public class Domains {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "active", nullable = false)
+    private Boolean active = true;
+
     @OneToMany(mappedBy = "domain", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<UserDomains> userDomains;
 

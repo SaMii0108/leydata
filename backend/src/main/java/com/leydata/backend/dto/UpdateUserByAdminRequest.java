@@ -12,10 +12,11 @@ import java.util.UUID;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class CreateUserRequest {
-    private String email;
+public class UpdateUserByAdminRequest {
+
     private String password;
     private String name;
-    private String roleCode;
-    private List<UUID> domainIds; // Lista de IDs de dominios a asignar
+    private List<String> roleCodes; // Lista de códigos de roles
+    private List<UUID> domainIds; // Lista de IDs de dominios
+    private Boolean active;
 }
