@@ -7,6 +7,7 @@ import { consentRecords as initialRecords } from '../utils/mockData';
 import type { ConsentStatus, ConsentRecord } from '../utils/mockData';
 import { usePermissions } from '../features/auth/usePermissions';
 import { AREAS } from '../features/auth/mockUsers';
+import { formatDate } from '../utils/formatters';
 import styles from './ConsentimientosPage.module.css';
 
 type SortField = Extract<keyof ConsentRecord, 'area' | 'finalidad' | 'estado' | 'fechaOtorgamiento' | 'fechaExpiracion'>;
@@ -149,7 +150,9 @@ const ConsentimientosPage = () => {
             {hasActiveFilters && ' (filtrado)'}
           </span>
           <div className={styles.tableActions}>
-            <Button variant="ghost" size="sm">Exportar CSV</Button>
+            <Button variant="ghost" size="sm" onClick={() => console.warn('Exportar CSV: pendiente integración backend')}>
+              Exportar CSV
+            </Button>
           </div>
         </div>
 
@@ -251,8 +254,5 @@ const ConsentimientosPage = () => {
     </div>
   );
 };
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
 
 export default ConsentimientosPage;

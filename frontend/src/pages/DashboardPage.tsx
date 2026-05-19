@@ -4,9 +4,9 @@ import { summaryCards, chartData, consentRecords } from '../utils/mockData';
 import type { SummaryCard } from '../utils/mockData';
 import { usePermissions } from '../features/auth/usePermissions';
 import { useNavigate } from 'react-router-dom';
+import { formatDate } from '../utils/formatters';
 import styles from './DashboardPage.module.css';
 
-// ── Sparkline ──────────────────────────────────────────────────────────────
 const Sparkline = ({ values, trend }: { values: number[]; trend: SummaryCard['trend'] }) => {
   const w = 80;
   const h = 32;
@@ -26,7 +26,6 @@ const Sparkline = ({ values, trend }: { values: number[]; trend: SummaryCard['tr
   );
 };
 
-// ── Bar chart ──────────────────────────────────────────────────────────────
 const ConsentChart = () => {
   const maxVal = Math.max(...chartData.flatMap((d) => [d.granted, d.rejected, d.revoked]));
   const H = 180;
@@ -89,7 +88,6 @@ const ConsentChart = () => {
   );
 };
 
-// ── Card icons ─────────────────────────────────────────────────────────────
 const CARD_COLORS = [
   { color: '#4361ee', bg: '#eef1fd' }, // Total — azul
   { color: '#16a34a', bg: '#dcfce7' }, // Otorgados — verde
@@ -130,7 +128,6 @@ const CardIcon = ({ index }: { index: number }) => {
   );
 };
 
-// ── Page ───────────────────────────────────────────────────────────────────
 const DashboardPage = () => {
   const { canCreate } = usePermissions();
   const navigate = useNavigate();
@@ -216,8 +213,5 @@ const DashboardPage = () => {
   </div>
   );
 };
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
 
 export default DashboardPage;

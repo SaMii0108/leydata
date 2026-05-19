@@ -1,7 +1,6 @@
 import Button from '../components/common/Button';
 import styles from './CompliancePage.module.css';
 
-// ── Types ──────────────────────────────────────────────────────────────────
 type CheckStatus  = 'ok' | 'warning' | 'error';
 type AlertLevel   = 'high' | 'medium' | 'low';
 
@@ -22,7 +21,6 @@ interface ComplianceAlert {
   affectedCount: number;
 }
 
-// ── Mock data ──────────────────────────────────────────────────────────────
 const SCORE = 87;
 
 const checks: ComplianceCheck[] = [
@@ -83,7 +81,6 @@ const alerts: ComplianceAlert[] = [
   },
 ];
 
-// ── Sub-components ─────────────────────────────────────────────────────────
 const ScoreGauge = ({ score }: { score: number }) => {
   const r     = 52;
   const circ  = 2 * Math.PI * r;
@@ -117,7 +114,6 @@ const ScoreGauge = ({ score }: { score: number }) => {
 const statusIcon: Record<CheckStatus, string>  = { ok: '✓', warning: '⚠', error: '✕' };
 const levelLabel: Record<AlertLevel, string>   = { high: 'Alto', medium: 'Medio', low: 'Bajo' };
 
-// ── Page ───────────────────────────────────────────────────────────────────
 const CompliancePage = () => {
   const byCategory = checks.reduce<Record<string, ComplianceCheck[]>>((acc, c) => {
     (acc[c.category] ||= []).push(c);
@@ -136,7 +132,9 @@ const CompliancePage = () => {
           <h2 className={styles.title}>Cumplimiento Legal</h2>
           <p className={styles.subtitle}>Estado de conformidad con la Ley 21.719 — Protección de datos personales</p>
         </div>
-        <Button variant="ghost" size="sm">Exportar informe</Button>
+        <Button variant="ghost" size="sm" onClick={() => console.warn('Exportar informe: pendiente integración backend')}>
+          Exportar informe
+        </Button>
       </div>
 
       {/* Top row: score + summary */}

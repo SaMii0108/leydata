@@ -28,7 +28,6 @@ const RevokeModal = ({ record, onClose, onConfirm }: RevokeModalProps) => {
     <Modal open={record !== null} onClose={handleClose} variant="center">
       {record && (
         <div className={styles.modal}>
-          {/* Header */}
           <div className={styles.header}>
             <div className={styles.warningIcon}>⚠</div>
             <div>
@@ -37,7 +36,6 @@ const RevokeModal = ({ record, onClose, onConfirm }: RevokeModalProps) => {
             </div>
           </div>
 
-          {/* Info */}
           <div className={styles.infoBox}>
             <p className={styles.infoLabel}>ID</p>
             <p className={styles.infoValue}>{record.id}</p>
@@ -47,7 +45,6 @@ const RevokeModal = ({ record, onClose, onConfirm }: RevokeModalProps) => {
             <p className={styles.infoValue}>{record.finalidad}</p>
           </div>
 
-          {/* Reason field */}
           <div className={styles.field}>
             <label htmlFor="revoke-reason" className={styles.label}>
               Razón de revocación <span className={styles.required}>*</span>
@@ -64,7 +61,6 @@ const RevokeModal = ({ record, onClose, onConfirm }: RevokeModalProps) => {
             <p className={styles.charCount}>{reason.length}/500</p>
           </div>
 
-          {/* Actions */}
           <div className={styles.actions}>
             <Button variant="ghost" onClick={handleClose}>Cancelar</Button>
             <Button

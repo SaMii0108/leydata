@@ -3,14 +3,12 @@ import { MOCK_USERS, AREAS, addMockUser } from '../features/auth/mockUsers';
 import type { AppUser } from '../features/auth/mockUsers';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
+import { ROLE_LABEL } from '../constants/labels';
+import { initials } from '../utils/formatters';
 import styles from './UsuariosPage.module.css';
 
-const initials = (name: string) =>
-  name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-
-const ROLE_LABEL: Record<string, string> = {
-  ADMIN: 'Administrador',
-  DPO: 'DPO',
+const USUARIO_LABEL: Record<string, string> = {
+  ...ROLE_LABEL,
   USER: 'Responsable de área',
 };
 
@@ -85,7 +83,7 @@ const UsuariosPage = () => {
                   <td className={styles.cellMono}>{user.email}</td>
                   <td>
                     <span className={[styles.roleBadge, styles[`role_${user.role.toLowerCase()}`]].join(' ')}>
-                      {ROLE_LABEL[user.role]}
+                      {USUARIO_LABEL[user.role]}
                     </span>
                   </td>
                   <td className={styles.cellArea}>
