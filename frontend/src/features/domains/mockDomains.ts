@@ -28,6 +28,9 @@ export const updateMockDomain = (id: string, updates: Partial<MockDomain>) => {
   if (idx !== -1) Object.assign(MOCK_DOMAINS[idx], updates);
 };
 
+/** Lista de nombres de dominio activos (equivalente al antiguo AREAS) */
+export const AREAS: string[] = MOCK_DOMAINS.filter((d) => d.active).map((d) => d.name);
+
 /** Verifica si ya existe un dominio con ese código (case-insensitive) */
 export const domainCodeExists = (code: string, excludeId?: string): boolean =>
   MOCK_DOMAINS.some(

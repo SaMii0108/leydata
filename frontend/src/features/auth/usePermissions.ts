@@ -26,6 +26,12 @@ export const usePermissions = () => {
     isAdmin:            user?.role === 'ADMIN',
     /** Dominios asignados al usuario (solo aplica a JEFE_DOMINIO) */
     userDomains:        user?.domains ?? [],
+    /** Primer dominio del usuario (para filtros en ConsentimientosPage) */
+    userArea:           user?.domains?.[0] ?? null,
     role:               user?.role ?? null,
+    /** ConsentimientosPage: DPO puede crear, ver todos y ver detalle */
+    canCreate:          user?.role === 'DPO',
+    canViewAll:         user?.role === 'DPO',
+    canViewDetail:      user?.role === 'DPO',
   };
 };

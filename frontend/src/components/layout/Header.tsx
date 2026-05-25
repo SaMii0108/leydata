@@ -117,7 +117,7 @@ const Header = ({ onMenuToggle }: HeaderProps) => {
                 <span className={styles.dropdownName}>{user?.name}</span>
                 <span className={styles.dropdownRole}>
                   {ROLE_LABEL[user?.role ?? ''] ?? user?.role}
-                  {user?.area ? ` · ${user.area}` : ''}
+                  {user?.domains?.[0] ? ` · ${user.domains[0]}` : ''}
                 </span>
               </div>
 

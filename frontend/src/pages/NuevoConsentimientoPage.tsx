@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AREAS } from '../features/auth/mockUsers';
+import { AREAS } from '../features/domains/mockDomains';
 import Button from '../components/common/Button';
 import styles from './NuevoConsentimientoPage.module.css';
 

@@ -6,7 +6,7 @@ import ConsentDrawer from '../components/common/ConsentDrawer';
 import { consentRecords as initialRecords } from '../utils/mockData';
 import type { ConsentStatus, ConsentRecord } from '../utils/mockData';
 import { usePermissions } from '../features/auth/usePermissions';
-import { AREAS } from '../features/auth/mockUsers';
+import { AREAS } from '../features/domains/mockDomains';
 import { formatDate } from '../utils/formatters';
 import styles from './ConsentimientosPage.module.css';
 
