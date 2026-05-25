@@ -45,7 +45,7 @@ const App = () => (
             }
           />
           <Route path="consentimientos" element={
-            <ProtectedRoute roles={['DPO']}>
+            <ProtectedRoute roles={['DPO', 'JEFE_DOMINIO']}>
               <ConsentimientosPage />
             </ProtectedRoute>
           } />

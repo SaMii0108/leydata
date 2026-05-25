@@ -84,7 +84,7 @@ const IconClipboard = () => (
 const navItems: NavItem[] = [
   { to: '/',                label: 'Métricas Generales', icon: <IconGrid />,       roles: ['ADMIN', 'DPO'] },
   { to: '/dominios',        label: 'Dominios',           icon: <IconDomain />,     roles: ['ADMIN'] },
-  { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,       roles: ['DPO'] },
+  { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,       roles: ['DPO', 'JEFE_DOMINIO'] },
   { to: '/solicitudes',     label: 'Solicitudes',        icon: <IconClipboard />,  roles: ['DPO', 'JEFE_DOMINIO'] },
   { to: '/usuarios',        label: 'Usuarios',           icon: <IconUsers />,      roles: ['ADMIN'] },
   { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,      roles: ['ADMIN', 'DPO'] },
