@@ -1,4 +1,4 @@
-import { useAuth } from '../features/auth/AuthContext';
+import { useAuth } from '../features/auth/useAuth';
 import { updateMockUser } from '../features/auth/mockUsers';
 import PerfilForm from '../components/common/PerfilForm';
 import styles from './PerfilPage.module.css';

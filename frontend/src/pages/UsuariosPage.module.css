@@ -287,3 +287,177 @@
   margin: 0;
   font-style: italic;
 }
+
+/* ── Estado de filas ─────────────────────────────────────────────────────────── */
+.rowInactive { opacity: 0.55; }
+.rowBlocked  { opacity: 0.45; background: #fff5f5; }
+
+/* ── Badge de estado ─────────────────────────────────────────────────────────── */
+.statusBadge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.statusActive   { background: var(--color-success-bg); color: var(--color-success); }
+.statusInactive { background: var(--color-warning-bg); color: var(--color-warning); }
+.statusBlocked  { background: var(--color-danger-bg);  color: var(--color-danger);  }
+
+/* ── Acciones en tabla ───────────────────────────────────────────────────────── */
+.actionsCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Toggle switch */
+.toggleBtn {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.toggleBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toggleOn  { background: var(--color-success); }
+.toggleOff { background: var(--color-border);  }
+
+.toggleThumb {
+  position: absolute;
+  top: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.18);
+}
+
+.toggleOn  .toggleThumb { left: 21px; }
+.toggleOff .toggleThumb { left: 3px;  }
+
+/* Bloqueo */
+.blockBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.blockBtn:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.blockBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Confirmación modal ──────────────────────────────────────────────────────── */
+.confirmBody {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  text-align: center;
+}
+
+.confirmIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.confirmWarn   { background: var(--color-warning-bg); color: var(--color-warning); }
+.confirmInfo   { background: var(--color-info-bg);    color: var(--color-info); }
+.confirmDanger { background: var(--color-danger-bg);  color: var(--color-danger); }
+
+.confirmUserName {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.confirmText {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.55;
+  max-width: 340px;
+}
+
+/* Bloqueo permanente */
+.dangerTitle { color: var(--color-danger); }
+
+.dangerBox {
+  background: var(--color-danger-bg);
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  line-height: 1.5;
+  max-width: 340px;
+}
+
+.dangerBox p {
+  margin: 6px 0 0;
+  color: #b91c1c;
+}
+
+/* ── Info de rol seleccionado ────────────────────────────────────────────────── */
+.roleInfo {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--color-primary-light);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
+/* ── Aviso sin dominios ──────────────────────────────────────────────────────── */
+.noDomainWarning {
+  font-size: var(--text-sm);
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border: 1px solid #fde68a;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.warnIcon { font-size: 16px; flex-shrink: 0; }
+
+.warnLink {
+  color: var(--color-warning);
+  font-weight: 700;
+  text-decoration: underline;
+}

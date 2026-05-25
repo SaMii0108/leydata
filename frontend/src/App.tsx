@@ -5,10 +5,12 @@ import DashboardLayout from './layouts/DashboardLayout';
 import TitularLayout from './layouts/TitularLayout';
 import LoginPage from './pages/LoginPage';
 import TitularLoginPage from './pages/TitularLoginPage';
+import RoleSelectPage from './pages/RoleSelectPage';
 import DashboardPage from './pages/DashboardPage';
 import ConsentimientosPage from './pages/ConsentimientosPage';
 import NuevoConsentimientoPage from './pages/NuevoConsentimientoPage';
 import UsuariosPage from './pages/UsuariosPage';
+import DominiosPage from './pages/DominiosPage';
 import AuditTrailPage from './pages/AuditTrailPage';
 import TemplatesPage from './pages/TemplatesPage';
 import CompliancePage from './pages/CompliancePage';
@@ -20,9 +22,10 @@ const App = () => (
   <AuthProvider>
     <BrowserRouter>
       <Routes>
-        {/* Portales de login */}
-        <Route path="/login"          element={<LoginPage />} />
-        <Route path="/titular/login"  element={<TitularLoginPage />} />
+        {/* Portales de login y selección de rol */}
+        <Route path="/login"           element={<LoginPage />} />
+        <Route path="/titular/login"   element={<TitularLoginPage />} />
+        <Route path="/seleccionar-rol" element={<RoleSelectPage />} />
 
         {/* Portal operativo (ADMIN, DPO, USER) */}
         <Route
@@ -48,6 +51,11 @@ const App = () => (
           <Route path="consentimientos/nuevo" element={
             <ProtectedRoute roles={['DPO']}>
               <NuevoConsentimientoPage />
+            </ProtectedRoute>
+          } />
+          <Route path="dominios" element={
+            <ProtectedRoute roles={['ADMIN']}>
+              <DominiosPage />
             </ProtectedRoute>
           } />
           <Route path="usuarios" element={

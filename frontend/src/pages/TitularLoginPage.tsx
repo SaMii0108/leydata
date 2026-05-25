@@ -1,5 +1,5 @@
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../features/auth/AuthContext';
+import { useAuth } from '../features/auth/useAuth';
 import { findUser } from '../features/auth/mockUsers';
 import LoginForm, { HintBox, HintRow } from '../components/common/LoginForm';
 import styles from './LoginPage.module.css';

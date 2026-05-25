@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { consentRecords as initialRecords } from '../utils/mockData';
 import type { ConsentRecord, ConsentStatus } from '../utils/mockData';
-import { useAuth } from '../features/auth/AuthContext';
+import { useAuth } from '../features/auth/useAuth';
 import RevokeModal from '../components/common/RevokeModal';
 import ConsentCard from '../components/common/ConsentCard';
 import styles from './TitularPortalPage.module.css';

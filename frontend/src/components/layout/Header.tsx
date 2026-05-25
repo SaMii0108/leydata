@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../features/auth/AuthContext';
+import { useAuth } from '../../features/auth/useAuth';
 import { ROLE_LABEL } from '../../constants/labels';
 import { initials } from '../../utils/formatters';
 import styles from './Header.module.css';

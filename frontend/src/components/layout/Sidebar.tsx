@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../features/auth/AuthContext';
+import { useAuth } from '../../features/auth/useAuth';
 import type { Role } from '../../features/auth/mockUsers';
 import { ROLE_LABEL } from '../../constants/labels';
 import { initials } from '../../utils/formatters';
@@ -64,20 +64,30 @@ const IconUser = () => (
   </svg>
 );
 
+const IconDomain = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+  </svg>
+);
+
 const navItems: NavItem[] = [
-  { to: '/',               label: 'Métricas Generales', icon: <IconGrid />,    roles: ['ADMIN', 'DPO'] },
-  { to: '/consentimientos', label: 'Consentimientos',   icon: <IconList />,    roles: ['DPO', 'USER'] },
-  { to: '/usuarios',       label: 'Usuarios',           icon: <IconUsers />,   roles: ['ADMIN'] },
-  { to: '/auditoria',      label: 'Auditoría',          icon: <IconAudit />,   roles: ['ADMIN', 'DPO'] },
-  { to: '/cumplimiento',   label: 'Cumplimiento Legal', icon: <IconShield />,  roles: ['ADMIN', 'DPO'] },
-  { to: '/plantillas',     label: 'Plantillas',         icon: <IconPalette />, roles: ['DPO'] },
-  { to: '/perfil',         label: 'Mi Perfil',          icon: <IconUser />,    roles: ['ADMIN', 'DPO', 'USER'] },
+  { to: '/',                label: 'Métricas Generales', icon: <IconGrid />,    roles: ['ADMIN', 'DPO'] },
+  { to: '/dominios',        label: 'Dominios',           icon: <IconDomain />, roles: ['ADMIN'] },
+  { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,    roles: ['DPO', 'USER'] },
+  { to: '/usuarios',        label: 'Usuarios',           icon: <IconUsers />,   roles: ['ADMIN'] },
+  { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,   roles: ['ADMIN', 'DPO'] },
+  { to: '/cumplimiento',    label: 'Cumplimiento Legal', icon: <IconShield />,  roles: ['ADMIN', 'DPO'] },
+  { to: '/plantillas',      label: 'Plantillas',         icon: <IconPalette />, roles: ['DPO'] },
+  { to: '/perfil',          label: 'Mi Perfil',          icon: <IconUser />,    roles: ['ADMIN', 'DPO', 'USER'] },
 ];
 
 const ROLE_COLOR: Record<Role, string> = {
-  ADMIN: '#4361ee',
-  DPO: '#7c3aed',
-  USER: '#059669',
+  ADMIN:   '#4361ee',
+  DPO:     '#7c3aed',
+  USER:    '#059669',
+  TITULAR: '#0891b2',
 };
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
@@ -87,8 +97,11 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const [confirmLogout, setConfirmLogout] = useState(false);
 
   useEffect(() => {
-    onClose();
-    setConfirmLogout(false);
+    // Cierra el menú móvil y resetea confirmación al navegar
+    Promise.resolve().then(() => {
+      onClose();
+      setConfirmLogout(false);
+    });
   }, [location.pathname, onClose]);
 
   const visible = navItems.filter((item) => user && item.roles.includes(user.role));
