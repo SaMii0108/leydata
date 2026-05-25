@@ -67,13 +67,15 @@ const destinationFor = (role: Role): string => {
 
 /* ─── Componente principal ─────────────────────────────────────────────────── */
 const RoleSelectPage = () => {
-  const { pendingUser, selectRole } = useAuth();
+  const { pendingUser, selectRole, user } = useAuth();
   const navigate = useNavigate();
 
-  // Guard: si no hay usuario pendiente, redirigir a login
+  // Guard: solo redirigir a login si NO hay ni usuario pendiente NI usuario activo.
+  // Cuando se elige un rol, pendingUser pasa a null pero user se activa —
+  // en ese momento NO se debe redirigir (la navegación al dashboard ya ocurrió).
   useEffect(() => {
-    if (!pendingUser) navigate('/login', { replace: true });
-  }, [pendingUser, navigate]);
+    if (!pendingUser && !user) navigate('/login', { replace: true });
+  }, [pendingUser, user, navigate]);
 
   if (!pendingUser) return null;
 
