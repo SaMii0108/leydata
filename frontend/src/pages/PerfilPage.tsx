@@ -7,9 +7,9 @@ const PerfilPage = () => {
   const { user, login } = useAuth();
   if (!user) return null;
 
-  const handleSaveProfile = (name: string, email: string) => {
-    updateMockUser(user.id, { name, email });
-    login({ ...user, name, email });
+  const handleSaveProfile = (name: string) => {
+    updateMockUser(user.id, { name });
+    login({ ...user, name });
   };
 
   const handleSavePassword = (_current: string, next: string): string | null => {
@@ -30,7 +30,7 @@ const PerfilPage = () => {
         initialEmail={user.email}
         currentPassword={user.password}
         role={user.role}
-        area={user.area}
+        domains={user.domains}
         onSaveProfile={handleSaveProfile}
         onSavePassword={handleSavePassword}
       />

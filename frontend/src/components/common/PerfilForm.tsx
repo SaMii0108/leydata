@@ -8,8 +8,8 @@ interface PerfilFormProps {
   initialEmail: string;
   currentPassword: string;
   role: string;
-  area: string | null;
-  onSaveProfile: (name: string, email: string) => void;
+  domains: string[];
+  onSaveProfile: (name: string) => void;
   onSavePassword: (current: string, next: string) => string | null;
 }
 
@@ -18,12 +18,11 @@ const PerfilForm = ({
   initialEmail,
   currentPassword,
   role,
-  area,
+  domains,
   onSaveProfile,
   onSavePassword,
 }: PerfilFormProps) => {
-  const [name, setName]   = useState(initialName);
-  const [email, setEmail] = useState(initialEmail);
+  const [name, setName] = useState(initialName);
 
   const [currentPwd, setCurrentPwd] = useState('');
   const [newPwd, setNewPwd]         = useState('');
@@ -34,7 +33,7 @@ const PerfilForm = ({
   const [pwdError, setPwdError]         = useState('');
 
   const handleSaveProfile = () => {
-    onSaveProfile(name, email);
+    onSaveProfile(name);
     setProfileSaved(true);
     setTimeout(() => setProfileSaved(false), 2500);
   };
@@ -83,13 +82,17 @@ const PerfilForm = ({
             />
           </div>
           <div className={styles.fieldGroup}>
-            <label className={styles.label} htmlFor="pf-email">Correo electrónico</label>
+            <label className={styles.label} htmlFor="pf-email">
+              Correo electrónico
+              <span className={styles.immutableNote}> · no modificable (Ley 21.719)</span>
+            </label>
             <input
               id="pf-email"
               type="email"
-              className={styles.input}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              className={[styles.input, styles.inputReadonly].join(' ')}
+              value={initialEmail}
+              readOnly
+              tabIndex={-1}
             />
           </div>
           <div className={styles.fieldGroup}>
@@ -98,7 +101,9 @@ const PerfilForm = ({
               <span className={[styles.roleBadge, styles[`role_${role.toLowerCase()}`]].join(' ')}>
                 {ROLE_LABEL[role] ?? role}
               </span>
-              {area && <span className={styles.areaBadge}>{area}</span>}
+              {domains.map((d) => (
+                <span key={d} className={styles.areaBadge}>{d}</span>
+              ))}
             </div>
           </div>
         </div>
@@ -108,7 +113,7 @@ const PerfilForm = ({
             variant="primary"
             size="sm"
             onClick={handleSaveProfile}
-            disabled={!name.trim() || !email.trim()}
+            disabled={!name.trim()}
           >
             Guardar cambios
           </Button>

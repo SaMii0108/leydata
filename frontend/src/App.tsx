@@ -16,6 +16,7 @@ import TemplatesPage from './pages/TemplatesPage';
 import CompliancePage from './pages/CompliancePage';
 import PerfilPage from './pages/PerfilPage';
 import TitularPortalPage from './pages/TitularPortalPage';
+import SolicitudesPage from './pages/SolicitudesPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 const App = () => (
@@ -27,10 +28,10 @@ const App = () => (
         <Route path="/titular/login"   element={<TitularLoginPage />} />
         <Route path="/seleccionar-rol" element={<RoleSelectPage />} />
 
-        {/* Portal operativo (ADMIN, DPO, USER) */}
+        {/* Portal operativo (ADMIN, DPO, JEFE_DOMINIO) */}
         <Route
           element={
-            <ProtectedRoute roles={['ADMIN', 'DPO', 'USER']}>
+            <ProtectedRoute roles={['ADMIN', 'DPO', 'JEFE_DOMINIO']}>
               <DashboardLayout />
             </ProtectedRoute>
           }
@@ -38,14 +39,19 @@ const App = () => (
           <Route
             index
             element={
-              <ProtectedRoute roles={['ADMIN', 'DPO']} fallback="/consentimientos">
+              <ProtectedRoute roles={['ADMIN', 'DPO']} fallback="/solicitudes">
                 <DashboardPage />
               </ProtectedRoute>
             }
           />
           <Route path="consentimientos" element={
-            <ProtectedRoute roles={['DPO', 'USER']}>
+            <ProtectedRoute roles={['DPO']}>
               <ConsentimientosPage />
+            </ProtectedRoute>
+          } />
+          <Route path="solicitudes" element={
+            <ProtectedRoute roles={['DPO', 'JEFE_DOMINIO']}>
+              <SolicitudesPage />
             </ProtectedRoute>
           } />
           <Route path="consentimientos/nuevo" element={
@@ -79,7 +85,7 @@ const App = () => (
             </ProtectedRoute>
           } />
           <Route path="perfil" element={
-            <ProtectedRoute roles={['ADMIN', 'DPO', 'USER']}>
+            <ProtectedRoute roles={['ADMIN', 'DPO', 'JEFE_DOMINIO']}>
               <PerfilPage />
             </ProtectedRoute>
           } />

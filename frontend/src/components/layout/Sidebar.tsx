@@ -72,22 +72,32 @@ const IconDomain = () => (
   </svg>
 );
 
+const IconClipboard = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+    <line x1="9" y1="12" x2="15" y2="12"/>
+    <line x1="9" y1="16" x2="13" y2="16"/>
+  </svg>
+);
+
 const navItems: NavItem[] = [
-  { to: '/',                label: 'Métricas Generales', icon: <IconGrid />,    roles: ['ADMIN', 'DPO'] },
-  { to: '/dominios',        label: 'Dominios',           icon: <IconDomain />, roles: ['ADMIN'] },
-  { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,    roles: ['DPO', 'USER'] },
-  { to: '/usuarios',        label: 'Usuarios',           icon: <IconUsers />,   roles: ['ADMIN'] },
-  { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,   roles: ['ADMIN', 'DPO'] },
-  { to: '/cumplimiento',    label: 'Cumplimiento Legal', icon: <IconShield />,  roles: ['ADMIN', 'DPO'] },
-  { to: '/plantillas',      label: 'Plantillas',         icon: <IconPalette />, roles: ['DPO'] },
-  { to: '/perfil',          label: 'Mi Perfil',          icon: <IconUser />,    roles: ['ADMIN', 'DPO', 'USER'] },
+  { to: '/',                label: 'Métricas Generales', icon: <IconGrid />,       roles: ['ADMIN', 'DPO'] },
+  { to: '/dominios',        label: 'Dominios',           icon: <IconDomain />,     roles: ['ADMIN'] },
+  { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,       roles: ['DPO'] },
+  { to: '/solicitudes',     label: 'Solicitudes',        icon: <IconClipboard />,  roles: ['DPO', 'JEFE_DOMINIO'] },
+  { to: '/usuarios',        label: 'Usuarios',           icon: <IconUsers />,      roles: ['ADMIN'] },
+  { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,      roles: ['ADMIN', 'DPO'] },
+  { to: '/cumplimiento',    label: 'Cumplimiento Legal', icon: <IconShield />,     roles: ['ADMIN', 'DPO'] },
+  { to: '/plantillas',      label: 'Plantillas',         icon: <IconPalette />,    roles: ['DPO'] },
+  { to: '/perfil',          label: 'Mi Perfil',          icon: <IconUser />,       roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
 ];
 
 const ROLE_COLOR: Record<Role, string> = {
-  ADMIN:   '#4361ee',
-  DPO:     '#7c3aed',
-  USER:    '#059669',
-  TITULAR: '#0891b2',
+  ADMIN:        '#4361ee',
+  DPO:          '#7c3aed',
+  JEFE_DOMINIO: '#059669',
+  TITULAR:      '#0891b2',
 };
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
@@ -152,7 +162,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               <span className={styles.userName}>{user.name}</span>
               <span className={styles.userRole} style={{ color: ROLE_COLOR[user.role] }}>
                 {ROLE_LABEL[user.role]}
-                {user.area && ` · ${user.area}`}
+                {user.domains.length > 0 && ` · ${user.domains[0]}`}
               </span>
             </div>
           </div>

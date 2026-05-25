@@ -6,12 +6,13 @@ import {
   domainCodeExists,
 } from '../features/domains/mockDomains';
 import type { MockDomain } from '../features/domains/mockDomains';
+import { MOCK_USERS } from '../features/auth/mockUsers';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import styles from './DominiosPage.module.css';
 
 /* ─── Formulario vacío ─────────────────────────────────────────────────────── */
-const EMPTY_FORM = { code: '', name: '', description: '' };
+const EMPTY_FORM = { code: '', name: '', description: '', jefeId: '' };
 
 /* ─── Componente principal ─────────────────────────────────────────────────── */
 const DominiosPage = () => {
@@ -38,6 +39,7 @@ const DominiosPage = () => {
       code,
       name,
       description,
+      jefeId:      form.jefeId || null,
       active:      true,
     };
     addMockDomain(newDomain);
@@ -140,6 +142,7 @@ const DominiosPage = () => {
           </p>
 
           <div className={styles.fields}>
+            {/* jefeId options: all active JEFE_DOMINIO users */}
             <div className={styles.fieldGroup}>
               <label className={styles.fieldLabel} htmlFor="d-code">
                 Código <span className={styles.required}>*</span>
@@ -179,6 +182,21 @@ const DominiosPage = () => {
                 rows={3}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
+            </div>
+
+            <div className={styles.fieldGroup}>
+              <label className={styles.fieldLabel} htmlFor="d-jefe">Jefe de dominio (opcional)</label>
+              <select
+                id="d-jefe"
+                className={styles.input}
+                value={form.jefeId}
+                onChange={(e) => setForm((f) => ({ ...f, jefeId: e.target.value }))}
+              >
+                <option value="">Sin asignar</option>
+                {MOCK_USERS.filter((u) => u.roles.includes('JEFE_DOMINIO') && u.active && !u.blocked).map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
             </div>
 
             {formError && <p className={styles.formError}>{formError}</p>}

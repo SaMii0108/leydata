@@ -1,10 +1,10 @@
 import type { AuditAction } from '../utils/mockData';
 
 export const ROLE_LABEL: Record<string, string> = {
-  ADMIN:   'Administrador',
-  DPO:     'DPO',
-  USER:    'Usuario',
-  TITULAR: 'Titular de datos',
+  ADMIN:         'Administrador',
+  DPO:           'DPO',
+  JEFE_DOMINIO:  'Jefe de Dominio',
+  TITULAR:       'Titular de datos',
 };
 
 export const ACTION_LABEL: Record<AuditAction, string> = {

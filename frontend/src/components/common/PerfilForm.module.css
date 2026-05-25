@@ -84,10 +84,10 @@
   letter-spacing: 0.05em;
 }
 
-.role_admin   { background: #dbeafe; color: #1d4ed8; }
-.role_dpo     { background: #ede9fe; color: #7c3aed; }
-.role_user    { background: #d1fae5; color: #059669; }
-.role_titular { background: #fef3c7; color: #d97706; }
+.role_admin        { background: #dbeafe; color: #1d4ed8; }
+.role_dpo          { background: #ede9fe; color: #7c3aed; }
+.role_jefe_dominio { background: #d1fae5; color: #059669; }
+.role_titular      { background: #fef3c7; color: #d97706; }
 
 .areaBadge {
   font-size: 11px;
@@ -96,6 +96,21 @@
   border-radius: 999px;
   background: var(--color-primary-light);
   color: var(--color-primary);
+}
+
+.inputReadonly {
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.inputReadonly:focus { border-color: var(--color-border); }
+
+.immutableNote {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--color-text-muted);
 }
 
 .errorMsg {

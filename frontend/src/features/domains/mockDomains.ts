@@ -3,16 +3,18 @@ export interface MockDomain {
   code: string;
   name: string;
   description: string;
+  /** ID del jefe de dominio asignado (opcional) */
+  jefeId: string | null;
   active: boolean;
 }
 
 /** Estado global de dominios durante la sesión (mutable, igual que MOCK_USERS) */
 export const MOCK_DOMAINS: MockDomain[] = [
-  { id: 'd1', code: 'MKT',  name: 'Marketing',       description: 'Área de marketing y comunicaciones digitales', active: true  },
-  { id: 'd2', code: 'RRHH', name: 'Recursos Humanos', description: 'Gestión de personas y capital humano',          active: true  },
-  { id: 'd3', code: 'TEC',  name: 'Tecnología',       description: 'Área de tecnología, sistemas e innovación',     active: true  },
-  { id: 'd4', code: 'LEG',  name: 'Legal',            description: 'Área jurídica y cumplimiento normativo',        active: true  },
-  { id: 'd5', code: 'FIN',  name: 'Finanzas',         description: 'Área financiera y contabilidad',                active: false },
+  { id: 'd1', code: 'MKT',  name: 'Marketing',       description: 'Área de marketing y comunicaciones digitales', jefeId: 'u4', active: true  },
+  { id: 'd2', code: 'RRHH', name: 'Recursos Humanos', description: 'Gestión de personas y capital humano',          jefeId: 'u3', active: true  },
+  { id: 'd3', code: 'TEC',  name: 'Tecnología',       description: 'Área de tecnología, sistemas e innovación',     jefeId: 'u5', active: true  },
+  { id: 'd4', code: 'LEG',  name: 'Legal',            description: 'Área jurídica y cumplimiento normativo',        jefeId: null, active: true  },
+  { id: 'd5', code: 'FIN',  name: 'Finanzas',         description: 'Área financiera y contabilidad',                jefeId: null, active: false },
 ];
 
 /** Agrega un dominio nuevo al array */

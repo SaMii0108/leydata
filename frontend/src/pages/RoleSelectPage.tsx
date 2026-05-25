@@ -45,9 +45,9 @@ const ROLE_META: Record<Role, RoleMeta> = {
     icon:        <IconEye />,
     color:       '#7c3aed',
   },
-  USER: {
-    label:       'Jefe de Área',
-    description: 'Gestión de consentimientos y solicitudes de su área asignada.',
+  JEFE_DOMINIO: {
+    label:       'Jefe de Dominio',
+    description: 'Gestión de consentimientos y solicitudes de propósito para los dominios asignados.',
     icon:        <IconUserCircle />,
     color:       '#059669',
   },
@@ -61,7 +61,7 @@ const ROLE_META: Record<Role, RoleMeta> = {
 
 /* ─── Destino por rol ──────────────────────────────────────────────────────── */
 const destinationFor = (role: Role): string => {
-  if (role === 'USER') return '/consentimientos';
+  if (role === 'JEFE_DOMINIO') return '/solicitudes';
   return '/';
 };
 

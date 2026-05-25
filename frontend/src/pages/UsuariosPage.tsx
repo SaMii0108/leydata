@@ -8,16 +8,10 @@ import { ROLE_LABEL } from '../constants/labels';
 import { initials } from '../utils/formatters';
 import styles from './UsuariosPage.module.css';
 
-/* ─── Labels ────────────────────────────────────────────────────────────────── */
-const USUARIO_LABEL: Record<string, string> = {
-  ...ROLE_LABEL,
-  USER: 'Jefe de Área',
-};
-
 /* ─── Roles creables por el admin ───────────────────────────────────────────── */
 const CREATABLE_ROLES: { value: Role; label: string }[] = [
-  { value: 'USER', label: 'Jefe de Área' },
-  { value: 'DPO',  label: 'DPO' },
+  { value: 'JEFE_DOMINIO', label: 'Jefe de Dominio' },
+  { value: 'DPO',          label: 'DPO' },
 ];
 
 /* ─── Helpers ────────────────────────────────────────────────────────────────── */
@@ -39,7 +33,7 @@ const UsuariosPage = () => {
 
   /* ── Estado modal crear ──────────────────────────────────────────────────── */
   const [showCreate, setShowCreate]   = useState(false);
-  const [selectedRole, setSelectedRole] = useState<Role>('USER');
+  const [selectedRole, setSelectedRole] = useState<Role>('JEFE_DOMINIO');
   const [form, setForm] = useState({ name: '', email: '', domainId: '' });
   const [provisionalPwd, setProvisionalPwd] = useState<string | null>(null);
 
@@ -49,7 +43,7 @@ const UsuariosPage = () => {
   /* ─── Crear usuario ─────────────────────────────────────────────────────── */
   const handleCreate = () => {
     if (!form.name.trim() || !form.email.trim()) return;
-    if (selectedRole === 'USER' && !form.domainId) return;
+    if (selectedRole === 'JEFE_DOMINIO' && !form.domainId) return;
 
     const domain = MOCK_DOMAINS.find((d) => d.id === form.domainId);
     const password = generatePassword();
@@ -61,7 +55,7 @@ const UsuariosPage = () => {
       password,
       roles:    [selectedRole],
       role:     selectedRole,
-      area:     selectedRole === 'USER' ? (domain?.name ?? null) : null,
+      domains:  selectedRole === 'JEFE_DOMINIO' ? (domain ? [domain.name] : []) : [],
       active:   true,
       blocked:  false,
     };
@@ -76,7 +70,7 @@ const UsuariosPage = () => {
     setShowCreate(false);
     setProvisionalPwd(null);
     setForm({ name: '', email: '', domainId: '' });
-    setSelectedRole('USER');
+    setSelectedRole('JEFE_DOMINIO');
   };
 
   /* ─── Toggle activo / desactivado ───────────────────────────────────────── */
@@ -108,7 +102,7 @@ const UsuariosPage = () => {
   const createDisabled  =
     !form.name.trim() ||
     !form.email.trim() ||
-    (selectedRole === 'USER' && (!form.domainId || noDomains));
+    (selectedRole === 'JEFE_DOMINIO' && (!form.domainId || noDomains));
 
   return (
     <div className={styles.page}>
@@ -241,8 +235,8 @@ const UsuariosPage = () => {
                   </select>
                 </div>
 
-                {/* 4. Área (solo Jefe de Área) */}
-                {selectedRole === 'USER' && (
+                {/* 4. Dominio (solo Jefe de Dominio) */}
+                {selectedRole === 'JEFE_DOMINIO' && (
                   <div className={styles.fieldGroup}>
                     <label className={styles.fieldLabel} htmlFor="u-domain">
                       Área asignada
@@ -396,13 +390,15 @@ const UserRow = ({ user, onToggle, onBlock }: UserRowProps) => {
       {/* Rol */}
       <td>
         <span className={[styles.roleBadge, styles[`role_${user.role.toLowerCase()}`]].join(' ')}>
-          {USUARIO_LABEL[user.role]}
+          {ROLE_LABEL[user.role]}
         </span>
       </td>
 
-      {/* Área */}
+      {/* Dominio */}
       <td className={styles.cellArea}>
-        {user.area ?? <span className={styles.noArea}>—</span>}
+        {user.domains.length > 0
+          ? user.domains.join(', ')
+          : <span className={styles.noArea}>—</span>}
       </td>
 
       {/* Estado */}
