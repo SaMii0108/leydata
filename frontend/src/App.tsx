@@ -39,7 +39,7 @@ const App = () => (
           <Route
             index
             element={
-              <ProtectedRoute roles={['ADMIN', 'DPO']} fallback="/solicitudes">
+              <ProtectedRoute roles={['ADMIN', 'DPO', 'JEFE_DOMINIO']}>
                 <DashboardPage />
               </ProtectedRoute>
             }

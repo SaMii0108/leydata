@@ -92,8 +92,12 @@
   font-weight: 500;
 }
 
-.deltaUp   { color: var(--color-success); }
-.deltaDown { color: var(--color-danger); }
+.deltaUp         { color: var(--color-success); }
+.deltaDown       { color: var(--color-danger); }
+.cardDeltaNeutral {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
 
 /* Chart */
 .chartSection {

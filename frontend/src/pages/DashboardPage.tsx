@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import Badge from '../components/common/Badge';
 import Button from '../components/common/Button';
 import { summaryCards, chartData, consentRecords } from '../utils/mockData';
@@ -129,15 +130,50 @@ const CardIcon = ({ index }: { index: number }) => {
 };
 
 const DashboardPage = () => {
-  const { canCreate } = usePermissions();
+  const { canCreate, isJefeDominio, userDomains } = usePermissions();
   const navigate = useNavigate();
+
+  const domainName = userDomains[0] ?? null;
+
+  /* ── Registros filtrados por dominio (JEFE_DOMINIO) ─────────────────────── */
+  const visibleRecords = useMemo(
+    () => isJefeDominio && domainName
+      ? consentRecords.filter((r) => r.area === domainName)
+      : consentRecords,
+    [isJefeDominio, domainName],
+  );
+
+  /* ── Cards calculadas para JEFE_DOMINIO ─────────────────────────────────── */
+  const domainCards: SummaryCard[] = useMemo(() => {
+    if (!isJefeDominio) return summaryCards;
+    const total    = visibleRecords.length;
+    const activos  = visibleRecords.filter((r) => r.estado === 'activo').length;
+    const pendien  = visibleRecords.filter((r) => r.estado === 'pendiente').length;
+    const revocados = visibleRecords.filter((r) => r.estado === 'revocado').length;
+    return [
+      { label: 'Total consentimientos', value: total,    delta: '—', deltaLabel: 'en tu dominio', trend: 'neutral', sparkline: [total, total, total, total, total] },
+      { label: 'Activos',               value: activos,  delta: '—', deltaLabel: 'activos',        trend: 'up',      sparkline: [activos, activos, activos, activos, activos] },
+      { label: 'Pendientes',            value: pendien,  delta: '—', deltaLabel: 'pendientes',     trend: 'neutral', sparkline: [pendien, pendien, pendien, pendien, pendien] },
+      { label: 'Revocados',             value: revocados,delta: '—', deltaLabel: 'revocados',      trend: 'down',    sparkline: [revocados, revocados, revocados, revocados, revocados] },
+    ];
+  }, [isJefeDominio, visibleRecords]);
+
+  const cards = isJefeDominio ? domainCards : summaryCards;
 
   return (
   <div className={styles.page}>
     <div className={styles.pageHeader}>
       <div>
-        <h2 className={styles.title}>Métricas Generales</h2>
-        <p className={styles.subtitle}>Panel de gestión de consentimientos en tiempo real</p>
+        <h2 className={styles.title}>
+          {isJefeDominio && domainName
+            ? `Métricas · ${domainName}`
+            : 'Métricas Generales'}
+        </h2>
+        <p className={styles.subtitle}>
+          {isJefeDominio
+            ? `Consentimientos activos en el dominio ${domainName}`
+            : 'Panel de gestión de consentimientos en tiempo real'}
+        </p>
       </div>
       {canCreate && (
         <Button variant="primary" onClick={() => navigate('/consentimientos/nuevo')}>
@@ -148,7 +184,7 @@ const DashboardPage = () => {
 
     {/* Summary cards */}
     <section className={styles.cardsGrid}>
-      {summaryCards.map((card, i) => (
+      {cards.map((card, i) => (
         <div key={card.label} className={styles.card}>
           <div className={styles.cardTop}>
             <p className={styles.cardLabel}>{card.label}</p>
@@ -156,56 +192,75 @@ const DashboardPage = () => {
           </div>
           <p className={styles.cardValue}>{card.value.toLocaleString('es-CL')}</p>
           <div className={styles.cardBottom}>
-            <span className={[
-              styles.cardDelta,
-              card.trend === 'up' ? styles.deltaUp : styles.deltaDown,
-            ].join(' ')}>
-              {card.trend === 'up' ? '↗' : '↘'} {card.delta} {card.deltaLabel}
-            </span>
-            <Sparkline values={card.sparkline} trend={card.trend} />
+            {card.trend !== 'neutral' ? (
+              <>
+                <span className={[
+                  styles.cardDelta,
+                  card.trend === 'up' ? styles.deltaUp : styles.deltaDown,
+                ].join(' ')}>
+                  {card.trend === 'up' ? '↗' : '↘'} {card.delta} {card.deltaLabel}
+                </span>
+                <Sparkline values={card.sparkline} trend={card.trend} />
+              </>
+            ) : (
+              <span className={styles.cardDeltaNeutral}>{card.deltaLabel}</span>
+            )}
           </div>
         </div>
       ))}
     </section>
 
-    {/* Consent Trends chart */}
-    <section className={styles.chartSection}>
-      <div className={styles.chartHeader}>
-        <div>
-          <h3 className={styles.chartTitle}>Tendencias de Consentimiento – Últimos 14 días</h3>
-          <p className={styles.chartSubtitle}>Actividad diaria por tipo de consentimiento</p>
+    {/* Consent Trends chart — solo ADMIN y DPO */}
+    {!isJefeDominio && (
+      <section className={styles.chartSection}>
+        <div className={styles.chartHeader}>
+          <div>
+            <h3 className={styles.chartTitle}>Tendencias de Consentimiento – Últimos 14 días</h3>
+            <p className={styles.chartSubtitle}>Actividad diaria por tipo de consentimiento</p>
+          </div>
         </div>
-      </div>
-      <ConsentChart />
-    </section>
+        <ConsentChart />
+      </section>
+    )}
 
     {/* Recent records */}
     <section className={styles.tableSection}>
       <div className={styles.tableHeader}>
-        <h3 className={styles.tableTitle}>Registros recientes</h3>
-        <Button variant="ghost" size="sm">Ver todos →</Button>
+        <h3 className={styles.tableTitle}>
+          {isJefeDominio ? `Consentimientos de ${domainName}` : 'Registros recientes'}
+        </h3>
+        <Button variant="ghost" size="sm" onClick={() => navigate('/consentimientos')}>
+          Ver todos →
+        </Button>
       </div>
       <div className={styles.tableWrapper}>
         <table className={styles.table}>
           <thead>
             <tr>
               <th>ID</th>
-              <th>Área</th>
+              {!isJefeDominio && <th>Área</th>}
               <th>Finalidad</th>
               <th>Estado</th>
               <th>Fecha</th>
             </tr>
           </thead>
           <tbody>
-            {consentRecords.slice(0, 5).map((r) => (
+            {visibleRecords.slice(0, 5).map((r) => (
               <tr key={r.id}>
                 <td className={styles.cellId}>{r.id}</td>
-                <td className={styles.cellMuted}>{r.area}</td>
+                {!isJefeDominio && <td className={styles.cellMuted}>{r.area}</td>}
                 <td className={styles.cellMuted}>{r.finalidad}</td>
                 <td><Badge status={r.estado} /></td>
                 <td className={styles.cellMuted}>{formatDate(r.fechaOtorgamiento)}</td>
               </tr>
             ))}
+            {visibleRecords.length === 0 && (
+              <tr>
+                <td colSpan={isJefeDominio ? 4 : 5} className={styles.cellMuted} style={{ textAlign: 'center', padding: '32px 0' }}>
+                  No hay registros para este dominio.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
