@@ -35,7 +35,7 @@ const LoginPage = () => {
 
     // Un solo rol → entra directamente
     login(user);
-    navigate(user.role === 'USER' ? '/consentimientos' : '/', { replace: true });
+    navigate('/', { replace: true });
     return null;
   };
 
@@ -55,7 +55,7 @@ const LoginPage = () => {
             <HintBox>
               <HintRow role="ADMIN"  email="ana@leydata.cl"    />
               <HintRow role="DPO"    email="carlos@leydata.cl" />
-              <HintRow role="USER"   email="maria@leydata.cl"  label="RRHH" />
+              <HintRow role="JEFE_DOMINIO" email="maria@leydata.cl" label="RRHH" />
               <HintRow role="ADMIN"  email="aurora@leydata.cl" label="ADMIN+DPO (multirol)" />
             </HintBox>
           }
