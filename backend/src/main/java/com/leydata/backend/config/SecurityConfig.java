@@ -30,10 +30,6 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
 
-    /*
-     * Define el filtro principal (Cadena de Seguridad) por donde pasan todas las
-     * peticiones HTTP.
-     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -71,10 +67,8 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * Proveedor de Autenticación: Conecta la base de datos con el encriptador de
-     * contraseñas.
-     */
+    // Proveedor de Autenticación: Conecta la base de datos con el encriptador de
+    // contraseñas.
     @Bean
     public AuthenticationProvider authenticationProvider() {
         // Usa exactamente la lógica original que funciona en tu versión
@@ -83,9 +77,7 @@ public class SecurityConfig {
         return provider;
     }
 
-    /**
-     * Gestor de Autenticación: Maneja el flujo de login.
-     */
+    // Gestor de Autenticación: Maneja el flujo de login.
     @Bean
     public AuthenticationManager authenticationManager(
             org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration authConfig)
@@ -93,17 +85,12 @@ public class SecurityConfig {
         return authConfig.getAuthenticationManager();
     }
 
-    /**
-     * Motor de encriptación de contraseñas con BCrypt.
-     */
+    // Motor de encriptación de contraseñas con BCrypt.
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    /**
-     * Configuración CORS (Cross-Origin Resource Sharing) para el Frontend.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

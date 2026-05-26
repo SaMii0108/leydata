@@ -15,7 +15,7 @@ backend/*.jar
 backend/.classpath
 backend/.project
 backend/.settings/
-
+frontend/.pnpm/pnpm-lock.yaml
 # IDEs
 .vscode/
 .idea/

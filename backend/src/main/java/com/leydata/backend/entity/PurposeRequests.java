@@ -38,8 +38,8 @@ public class PurposeRequests {
     @Column(name = "justification", columnDefinition = "TEXT", nullable = false)
     private String justification;
 
-    @Column(name = "requested_data", columnDefinition = "JSONB")
-    private String requestedData; // JSONB for requested data
+    @Column(name = "requested_data", columnDefinition = "TEXT")
+    private String requestedData; // JSON stored as TEXT (no JSONB in DB)
 
     @Column(name = "status", nullable = false)
     private String status; // PENDING, APPROVED, REJECTED
