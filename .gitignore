@@ -24,4 +24,5 @@ backend/.settings/
 .DS_Store
 
 # BBDD
+postgres_data/frontend/.claude/
 postgres_data/
