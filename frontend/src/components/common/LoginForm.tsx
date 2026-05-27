@@ -12,7 +12,7 @@ const LoginForm = ({ onSubmit, demoHintContent, footer }: LoginFormProps) => {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
-  const [showHint, setShowHint] = useState(false);
+  const [showHint, setShowHint] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -53,10 +53,10 @@ const LoginPage = () => {
           onSubmit={handleSubmit}
           demoHintContent={
             <HintBox>
-              <HintRow role="ADMIN"  email="ana@leydata.cl"    />
-              <HintRow role="DPO"    email="carlos@leydata.cl" />
-              <HintRow role="JEFE_DOMINIO" email="maria@leydata.cl" label="RRHH" />
-              <HintRow role="ADMIN"  email="aurora@leydata.cl" label="ADMIN+DPO (multirol)" />
+              <HintRow role="ADMIN"        email="ana@leydata.cl"    />
+              <HintRow role="DPO"          email="carlos@leydata.cl" />
+              <HintRow role="JEFE_DOMINIO" email="pedro@leydata.cl"  label="Jefe Marketing" />
+              <HintRow role="ADMIN"        email="aurora@leydata.cl" label="ADMIN+DPO (multirol)" />
             </HintBox>
           }
           footer={
