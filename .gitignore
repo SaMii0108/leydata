@@ -1,21 +1,24 @@
 # FRONTEND
 frontend/node_modules/
 frontend/dist/
+frontend/.pnpm/pnpm-lock.yaml
 
 # BACKEND
 backend/target/
 backend/*.log
 backend/*.class
-
-# GENERAL
-.env
-.env.local
 backend/.mvn/
 backend/*.jar
 backend/.classpath
 backend/.project
 backend/.settings/
-frontend/.pnpm/pnpm-lock.yaml
+
+# GENERAL
+.env
+.env.local
+.github/
+
+
 # IDEs
 .vscode/
 .idea/
