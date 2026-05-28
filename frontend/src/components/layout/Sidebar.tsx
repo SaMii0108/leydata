@@ -87,8 +87,8 @@ const navItems: NavItem[] = [
   { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,       roles: ['DPO', 'JEFE_DOMINIO'] },
   { to: '/solicitudes',     label: 'Solicitudes',        icon: <IconClipboard />,  roles: ['DPO', 'JEFE_DOMINIO'] },
   { to: '/usuarios',        label: 'Usuarios',           icon: <IconUsers />,      roles: ['ADMIN'] },
-  { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,      roles: ['ADMIN', 'DPO'] },
-  { to: '/cumplimiento',    label: 'Cumplimiento Legal', icon: <IconShield />,     roles: ['ADMIN', 'DPO'] },
+  { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,      roles: ['DPO'] },
+  { to: '/cumplimiento',    label: 'Cumplimiento Legal', icon: <IconShield />,     roles: ['DPO'] },
   { to: '/plantillas',      label: 'Plantillas',         icon: <IconPalette />,    roles: ['DPO'] },
   { to: '/perfil',          label: 'Mi Perfil',          icon: <IconUser />,       roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
 ];

@@ -70,12 +70,12 @@ const App = () => (
             </ProtectedRoute>
           } />
           <Route path="auditoria" element={
-            <ProtectedRoute roles={['ADMIN', 'DPO']}>
+            <ProtectedRoute roles={['DPO']}>
               <AuditTrailPage />
             </ProtectedRoute>
           } />
           <Route path="cumplimiento" element={
-            <ProtectedRoute roles={['ADMIN', 'DPO']}>
+            <ProtectedRoute roles={['DPO']}>
               <CompliancePage />
             </ProtectedRoute>
           } />
