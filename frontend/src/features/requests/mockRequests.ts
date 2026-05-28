@@ -93,6 +93,14 @@ export const MOCK_REQUESTS: PurposeRequest[] = [
   },
 ];
 
+/**
+ * Devuelve los títulos únicos de todas las solicitudes APROBADAS.
+ * Usado por el formulario de nuevo consentimiento para poblar el selector de finalidad.
+ * Lee directamente del array en memoria — refleja aprobaciones realizadas en la sesión.
+ */
+export const getApprovedFinalidades = (): string[] =>
+  [...new Set(MOCK_REQUESTS.filter((r) => r.status === 'APPROVED').map((r) => r.title))];
+
 /** Agrega una nueva solicitud al array (persiste durante la sesión) */
 export const addMockRequest = (req: PurposeRequest) => {
   MOCK_REQUESTS.push(req);

@@ -17,6 +17,8 @@ export interface AuthContextValue {
   setPendingUser: (user: AppUser) => void;
   /** Confirma el rol elegido y activa la sesión */
   selectRole: (role: Role) => void;
+  /** Cambia el rol activo de un usuario ya autenticado con múltiples roles */
+  switchRole: (role: Role) => void;
   /** Cierra sesión completa */
   logout: () => void;
 }

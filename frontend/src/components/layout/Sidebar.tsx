@@ -3,8 +3,8 @@ import type { ReactElement } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../features/auth/useAuth';
 import type { Role } from '../../features/auth/mockUsers';
-import { ROLE_LABEL } from '../../constants/labels';
 import { initials } from '../../utils/formatters';
+import RoleSwitcher from '../common/RoleSwitcher';
 import styles from './Sidebar.module.css';
 
 interface NavItem {
@@ -160,10 +160,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             </span>
             <div className={styles.userInfo}>
               <span className={styles.userName}>{user.name}</span>
-              <span className={styles.userRole} style={{ color: ROLE_COLOR[user.role] }}>
-                {ROLE_LABEL[user.role]}
-                {user.domains.length > 0 && ` · ${user.domains[0]}`}
-              </span>
+              <RoleSwitcher variant="sidebar" />
             </div>
           </div>
           {!confirmLogout ? (

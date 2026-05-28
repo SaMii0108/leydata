@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/useAuth';
-import { ROLE_LABEL } from '../../constants/labels';
 import { initials } from '../../utils/formatters';
+import RoleSwitcher from '../common/RoleSwitcher';
 import styles from './Header.module.css';
 
 interface HeaderProps {
@@ -115,10 +115,7 @@ const Header = ({ onMenuToggle }: HeaderProps) => {
               {/* Mini encabezado */}
               <div className={styles.dropdownHeader}>
                 <span className={styles.dropdownName}>{user?.name}</span>
-                <span className={styles.dropdownRole}>
-                  {ROLE_LABEL[user?.role ?? ''] ?? user?.role}
-                  {user?.domains?.[0] ? ` · ${user.domains[0]}` : ''}
-                </span>
+                <RoleSwitcher variant="header" />
               </div>
 
               <div className={styles.dropdownDivider} />

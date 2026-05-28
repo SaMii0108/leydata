@@ -1,16 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AREAS } from '../features/domains/mockDomains';
+import { getApprovedFinalidades } from '../features/requests/mockRequests';
 import Button from '../components/common/Button';
 import styles from './NuevoConsentimientoPage.module.css';
-
-const FINALIDADES = [
-  'Marketing directo',
-  'Análisis de datos internos',
-  'Transferencia a terceros',
-  'Investigación académica',
-  'Publicidad personalizada',
-];
 
 const DOMINIOS = ['Marketing', 'Publicidad', 'Análisis', 'Funcional'] as const;
 
@@ -22,23 +15,26 @@ interface FormState {
   notas: string;
 }
 
-const INITIAL: FormState = {
-  area: AREAS[0],
-  finalidad: FINALIDADES[0],
-  dominio: '',
-  fechaExpiracion: '',
-  notas: '',
-};
-
 const NuevoConsentimientoPage = () => {
   const navigate = useNavigate();
-  const [form, setForm] = useState<FormState>(INITIAL);
+
+  // Lee del array en memoria — refleja las aprobaciones del DPO en la sesión actual.
+  // Se recalcula en cada montaje del componente (al navegar a esta página).
+  const finalidades = getApprovedFinalidades();
+
+  const [form, setForm] = useState<FormState>({
+    area: AREAS[0],
+    finalidad: finalidades[0] ?? '',
+    dominio: '',
+    fechaExpiracion: '',
+    notas: '',
+  });
   const [submitted, setSubmitted] = useState(false);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  const isValid = form.area && form.finalidad && form.fechaExpiracion;
+  const isValid = form.area && form.finalidad && form.fechaExpiracion && finalidades.length > 0;
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -91,14 +87,24 @@ const NuevoConsentimientoPage = () => {
           <Section title="Finalidad del tratamiento">
             <div className={styles.fieldGroup}>
               <label className={styles.fieldLabel} htmlFor="nc-finalidad">Finalidad</label>
-              <select
-                id="nc-finalidad"
-                className={styles.select}
-                value={form.finalidad}
-                onChange={(e) => update('finalidad', e.target.value)}
-              >
-                {FINALIDADES.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
+              {finalidades.length === 0 ? (
+                <div className={styles.noFinalidades}>
+                  <p className={styles.noFinalidadesText}>
+                    No hay finalidades aprobadas disponibles. Para crear un consentimiento, un
+                    Jefe de Dominio debe enviar una solicitud de propósito y el DPO debe aprobarla
+                    desde la sección <strong>Solicitudes</strong>.
+                  </p>
+                </div>
+              ) : (
+                <select
+                  id="nc-finalidad"
+                  className={styles.select}
+                  value={form.finalidad}
+                  onChange={(e) => update('finalidad', e.target.value)}
+                >
+                  {finalidades.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+              )}
             </div>
 
             <div className={styles.fieldGroup}>

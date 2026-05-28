@@ -23,13 +23,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setPendingUserState(null);
   };
 
+  const switchRole = (role: Role) => {
+    if (!user || !user.roles.includes(role)) return;
+    setUser({ ...user, role });
+  };
+
   const logout = () => {
     setUser(null);
     setPendingUserState(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, pendingUser, login, setPendingUser, selectRole, logout }}>
+    <AuthContext.Provider value={{ user, pendingUser, login, setPendingUser, selectRole, switchRole, logout }}>
       {children}
     </AuthContext.Provider>
   );

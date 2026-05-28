@@ -1,0 +1,133 @@
+.wrap {
+  position: relative;
+}
+
+/* Texto estático (usuario con un solo rol) */
+.roleText {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Variante sidebar: texto claro */
+.role_sidebar { color: inherit; }
+/* Variante header: texto secundario */
+.role_header  { color: var(--color-text-muted); }
+
+/* Botón trigger */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s;
+  max-width: 100%;
+}
+
+.trigger:hover { opacity: 0.75; }
+
+/* En sidebar: texto claro (heredado del sidebar oscuro) */
+.trigger_sidebar { color: #94a3b8; }
+/* En header: sobre fondo blanco */
+.trigger_header  { color: var(--color-text-muted); }
+
+.chevron {
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: transform 0.18s ease;
+  color: currentColor;
+}
+
+.chevronOpen { transform: rotate(180deg); }
+
+/* Dropdown */
+.dropdown {
+  position: absolute;
+  z-index: 300;
+  min-width: 180px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: fadeInDown 0.12s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Sidebar: abre hacia arriba */
+.dropdown_sidebar {
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+
+/* Header: abre hacia abajo */
+.dropdown_header {
+  top: calc(100% + 6px);
+  right: 0;
+}
+
+.dropdownLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-muted);
+  margin: 0 0 4px;
+  padding: 2px 8px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.option:hover { background: var(--color-bg); }
+
+.optionActive {
+  background: var(--color-primary-light);
+  font-weight: 600;
+}
+
+.optionDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.optionLabel { flex: 1; }
+
+.checkIcon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
