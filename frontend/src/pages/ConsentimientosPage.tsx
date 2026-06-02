@@ -8,6 +8,7 @@ import type { ConsentStatus, ConsentRecord } from '../utils/mockData';
 import { usePermissions } from '../features/auth/usePermissions';
 import { AREAS } from '../features/domains/mockDomains';
 import { formatDate } from '../utils/formatters';
+import { getTemplateByConsentId } from '../features/templates/mockTemplates';
 import styles from './ConsentimientosPage.module.css';
 
 type SortField = Extract<keyof ConsentRecord, 'area' | 'finalidad' | 'estado' | 'fechaOtorgamiento' | 'fechaExpiracion'>;
@@ -32,6 +33,35 @@ const ConsentimientosPage = () => {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [drawerRecord, setDrawerRecord] = useState<ConsentRecord | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // ── Selección múltiple ────────────────────────────────────
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelection = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleGenerateForSelected = () => {
+    const ids = [...selectedIds];
+    exitSelectionMode();
+    if (ids.length === 1) {
+      const tmpl = getTemplateByConsentId(ids[0]);
+      navigate(tmpl
+        ? `/plantillas?templateId=${tmpl.id}`
+        : `/plantillas?consentId=${ids[0]}`);
+    } else {
+      navigate(`/plantillas?consentIds=${ids.join(',')}`);
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -145,15 +175,47 @@ const ConsentimientosPage = () => {
       {/* Table */}
       <section className={styles.tableSection}>
         <div className={styles.tableHeader}>
-          <span className={styles.resultCount}>
-            {filtered.length} resultado{filtered.length !== 1 ? 's' : ''}
-            {hasActiveFilters && ' (filtrado)'}
-          </span>
-          <div className={styles.tableActions}>
-            <Button variant="ghost" size="sm" onClick={() => console.warn('Exportar CSV: pendiente integración backend')}>
-              Exportar CSV
-            </Button>
-          </div>
+          {selectionMode ? (
+            <>
+              <span className={styles.selectionCount}>
+                {selectedIds.size > 0
+                  ? `${selectedIds.size} seleccionado${selectedIds.size !== 1 ? 's' : ''}`
+                  : 'Selecciona uno o más consentimientos'}
+              </span>
+              <div className={styles.tableActions}>
+                <button
+                  className={[
+                    styles.generateSelectedBtn,
+                    selectedIds.size === 0 ? styles.generateSelectedBtnDisabled : '',
+                  ].join(' ')}
+                  disabled={selectedIds.size === 0}
+                  onClick={handleGenerateForSelected}
+                >
+                  Generar plantilla para seleccionados
+                </button>
+                <Button variant="ghost" size="sm" onClick={exitSelectionMode}>
+                  Cancelar
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className={styles.resultCount}>
+                {filtered.length} resultado{filtered.length !== 1 ? 's' : ''}
+                {hasActiveFilters && ' (filtrado)'}
+              </span>
+              <div className={styles.tableActions}>
+                {canCreate && (
+                  <Button variant="ghost" size="sm" onClick={() => setSelectionMode(true)}>
+                    Seleccionar
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => console.warn('Exportar CSV: pendiente integración backend')}>
+                  Exportar CSV
+                </Button>
+              </div>
+            </>
+          )}
         </div>
 
         <div className={styles.tableWrapper}>
@@ -182,6 +244,7 @@ const ConsentimientosPage = () => {
               <table className={styles.table}>
                 <thead>
                   <tr>
+                    {selectionMode && <th className={styles.checkboxCol}></th>}
                     <th>ID</th>
                     <th className={styles.sortable} onClick={() => handleSort('area')}>
                       Área {sortIcon('area')}
@@ -202,25 +265,64 @@ const ConsentimientosPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginated.map((record) => (
-                    <tr key={record.id}>
-                      <td className={styles.cellId}>{record.id}</td>
-                      <td>
-                        <span className={styles.areaBadge}>{record.area}</span>
-                      </td>
-                      <td className={styles.cellFinalidad}>{record.finalidad}</td>
-                      <td><Badge status={record.estado} /></td>
-                      <td className={styles.cellDate}>{formatDate(record.fechaOtorgamiento)}</td>
-                      <td className={styles.cellDate}>{formatDate(record.fechaExpiracion)}</td>
-                      <td>
-                        {canViewDetail && (
-                          <Button variant="ghost" size="sm" onClick={() => setDrawerRecord(record)}>
-                            Ver
-                          </Button>
+                  {paginated.map((record) => {
+                    const existingTemplate = canCreate ? getTemplateByConsentId(record.id) : null;
+                    const isSelected = selectedIds.has(record.id);
+                    return (
+                      <tr
+                        key={record.id}
+                        className={isSelected ? styles.rowSelected : ''}
+                        onClick={selectionMode ? () => toggleSelection(record.id) : undefined}
+                        style={selectionMode ? { cursor: 'pointer' } : undefined}
+                      >
+                        {selectionMode && (
+                          <td className={styles.checkboxCol} onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              className={styles.checkboxInput}
+                              checked={isSelected}
+                              onChange={() => toggleSelection(record.id)}
+                              aria-label={`Seleccionar ${record.id}`}
+                            />
+                          </td>
                         )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className={styles.cellId}>{record.id}</td>
+                        <td>
+                          <span className={styles.areaBadge}>{record.area}</span>
+                        </td>
+                        <td className={styles.cellFinalidad}>{record.finalidad}</td>
+                        <td><Badge status={record.estado} /></td>
+                        <td className={styles.cellDate}>{formatDate(record.fechaOtorgamiento)}</td>
+                        <td className={styles.cellDate}>{formatDate(record.fechaExpiracion)}</td>
+                        <td>
+                          <div className={styles.rowActions}>
+                            {canViewDetail && (
+                              <Button variant="ghost" size="sm" onClick={() => setDrawerRecord(record)}>
+                                Ver
+                              </Button>
+                            )}
+                            {canCreate && (
+                              existingTemplate ? (
+                                <button
+                                  className={styles.templateBtn}
+                                  onClick={() => navigate(`/plantillas?templateId=${existingTemplate.id}`)}
+                                >
+                                  Ver plantilla
+                                </button>
+                              ) : (
+                                <button
+                                  className={styles.templateBtnNew}
+                                  onClick={() => navigate(`/plantillas?consentId=${record.id}`)}
+                                >
+                                  + Plantilla
+                                </button>
+                              )
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {totalPages > 1 && (
@@ -250,7 +352,19 @@ const ConsentimientosPage = () => {
         </div>
       </section>
 
-      <ConsentDrawer record={drawerRecord} onClose={() => setDrawerRecord(null)} />
+      <ConsentDrawer
+        record={drawerRecord}
+        onClose={() => setDrawerRecord(null)}
+        onGenerateTemplate={canCreate && drawerRecord ? () => {
+          const tmpl = getTemplateByConsentId(drawerRecord.id);
+          setDrawerRecord(null);
+          navigate(tmpl
+            ? `/plantillas?templateId=${tmpl.id}`
+            : `/plantillas?consentId=${drawerRecord.id}`
+          );
+        } : undefined}
+        templateExists={drawerRecord ? !!getTemplateByConsentId(drawerRecord.id) : false}
+      />
     </div>
   );
 };

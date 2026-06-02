@@ -7,6 +7,7 @@ import { initials } from '../../utils/formatters';
 import RoleSwitcher from '../common/RoleSwitcher';
 import styles from './Sidebar.module.css';
 
+// ── Types ────────────────────────────────────────────────────────
 interface NavItem {
   to: string;
   label: string;
@@ -14,11 +15,24 @@ interface NavItem {
   roles: Role[];
 }
 
+interface NavGroupDef {
+  id: string;
+  label: string;
+  icon: ReactElement;
+  childRoutes: string[];
+  children: NavItem[];
+}
+
+type NavEntry =
+  | ({ kind: 'item' } & NavItem)
+  | ({ kind: 'group' } & NavGroupDef);
+
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+// ── Icons ────────────────────────────────────────────────────────
 const IconGrid = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
@@ -63,7 +77,6 @@ const IconUser = () => (
     <circle cx="12" cy="7" r="4"/>
   </svg>
 );
-
 const IconDomain = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <ellipse cx="12" cy="5" rx="9" ry="3"/>
@@ -71,7 +84,6 @@ const IconDomain = () => (
     <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
   </svg>
 );
-
 const IconClipboard = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
@@ -80,19 +92,42 @@ const IconClipboard = () => (
     <line x1="9" y1="16" x2="13" y2="16"/>
   </svg>
 );
+const IconLayers = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+    <polyline points="2 17 12 22 22 17"/>
+    <polyline points="2 12 12 17 22 12"/>
+  </svg>
+);
+const IconChevron = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="6 9 12 15 18 9"/>
+  </svg>
+);
 
-const navItems: NavItem[] = [
-  { to: '/',                label: 'Métricas',           icon: <IconGrid />,       roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
-  { to: '/dominios',        label: 'Dominios',           icon: <IconDomain />,     roles: ['ADMIN'] },
-  { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,       roles: ['DPO', 'JEFE_DOMINIO'] },
-  { to: '/solicitudes',     label: 'Solicitudes',        icon: <IconClipboard />,  roles: ['DPO', 'JEFE_DOMINIO'] },
-  { to: '/usuarios',        label: 'Usuarios',           icon: <IconUsers />,      roles: ['ADMIN'] },
-  { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,      roles: ['DPO'] },
-  { to: '/cumplimiento',    label: 'Cumplimiento Legal', icon: <IconShield />,     roles: ['DPO'] },
-  { to: '/plantillas',      label: 'Plantillas',         icon: <IconPalette />,    roles: ['DPO'] },
-  { to: '/perfil',          label: 'Mi Perfil',          icon: <IconUser />,       roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
+// ── Navigation entries ───────────────────────────────────────────
+const navEntries: NavEntry[] = [
+  { kind: 'item', to: '/',             label: 'Métricas',           icon: <IconGrid />,      roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
+  { kind: 'item', to: '/dominios',     label: 'Dominios',           icon: <IconDomain />,    roles: ['ADMIN'] },
+  {
+    kind: 'group',
+    id: 'consentimientos-plantillas',
+    label: 'Plantillas y consentimientos',
+    icon: <IconLayers />,
+    childRoutes: ['/consentimientos', '/plantillas'],
+    children: [
+      { to: '/consentimientos', label: 'Consentimientos', icon: <IconList />,    roles: ['DPO', 'JEFE_DOMINIO'] },
+      { to: '/plantillas',      label: 'Plantillas',      icon: <IconPalette />, roles: ['DPO'] },
+    ],
+  },
+  { kind: 'item', to: '/solicitudes',  label: 'Solicitudes',        icon: <IconClipboard />, roles: ['DPO', 'JEFE_DOMINIO'] },
+  { kind: 'item', to: '/usuarios',     label: 'Usuarios',           icon: <IconUsers />,     roles: ['ADMIN'] },
+  { kind: 'item', to: '/auditoria',    label: 'Auditoría',          icon: <IconAudit />,     roles: ['DPO'] },
+  { kind: 'item', to: '/cumplimiento', label: 'Cumplimiento Legal', icon: <IconShield />,    roles: ['DPO'] },
+  { kind: 'item', to: '/perfil',       label: 'Mi Perfil',          icon: <IconUser />,      roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
 ];
 
+// ── Role colors ──────────────────────────────────────────────────
 const ROLE_COLOR: Record<Role, string> = {
   ADMIN:        '#4361ee',
   DPO:          '#7c3aed',
@@ -100,21 +135,56 @@ const ROLE_COLOR: Record<Role, string> = {
   TITULAR:      '#0891b2',
 };
 
+// ── Component ────────────────────────────────────────────────────
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [confirmLogout, setConfirmLogout] = useState(false);
 
+  // Initialize expanded groups based on current path
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    navEntries.forEach((entry) => {
+      if (
+        entry.kind === 'group' &&
+        entry.childRoutes.some((r) => location.pathname.startsWith(r))
+      ) {
+        initial.add(entry.id);
+      }
+    });
+    return initial;
+  });
+
+  // Close mobile sidebar and reset logout confirmation on navigation
   useEffect(() => {
-    // Cierra el menú móvil y resetea confirmación al navegar
     Promise.resolve().then(() => {
       onClose();
       setConfirmLogout(false);
     });
   }, [location.pathname, onClose]);
 
-  const visible = navItems.filter((item) => user && item.roles.includes(user.role));
+  // Auto-expand groups when navigating into one of their child routes
+  useEffect(() => {
+    navEntries.forEach((entry) => {
+      if (
+        entry.kind === 'group' &&
+        entry.childRoutes.some((r) => location.pathname.startsWith(r))
+      ) {
+        setOpenGroups((prev) => {
+          if (prev.has(entry.id)) return prev;
+          return new Set([...prev, entry.id]);
+        });
+      }
+    });
+  }, [location.pathname]);
+
+  const toggleGroup = (id: string) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const handleLogout = () => {
     logout();
@@ -125,60 +195,122 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     <>
       {isOpen && <div className={styles.overlay} onClick={onClose} />}
       <aside className={[styles.sidebar, isOpen ? styles.sidebarOpen : ''].join(' ')}>
-      {/* Brand */}
-      <div className={styles.brand}>
-        <span className={styles.brandName}>Ley Data</span>
-        <span className={styles.brandSub}>Gestión de Privacidad</span>
-      </div>
 
-      {/* Nav */}
-      <nav className={styles.nav}>
-        {visible.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              [styles.navItem, isActive ? styles.active : ''].join(' ')
+        {/* Brand */}
+        <div className={styles.brand}>
+          <span className={styles.brandName}>Ley Data</span>
+          <span className={styles.brandSub}>Gestión de Privacidad</span>
+        </div>
+
+        {/* Nav */}
+        <nav className={styles.nav}>
+          {navEntries.map((entry) => {
+            // ── Flat item ────────────────────────────────────────
+            if (entry.kind === 'item') {
+              if (!user || !entry.roles.includes(user.role)) return null;
+              return (
+                <NavLink
+                  key={entry.to}
+                  to={entry.to}
+                  end={entry.to === '/'}
+                  className={({ isActive }) =>
+                    [styles.navItem, isActive ? styles.active : ''].join(' ')
+                  }
+                >
+                  <span className={styles.icon}>{entry.icon}</span>
+                  {entry.label}
+                </NavLink>
+              );
             }
-          >
-            <span className={styles.icon}>{item.icon}</span>
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
 
-      {/* User info */}
-      {user && (
-        <div className={styles.userPanel}>
-          <div className={styles.userRow}>
-            <span
-              className={styles.userAvatar}
-              style={{ background: ROLE_COLOR[user.role] + '22', color: ROLE_COLOR[user.role] }}
-            >
-              {initials(user.name)}
-            </span>
-            <div className={styles.userInfo}>
-              <span className={styles.userName}>{user.name}</span>
-              <RoleSwitcher variant="sidebar" />
-            </div>
-          </div>
-          {!confirmLogout ? (
-            <button className={styles.logoutBtn} onClick={() => setConfirmLogout(true)}>
-              Cerrar sesión
-            </button>
-          ) : (
-            <div className={styles.logoutConfirm}>
-              <span className={styles.logoutConfirmText}>¿Cerrar sesión?</span>
-              <div className={styles.logoutConfirmBtns}>
-                <button className={styles.logoutConfirmYes} onClick={handleLogout}>Sí</button>
-                <button className={styles.logoutConfirmNo} onClick={() => setConfirmLogout(false)}>No</button>
+            // ── Group ────────────────────────────────────────────
+            const visibleChildren = entry.children.filter(
+              (c) => user && c.roles.includes(user.role),
+            );
+            if (visibleChildren.length === 0) return null;
+
+            const isGroupActive = entry.childRoutes.some((r) =>
+              location.pathname.startsWith(r),
+            );
+            const isExpanded = openGroups.has(entry.id);
+
+            return (
+              <div key={entry.id} className={styles.navGroup}>
+                <button
+                  className={[
+                    styles.navGroupBtn,
+                    isGroupActive ? styles.navGroupBtnActive : '',
+                  ].join(' ')}
+                  onClick={() => toggleGroup(entry.id)}
+                  aria-expanded={isExpanded}
+                >
+                  <span className={styles.icon}>{entry.icon}</span>
+                  <span className={styles.navGroupLabel}>{entry.label}</span>
+                  <span
+                    className={[
+                      styles.navGroupChevron,
+                      isExpanded ? styles.navGroupChevronOpen : '',
+                    ].join(' ')}
+                  >
+                    <IconChevron />
+                  </span>
+                </button>
+
+                {isExpanded && (
+                  <div className={styles.navGroupChildren}>
+                    {visibleChildren.map((child) => (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        className={({ isActive: childActive }) =>
+                          [
+                            styles.navSubItem,
+                            childActive ? styles.navSubItemActive : '',
+                          ].join(' ')
+                        }
+                      >
+                        <span className={styles.icon}>{child.icon}</span>
+                        {child.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* User panel */}
+        {user && (
+          <div className={styles.userPanel}>
+            <div className={styles.userRow}>
+              <span
+                className={styles.userAvatar}
+                style={{ background: ROLE_COLOR[user.role] + '22', color: ROLE_COLOR[user.role] }}
+              >
+                {initials(user.name)}
+              </span>
+              <div className={styles.userInfo}>
+                <span className={styles.userName}>{user.name}</span>
+                <RoleSwitcher variant="sidebar" />
               </div>
             </div>
-          )}
-        </div>
-      )}
-    </aside>
+            {!confirmLogout ? (
+              <button className={styles.logoutBtn} onClick={() => setConfirmLogout(true)}>
+                Cerrar sesión
+              </button>
+            ) : (
+              <div className={styles.logoutConfirm}>
+                <span className={styles.logoutConfirmText}>¿Cerrar sesión?</span>
+                <div className={styles.logoutConfirmBtns}>
+                  <button className={styles.logoutConfirmYes} onClick={handleLogout}>Sí</button>
+                  <button className={styles.logoutConfirmNo} onClick={() => setConfirmLogout(false)}>No</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </aside>
     </>
   );
 };

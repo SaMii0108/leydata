@@ -186,6 +186,96 @@
 .logoutConfirmYes:hover,
 .logoutConfirmNo:hover { opacity: 0.85; }
 
+/* ── Nav Group (collapsible) ──────────────────────────────────── */
+.navGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.navGroupBtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  color: var(--sidebar-text);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  width: 100%;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: left;
+  border-left: 3px solid transparent;
+}
+
+.navGroupBtn:hover {
+  background: rgba(255,255,255,0.06);
+  color: #cbd5e1;
+}
+
+.navGroupBtnActive {
+  color: #e2e8f0;
+  border-left-color: var(--color-primary);
+  background: rgba(255,255,255,0.06);
+}
+
+.navGroupLabel {
+  flex: 1;
+  text-align: left;
+  line-height: 1.3;
+}
+
+.navGroupChevron {
+  display: flex;
+  align-items: center;
+  color: #475569;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.navGroupChevronOpen {
+  transform: rotate(180deg);
+}
+
+/* Children container */
+.navGroupChildren {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 4px 14px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Sub-item (child NavLink) */
+.navSubItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  color: #64748b;
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+.navSubItem:hover {
+  background: rgba(255,255,255,0.06);
+  color: #cbd5e1;
+}
+
+.navSubItemActive {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.navSubItemActive .icon { opacity: 1; }
+
 /* Mobile */
 .overlay {
   display: none;

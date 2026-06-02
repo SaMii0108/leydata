@@ -109,6 +109,11 @@ export const chartData: ChartDay[] = [
   { date: '6 may',  granted: 980,  rejected: 118, revoked: 55 },
 ];
 
+/** Agrega un consentimiento al registro (persiste durante la sesión). */
+export const addConsentRecord = (record: ConsentRecord) => {
+  consentRecords.push(record);
+};
+
 export const consentRecords: ConsentRecord[] = [
   { id: 'C-0001', titularId: 't1', area: 'Marketing',        finalidad: 'Marketing directo',          estado: 'activo',    fechaOtorgamiento: '2025-11-03', fechaExpiracion: '2026-11-03' },
   { id: 'C-0002', titularId: 't2', area: 'Tecnología',        finalidad: 'Análisis de datos internos', estado: 'revocado',  fechaOtorgamiento: '2025-08-15', fechaExpiracion: '2026-08-15' },

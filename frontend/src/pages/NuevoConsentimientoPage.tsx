@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AREAS } from '../features/domains/mockDomains';
 import { getApprovedFinalidades } from '../features/requests/mockRequests';
+import { addConsentRecord } from '../utils/mockData';
+import type { ConsentRecord } from '../utils/mockData';
 import Button from '../components/common/Button';
 import styles from './NuevoConsentimientoPage.module.css';
 
@@ -38,6 +40,16 @@ const NuevoConsentimientoPage = () => {
 
   const handleSubmit = () => {
     if (!isValid) return;
+    const newRecord: ConsentRecord = {
+      id: `C-${String(Date.now()).slice(-4)}`,
+      titularId: 'new',
+      area: form.area,
+      finalidad: form.finalidad,
+      estado: 'pendiente',
+      fechaOtorgamiento: new Date().toISOString().split('T')[0],
+      fechaExpiracion: form.fechaExpiracion,
+    };
+    addConsentRecord(newRecord);
     setSubmitted(true);
     setTimeout(() => navigate('/consentimientos'), 2000);
   };

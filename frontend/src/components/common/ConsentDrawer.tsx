@@ -8,9 +8,11 @@ import styles from './ConsentDrawer.module.css';
 interface ConsentDrawerProps {
   record: ConsentRecord | null;
   onClose: () => void;
+  onGenerateTemplate?: () => void;
+  templateExists?: boolean;
 }
 
-const ConsentDrawer = ({ record, onClose }: ConsentDrawerProps) => (
+const ConsentDrawer = ({ record, onClose, onGenerateTemplate, templateExists }: ConsentDrawerProps) => (
   <Modal open={record !== null} onClose={onClose} variant="drawer">
     {record && (
       <div className={styles.drawer}>
@@ -53,6 +55,11 @@ const ConsentDrawer = ({ record, onClose }: ConsentDrawerProps) => (
         </div>
 
         <div className={styles.footer}>
+          {onGenerateTemplate && (
+            <Button variant="ghost" onClick={onGenerateTemplate}>
+              {templateExists ? 'Ver/editar plantilla' : 'Generar plantilla'}
+            </Button>
+          )}
           <Button variant="ghost" onClick={onClose}>Cerrar</Button>
         </div>
       </div>
