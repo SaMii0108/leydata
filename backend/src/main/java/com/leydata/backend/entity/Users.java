@@ -47,6 +47,11 @@ public class Users implements UserDetails {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    // Para indicar si el usuario debe cambiar su contraseña en
+    // el próximo inicio de sesión
+    @Column(name = "must_change_password", nullable = false)
+    private Boolean mustChangePassword = false;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<UsersRole> userRoles;
 
