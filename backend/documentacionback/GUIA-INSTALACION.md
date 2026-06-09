@@ -5,41 +5,57 @@
 
 ---
 
-## Requisitos previos
+## Índice
 
-| Herramienta | Versión | Verificar |
-|---|---|---|
-| Docker Desktop | 4.x | `docker --version` |
-| Java 21 (JDK) | 21 | `java -version` |
-| Git | cualquiera | `git --version` |
-
-> En Windows usar **WSL 2 + Ubuntu**. Docker Desktop debe tener activada la integración con WSL (Settings → Resources → WSL Integration → Ubuntu ✅).
+1. [Requisitos previos](#1-requisitos-previos)
+2. [Clonar el repositorio](#2-clonar-el-repositorio)
+3. [Infraestructura Docker](#3-infraestructura-docker)
+4. [Configurar Keycloak](#4-configurar-keycloak)
+5. [Levantar el backend](#5-levantar-el-backend)
+6. [Verificar que todo funciona](#6-verificar-que-todo-funciona)
+7. [Comandos del día a día](#7-comandos-del-día-a-día)
+8. [Problemas frecuentes](#8-problemas-frecuentes)
 
 ---
 
-## 1. Clonar el repositorio
+## 1. Requisitos previos
+
+| Herramienta | Versión mínima | Verificar |
+|---|---|---|
+| Docker Desktop | 4.x | `docker --version` |
+| Java JDK | 21 | `java -version` |
+| Git | cualquiera | `git --version` |
+
+**Windows:** usar WSL 2 con Ubuntu. En Docker Desktop activar Settings > Resources > WSL Integration > Ubuntu.
+
+**macOS / Linux:** Docker Desktop o Docker Engine instalado directamente.
+
+---
+
+## 2. Clonar el repositorio
 
 ```bash
-# WSL / macOS
-cd ~
 git clone https://github.com/SaMii0108/leydata.git
 cd leydata
 ```
 
 ---
 
-## 2. Levantar la infraestructura
+## 3. Infraestructura Docker
+
+Desde la raíz del proyecto:
 
 ```bash
-cd ~/leydata
 docker-compose up -d
 ```
 
-Verificar que los tres contenedores estén `Up`:
+Verificar que los tres contenedores estén corriendo:
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
+
+Resultado esperado:
 
 ```
 NAMES                         STATUS    PORTS
@@ -48,134 +64,105 @@ leydata-consent-keycloak-db   Up        5432/tcp
 leydata-consent-keycloak      Up        0.0.0.0:8180->8080/tcp
 ```
 
-> La primera vez que levanta `leydata-consent-keycloak` puede tardar 30-60 segundos. Esperar antes de continuar.
+La primera vez que inicia `leydata-consent-keycloak` puede tardar entre 30 y 60 segundos. Esperar antes de continuar.
 
 ---
 
-## 3. Configurar Keycloak (primera vez)
+## 4. Configurar Keycloak
 
-> Si el entorno ya fue configurado y el volumen `keycloak_data` existe, omitir este paso.
+Este paso solo es necesario la primera vez, o después de un reset completo de volúmenes.
 
-Ejecutar el script de configuración automática. Crea el realm, roles, clientes y usuario admin en un solo paso:
+Ejecutar el script de configuración automática desde la raíz del proyecto:
 
 ```bash
-cd ~/leydata
 bash scripts/setup-keycloak.sh
 ```
 
-Al finalizar el script muestra el `KC_BACKEND_SECRET` generado. **Anotarlo** — se necesita en el paso 4.
+El script realiza lo siguiente:
 
-### ¿No existe el script todavía? Ejecutar manualmente
+- Crea el realm `leydata`
+- Crea los roles `ADMIN`, `DPO` y `JEFE_DOMINIO`
+- Crea el cliente `leydata-frontend` (public, para el frontend)
+- Crea el cliente `leydata-backend` (confidential, service account para gestión de usuarios)
+- Asigna los permisos `manage-users` y `view-realm` al service account
+- Crea el usuario `admin@leydata.cl` con contraseña `Admin1234!` y rol `ADMIN`
 
-```bash
-# 1. Obtener token master admin
-TOKEN=$(curl -s -X POST "http://localhost:8180/realms/master/protocol/openid-connect/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "grant_type=password" \
-  --data-urlencode "client_id=admin-cli" \
-  --data-urlencode "username=admin" \
-  --data-urlencode "password=admin" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+Al finalizar muestra la variable de entorno necesaria para el backend:
 
-# 2. Crear realm leydata
-curl -s -o /dev/null -w "Realm: %{http_code}\n" -X POST "http://localhost:8180/admin/realms" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"realm":"leydata","enabled":true,"accessTokenLifespan":300,"ssoSessionMaxLifespan":1800}'
-
-# 3. Crear roles
-for ROLE in ADMIN DPO JEFE_DOMINIO; do
-  curl -s -o /dev/null -w "Rol $ROLE: %{http_code}\n" \
-    -X POST "http://localhost:8180/admin/realms/leydata/roles" \
-    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-    -d "{\"name\":\"$ROLE\"}"
-done
-
-# 4. Crear cliente leydata-frontend (public)
-curl -s -o /dev/null -w "leydata-frontend: %{http_code}\n" \
-  -X POST "http://localhost:8180/admin/realms/leydata/clients" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"clientId":"leydata-frontend","enabled":true,"publicClient":true,
-       "standardFlowEnabled":true,"directAccessGrantsEnabled":true,
-       "redirectUris":["http://localhost:5173/*","http://localhost:3000/*","http://localhost:8080/*"],
-       "webOrigins":["http://localhost:5173","http://localhost:3000","http://localhost:8080"]}'
-
-# 5. Crear cliente leydata-backend (service account)
-curl -s -o /dev/null -w "leydata-backend: %{http_code}\n" \
-  -X POST "http://localhost:8180/admin/realms/leydata/clients" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"clientId":"leydata-backend","enabled":true,"publicClient":false,
-       "serviceAccountsEnabled":true,"standardFlowEnabled":false,"directAccessGrantsEnabled":false}'
-
-# 6. Asignar manage-users y view-realm al service account de leydata-backend
-BACKEND_ID=$(curl -s "http://localhost:8180/admin/realms/leydata/clients?clientId=leydata-backend" \
-  -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
-SA_ID=$(curl -s "http://localhost:8180/admin/realms/leydata/clients/$BACKEND_ID/service-account-user" \
-  -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-RM_ID=$(curl -s "http://localhost:8180/admin/realms/leydata/clients?clientId=realm-management" \
-  -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
-MU=$(curl -s "http://localhost:8180/admin/realms/leydata/clients/$RM_ID/roles/manage-users" \
-  -H "Authorization: Bearer $TOKEN")
-VR=$(curl -s "http://localhost:8180/admin/realms/leydata/clients/$RM_ID/roles/view-realm" \
-  -H "Authorization: Bearer $TOKEN")
-curl -s -o /dev/null -w "Roles service account: %{http_code}\n" \
-  -X POST "http://localhost:8180/admin/realms/leydata/users/$SA_ID/role-mappings/clients/$RM_ID" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "[$MU,$VR]"
-
-# 7. Crear usuario admin@leydata.cl
-USER_ID=$(curl -s -X POST "http://localhost:8180/admin/realms/leydata/users" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"username":"admin","email":"admin@leydata.cl","firstName":"Administrador",
-       "lastName":"LeyData","enabled":true,"emailVerified":true,
-       "credentials":[{"type":"password","value":"Admin1234!","temporary":false}]}' \
-  -D - | grep -i "^location:" | tr -d '\r' | awk -F'/' '{print $NF}')
-ADMIN_ROLE=$(curl -s "http://localhost:8180/admin/realms/leydata/roles/ADMIN" \
-  -H "Authorization: Bearer $TOKEN")
-curl -s -o /dev/null -w "Rol ADMIN al admin: %{http_code}\n" \
-  -X POST "http://localhost:8180/admin/realms/leydata/users/$USER_ID/role-mappings/realm" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "[$ADMIN_ROLE]"
-
-# 8. Mostrar el KC_BACKEND_SECRET generado
-echo ""
-echo "========================================"
-SECRET=$(curl -s "http://localhost:8180/admin/realms/leydata/clients/$BACKEND_ID/client-secret" \
-  -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
-echo "KC_BACKEND_SECRET=$SECRET"
-echo "Copiarlo para usarlo en el paso siguiente."
-echo "========================================"
 ```
+KC_BACKEND_SECRET=<valor generado>
+```
+
+Copiar ese valor antes de continuar.
 
 ---
 
-## 4. Levantar el backend
+## 5. Levantar el backend
+
+Requiere las siguientes variables de entorno. Las tres primeras son fijas; `KC_BACKEND_SECRET` se obtiene en el paso anterior.
+
+| Variable | Valor |
+|---|---|
+| `DB_USER` | `admin` |
+| `DB_PASS` | `admin` |
+| `DB_NAME` | `leydata_db` |
+| `KC_BACKEND_SECRET` | valor del paso 4 |
+
+### WSL / macOS / Linux
 
 ```bash
-# WSL / macOS
-cd ~/leydata/backend
+cd backend
 chmod +x mvnw   # solo la primera vez
-DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<secret_del_paso_3> ./mvnw spring-boot:run
+DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<secret> ./mvnw spring-boot:run
 ```
 
+### Windows PowerShell
+
 ```powershell
-# PowerShell
-cd C:\...\leydata\backend
-$env:DB_USER="admin"; $env:DB_PASS="admin"; $env:DB_NAME="leydata_db"; $env:KC_BACKEND_SECRET="<secret_del_paso_3>"
+cd backend
+$env:DB_USER="admin"
+$env:DB_PASS="admin"
+$env:DB_NAME="leydata_db"
+$env:KC_BACKEND_SECRET="<secret>"
 .\mvnw.cmd spring-boot:run
 ```
 
-**Señal de inicio exitoso:**
+### VS Code
+
+Crear o editar `.vscode/launch.json`:
+
+```json
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Backend",
+      "request": "launch",
+      "mainClass": "com.leydata.backend.BackendApplication",
+      "env": {
+        "DB_USER": "admin",
+        "DB_PASS": "admin",
+        "DB_NAME": "leydata_db",
+        "KC_BACKEND_SECRET": "<secret>"
+      }
+    }
+  ]
+}
+```
+
+El backend está listo cuando aparece en consola:
+
 ```
 Started BackendApplication in X.XXX seconds
 ```
 
-> El backend descarga automáticamente la configuración desde `http://localhost:8180/realms/leydata`. Keycloak debe estar corriendo **antes** de iniciar el backend.
-
 ---
 
-## 5. Verificar que todo funciona
+## 6. Verificar que todo funciona
+
+### Obtener un token de acceso
 
 ```bash
-# Obtener token del admin
 curl -s -X POST "http://localhost:8180/realms/leydata/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   --data-urlencode "grant_type=password" \
@@ -184,105 +171,197 @@ curl -s -X POST "http://localhost:8180/realms/leydata/protocol/openid-connect/to
   --data-urlencode "password=Admin1234!"
 ```
 
-Resultado esperado: JSON con `access_token`.
+Resultado esperado: JSON con `access_token`. El token empieza con `eyJ`.
+
+### Probar un endpoint protegido
 
 ```bash
-# Probar endpoint protegido
 curl -X GET http://localhost:8080/api/users \
   -H "Authorization: Bearer <access_token>"
 ```
 
-Resultado esperado: `200 OK` con lista de usuarios.
+Resultado esperado: `200 OK` con la lista de usuarios.
 
-**Swagger UI:** http://localhost:8080/swagger-ui.html  
-**Keycloak Admin:** http://localhost:8180 (admin / admin)
+### Documentación interactiva
+
+Con el backend corriendo, abrir en el navegador:
+
+```
+http://localhost:8080/swagger-ui.html
+```
+
+Para autenticarse en Swagger UI: click en el botón Authorize, ingresar `Bearer <access_token>` y confirmar.
 
 ---
 
-## Comandos del día a día
+## 7. Comandos del día a día
+
+### Levantar el entorno completo
 
 ```bash
-# Levantar todo
 docker-compose up -d
 cd backend && DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<secret> ./mvnw spring-boot:run
+```
 
-# Apagar contenedores (conserva datos)
+### Detener los contenedores sin perder datos
+
+```bash
 docker-compose stop
+```
 
-# Reset completo — BORRA TODOS LOS DATOS (BD + Keycloak)
+### Eliminar contenedores sin perder datos de base de datos
+
+```bash
+docker-compose down
+```
+
+### Reset completo — elimina todos los datos
+
+```bash
 docker-compose down -v
 rm -rf ./postgres_data
 docker-compose up -d
-# Requiere ejecutar el paso 3 (configuración Keycloak) nuevamente
+```
 
-# Ver logs
+Después de un reset completo es necesario ejecutar nuevamente el paso 4 (configurar Keycloak).
+
+### Ver logs de un contenedor
+
+```bash
 docker logs leydata-consent-keycloak --tail 50
 docker logs leydata-consent-db --tail 50
 ```
 
+### Compilar sin levantar
+
+```bash
+cd backend
+./mvnw clean package -DskipTests
+```
+
 ---
 
-## Solución de problemas
+## 8. Problemas frecuentes
 
-### ❌ Backend no arranca — `Unable to obtain configuration from issuer`
+---
 
-El realm `leydata` no existe en Keycloak. Ejecutar el paso 3 completo.
+### El backend no inicia — `Unable to obtain configuration from issuer`
 
-### ❌ `POST /api/users` retorna 500
+El realm `leydata` no existe en Keycloak. Ocurre después de un reset de volúmenes o en una instalación nueva sin haber ejecutado el script de configuración.
 
-La cuenta de servicio `leydata-backend` no tiene permisos o el `KC_BACKEND_SECRET` es incorrecto.
-Verificar en Keycloak Admin → Clients → leydata-backend → Service account roles: deben aparecer `manage-users` y `view-realm` del cliente `realm-management`.
+Solución: ejecutar el paso 4.
 
-### ❌ `"Account is not fully set up"` al hacer login
+```bash
+bash scripts/setup-keycloak.sh
+```
 
-El usuario tiene `lastName` vacío en Keycloak 26. Ir a Keycloak Admin → Users → seleccionar usuario → completar el campo **Last name** → Save.
+---
 
-Al crear usuarios con `POST /api/users`, el campo `name` debe tener nombre y apellido separados por espacio.
+### `POST /api/users` retorna 500
 
-### ❌ Contenedor `leydata-consent-db` en bucle / crash
+El backend no puede crear usuarios en Keycloak. Causas posibles:
+
+- `KC_BACKEND_SECRET` incorrecto o no configurado.
+- El service account de `leydata-backend` no tiene los roles necesarios.
+
+Verificar en Keycloak Admin (http://localhost:8180) > Clients > leydata-backend > Service account roles. Deben aparecer `manage-users` y `view-realm` del cliente `realm-management`. Si no están, ejecutar el script de configuración nuevamente.
+
+---
+
+### Login devuelve `"Account is not fully set up"`
+
+Keycloak 26 exige que el campo `Last name` del usuario no esté vacío. El usuario puede obtener el token pero Keycloak bloquea el acceso.
+
+Solución manual: Keycloak Admin > Users > seleccionar el usuario > completar el campo Last name > Save.
+
+Al crear usuarios con `POST /api/users`, el campo `name` del request debe incluir nombre y apellido separados por espacio (por ejemplo: `"María García"`). El backend divide el string y usa la primera palabra como firstName y el resto como lastName.
+
+---
+
+### Contenedor `leydata-consent-db` en bucle de reinicios
+
+Mensaje de error en los logs:
 
 ```
 FATAL: database files are incompatible with server
+DETAIL: The data directory was initialized by PostgreSQL version 15,
+        which is not compatible with this version 16.
 ```
 
-Los archivos en `./postgres_data` fueron creados con una versión distinta de PostgreSQL. Opciones:
-- **Sin perder datos:** no cambiar la versión de la imagen en `docker-compose.yml`
-- **Aceptando pérdida de datos:** `docker-compose down -v && rm -rf ./postgres_data && docker-compose up -d`
+El directorio `./postgres_data` fue creado con una versión de PostgreSQL diferente a la de la imagen en `docker-compose.yml`. No hacer upgrade de versión de imagen si ya existen datos.
 
-### ❌ Migración de nombres de contenedores (equipo)
+Solución sin perder datos: revertir la imagen a la versión original (`postgres:15`).
 
-Si un compañero tenía los contenedores con los nombres anteriores (`leydata-keycloak`, `leydata-db`, `keycloak-db`), debe ejecutar **en este orden**:
+Solución aceptando pérdida de datos:
 
 ```bash
-# 1. Bajar primero (mientras el compose viejo aún conoce los nombres)
+docker-compose down -v
+rm -rf ./postgres_data
+docker-compose up -d
+bash scripts/setup-keycloak.sh
+```
+
+---
+
+### `GET /api/audit/logs/verify` retorna `valid: false` sin manipulación
+
+Los logs de auditoría fueron generados con una versión anterior del código que no truncaba el timestamp a microsegundos. Java 21 en Linux genera timestamps con nanosegundos (9 decimales) pero PostgreSQL `timestamp(6)` almacena solo microsegundos (6 decimales), causando que el hash guardado no coincida con el recalculado.
+
+El código actual ya aplica la corrección (`truncatedTo(ChronoUnit.MICROS)`). Los logs anteriores a la corrección tienen hashes inválidos de forma permanente.
+
+Para restablecer una cadena válida, conectarse a la base de datos y ejecutar:
+
+```sql
+TRUNCATE system_audit_log;
+```
+
+Los nuevos logs generados a partir de ese momento se verificarán correctamente.
+
+---
+
+### Migración de nombres de contenedores
+
+Los contenedores fueron renombrados para evitar conflictos entre proyectos:
+
+| Nombre anterior | Nombre actual |
+|---|---|
+| `leydata-keycloak` | `leydata-consent-keycloak` |
+| `leydata-db` | `leydata-consent-db` |
+| `keycloak-db` | `leydata-consent-keycloak-db` |
+
+Si el entorno local todavía tiene los contenedores con los nombres anteriores, seguir este orden:
+
+```bash
+# 1. Bajar contenedores antes de hacer git pull
 docker-compose down
 
 # 2. Traer los cambios
 git pull
 
-# 3. Levantar con los nuevos nombres
+# 3. Levantar con los nombres nuevos
 docker-compose up -d
 ```
 
-Si ya hizo `git pull` antes de bajar:
+Si ya se hizo `git pull` antes de bajar los contenedores:
+
 ```bash
 docker stop leydata-keycloak leydata-db keycloak-db 2>/dev/null
 docker rm   leydata-keycloak leydata-db keycloak-db 2>/dev/null
 docker-compose up -d
 ```
 
-### ❌ `GET /api/audit/logs/verify` retorna `valid: false`
+`docker-compose down` sin `-v` conserva los volúmenes, por lo que los datos de la base de datos y la configuración de Keycloak no se pierden.
 
-Los logs fueron creados antes de un fix de precisión de timestamp. Limpiar con `TRUNCATE system_audit_log` en la BD y generar nuevos logs.
+---
 
-### ❌ Puerto 8080 o 5433 ya en uso
+### Puerto 8080 o 5433 ya en uso
 
 ```bash
-# Ver qué proceso usa el puerto
-lsof -i :8080    # WSL / macOS
-netstat -ano | findstr :8080   # PowerShell
+# WSL / macOS
+lsof -i :8080
+kill -9 <PID>
 
-# Terminar el proceso
-kill -9 <PID>    # WSL / macOS
-taskkill /PID <PID> /F   # PowerShell
+# PowerShell
+netstat -ano | findstr :8080
+taskkill /PID <PID> /F
 ```
