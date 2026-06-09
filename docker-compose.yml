@@ -2,7 +2,7 @@ services:
 
   #  Base de datos principal de la aplicación
   db:
-    image: postgres:16
+    image: postgres:15
     container_name: leydata-consent-db
     restart: always
     environment:
@@ -19,7 +19,7 @@ services:
 
   #  Base de datos exclusiva para Keycloak
   keycloak-db:
-    image: postgres:16
+    image: postgres:15
     container_name: leydata-consent-keycloak-db
     restart: always
     environment:
