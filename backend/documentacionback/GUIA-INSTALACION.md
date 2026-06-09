@@ -1,6 +1,6 @@
 # Guía de Instalación — Ley Data
 
-**Stack:** Java 21 · Spring Boot 4.0.6 · PostgreSQL 15 · Keycloak 26 · Docker  
+**Stack:** Java 21 · Spring Boot 3.x · PostgreSQL 15 · Keycloak 26 · Docker  
 **Repositorio:** https://github.com/SaMii0108/leydata
 
 ---
@@ -9,13 +9,14 @@
 
 1. [Requisitos previos](#1-requisitos-previos)
 2. [Clonar el repositorio](#2-clonar-el-repositorio)
-3. [Infraestructura Docker](#3-infraestructura-docker)
-4. [Configurar Keycloak](#4-configurar-keycloak)
-5. [Levantar el backend](#5-levantar-el-backend)
-6. [Verificar que todo funciona](#6-verificar-que-todo-funciona)
-7. [Actualizar el proyecto](#7-actualizar-el-proyecto)
-8. [Comandos del día a día](#8-comandos-del-día-a-día)
-9. [Problemas frecuentes](#9-problemas-frecuentes)
+3. [Crear el archivo .env](#3-crear-el-archivo-env)
+4. [Infraestructura Docker](#4-infraestructura-docker)
+5. [Configurar Keycloak](#5-configurar-keycloak)
+6. [Levantar el backend](#6-levantar-el-backend)
+7. [Verificar que todo funciona](#7-verificar-que-todo-funciona)
+8. [Actualizar el proyecto](#8-actualizar-el-proyecto)
+9. [Comandos del día a día](#9-comandos-del-día-a-día)
+10. [Problemas frecuentes](#10-problemas-frecuentes)
 
 ---
 
@@ -42,13 +43,47 @@ cd leydata
 
 ---
 
-## 3. Infraestructura Docker
+## 3. Crear el archivo .env
+
+El proyecto centraliza todas las credenciales en un archivo `.env` en la raíz del proyecto. Este archivo cumple dos funciones:
+
+- **Docker Compose** lo lee automáticamente al ejecutar `docker-compose up -d` para configurar los contenedores de PostgreSQL.
+- **El backend** lo usa como referencia de las variables de entorno necesarias para arrancar.
+
+El archivo no está en el repositorio (está en `.gitignore`). Hay que crearlo a partir del ejemplo incluido:
+
+**WSL / macOS / Linux:**
+```bash
+cp .env.example .env
+```
+
+**Windows PowerShell:**
+```powershell
+Copy-Item .env.example .env
+```
+
+El archivo `.env` resultante tiene este contenido:
+
+```
+DB_USER=admin
+DB_PASS=admin
+DB_NAME=leydata_db
+KC_BACKEND_SECRET=
+```
+
+Las primeras tres variables son fijas para el entorno de desarrollo local y no necesitan cambiarse. `KC_BACKEND_SECRET` se rellena en el paso 5, después de configurar Keycloak. Dejarla vacía por ahora.
+
+---
+
+## 4. Infraestructura Docker
 
 Desde la raíz del proyecto:
 
 ```bash
 docker-compose up -d
 ```
+
+Docker Compose lee el `.env` automáticamente para las credenciales de la base de datos. No es necesario pasar variables adicionales a este comando.
 
 Verificar que los tres contenedores estén corriendo:
 
@@ -69,13 +104,13 @@ La primera vez que inicia `leydata-consent-keycloak` puede tardar entre 30 y 60 
 
 ---
 
-## 4. Configurar Keycloak
+## 5. Configurar Keycloak
 
 Este paso solo es necesario la primera vez, o después de un reset completo de volúmenes. El script es idempotente: si algo ya existe lo omite sin fallar, por lo que puede ejecutarse más de una vez sin problema.
 
 ### Requisito previo
 
-Los contenedores del paso 3 deben estar corriendo. El script espera Keycloak en `http://localhost:8180` con credenciales `admin / admin`. Si Keycloak todavía está iniciando, el script espera automáticamente hasta 90 segundos antes de fallar.
+Los contenedores del paso 4 deben estar corriendo. El script espera Keycloak en `http://localhost:8180` con credenciales `admin / admin`. Si Keycloak todavía está iniciando, el script espera automáticamente hasta 90 segundos antes de fallar.
 
 ### Ejecutar el script
 
@@ -127,7 +162,7 @@ Crea `admin@leydata.cl` con contraseña `Admin1234!` y le asigna el rol `ADMIN`.
    App admin: admin@leydata.cl / Admin1234!
 
  Variable de entorno para el backend:
-   KC_BACKEND_SECRET=<valor>
+   KC_BACKEND_SECRET=<valor generado>
 
  Arrancar el backend con:
    DB_USER=admin DB_PASS=admin DB_NAME=leydata_db \
@@ -136,43 +171,63 @@ Crea `admin@leydata.cl` con contraseña `Admin1234!` y le asigna el rol `ADMIN`.
 ======================================================
 ```
 
-Copiar el valor de `KC_BACKEND_SECRET` antes de continuar. Este valor cambia cada vez que se recrea el cliente `leydata-backend` (es decir, después de cada reset completo).
+### Actualizar el .env con el secret
+
+Copiar el valor de `KC_BACKEND_SECRET` que imprime el script y pegarlo en el `.env`:
+
+```
+KC_BACKEND_SECRET=<valor copiado aquí>
+```
+
+Este valor cambia cada vez que se recrea el cliente `leydata-backend` (es decir, después de cada reset completo). Si el backend arranca con un secret incorrecto, `POST /api/users` retornará 500.
 
 ---
 
-## 5. Levantar el backend
-
-Requiere las siguientes variables de entorno. Las tres primeras son fijas; `KC_BACKEND_SECRET` se obtiene en el paso anterior.
-
-| Variable | Valor |
-|---|---|
-| `DB_USER` | `admin` |
-| `DB_PASS` | `admin` |
-| `DB_NAME` | `leydata_db` |
-| `KC_BACKEND_SECRET` | valor del paso 4 |
+## 6. Levantar el backend
 
 ### WSL / macOS / Linux
+
+Cargar el `.env` y levantar el backend en un solo comando:
 
 ```bash
 cd backend
 chmod +x mvnw   # solo la primera vez
+export $(cat ../.env | xargs) && ./mvnw spring-boot:run
+```
+
+O pasar las variables directamente si se prefiere:
+
+```bash
 DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<secret> ./mvnw spring-boot:run
 ```
 
 ### Windows PowerShell
 
 ```powershell
+# Leer el .env y setear las variables
+Get-Content ..\.env | Where-Object { $_ -notmatch '^#' -and $_ -match '=' } | ForEach-Object {
+    $key, $value = $_ -split '=', 2
+    [System.Environment]::SetEnvironmentVariable($key.Trim(), $value.Trim(), 'Process')
+}
+
 cd backend
+.\mvnw.cmd spring-boot:run
+```
+
+O setear manualmente:
+
+```powershell
 $env:DB_USER="admin"
 $env:DB_PASS="admin"
 $env:DB_NAME="leydata_db"
 $env:KC_BACKEND_SECRET="<secret>"
+cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
 ### VS Code
 
-Crear o editar `.vscode/launch.json`:
+Crear o editar `.vscode/launch.json` (reemplazar `<secret>` con el valor del `.env`):
 
 ```json
 {
@@ -201,7 +256,7 @@ Started BackendApplication in X.XXX seconds
 
 ---
 
-## 6. Verificar que todo funciona
+## 7. Verificar que todo funciona
 
 ### Obtener un token de acceso
 
@@ -214,7 +269,7 @@ curl -s -X POST "http://localhost:8180/realms/leydata/protocol/openid-connect/to
   --data-urlencode "password=Admin1234!"
 ```
 
-Resultado esperado: JSON con `access_token`. El token empieza con `eyJ`.
+Resultado esperado: JSON con `access_token`. El token comienza con `eyJ`.
 
 ### Probar un endpoint protegido
 
@@ -237,7 +292,7 @@ Para autenticarse en Swagger UI: click en el botón Authorize, ingresar `Bearer 
 
 ---
 
-## 7. Actualizar el proyecto
+## 8. Actualizar el proyecto
 
 Cuando alguien del equipo hace `git pull` para traer cambios nuevos, es necesario limpiar el directorio `target/` antes de volver a levantar el backend. El `target/` contiene las clases Java compiladas de la versión anterior. Si no se limpia, Maven puede levantar el backend con código viejo mezclado con código nuevo, causando errores difíciles de diagnosticar.
 
@@ -259,7 +314,7 @@ git pull
 
 # 2. Limpiar el compilado anterior y levantar desde cero
 cd backend
-DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<secret> ./mvnw clean spring-boot:run
+export $(cat ../.env | xargs) && ./mvnw clean spring-boot:run
 ```
 
 El flag `clean` elimina la carpeta `target/` completa antes de compilar. Tarda un poco más en la primera compilación después del pull, pero garantiza que no hay clases obsoletas.
@@ -283,14 +338,14 @@ En cualquiera de esos casos, detener el backend, ejecutar `./mvnw clean spring-b
 
 ---
 
-## 8. Comandos del día a día
-
+## 9. Comandos del día a día
 
 ### Levantar el entorno completo
 
 ```bash
+# Desde la raíz del proyecto
 docker-compose up -d
-cd backend && DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<secret> ./mvnw spring-boot:run
+cd backend && export $(cat ../.env | xargs) && ./mvnw spring-boot:run
 ```
 
 ### Detener los contenedores sin perder datos
@@ -311,9 +366,10 @@ docker-compose down
 docker-compose down -v
 rm -rf ./postgres_data
 docker-compose up -d
+bash scripts/setup-keycloak.sh   # o .\scripts\setup-keycloak.ps1 en Windows
 ```
 
-Después de un reset completo es necesario ejecutar nuevamente el paso 4 (configurar Keycloak).
+Después del reset, actualizar `KC_BACKEND_SECRET` en el `.env` con el nuevo valor que imprime el script.
 
 ### Ver logs de un contenedor
 
@@ -331,7 +387,7 @@ cd backend
 
 ---
 
-## 9. Problemas frecuentes
+## 10. Problemas frecuentes
 
 ---
 
@@ -339,7 +395,7 @@ cd backend
 
 El realm `leydata` no existe en Keycloak. Ocurre después de un reset de volúmenes o en una instalación nueva sin haber ejecutado el script de configuración.
 
-Solución: ejecutar el paso 4.
+Solución: ejecutar el paso 5.
 
 ```bash
 bash scripts/setup-keycloak.sh
@@ -351,10 +407,12 @@ bash scripts/setup-keycloak.sh
 
 El backend no puede crear usuarios en Keycloak. Causas posibles:
 
-- `KC_BACKEND_SECRET` incorrecto o no configurado.
+- `KC_BACKEND_SECRET` incorrecto o no configurado en el `.env`.
 - El service account de `leydata-backend` no tiene los roles necesarios.
 
-Verificar en Keycloak Admin (http://localhost:8180) > Clients > leydata-backend > Service account roles. Deben aparecer `manage-users` y `view-realm` del cliente `realm-management`. Si no están, ejecutar el script de configuración nuevamente.
+Verificar que el `.env` tenga el valor correcto de `KC_BACKEND_SECRET`. Si se perdió el valor, ejecutar nuevamente el script del paso 5 — imprimirá el secret actual.
+
+Verificar también en Keycloak Admin (http://localhost:8180) > Clients > leydata-backend > Service account roles. Deben aparecer `manage-users` y `view-realm` del cliente `realm-management`. Si no están, ejecutar el script de configuración nuevamente.
 
 ---
 
