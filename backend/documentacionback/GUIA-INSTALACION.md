@@ -243,23 +243,31 @@ El repositorio ya incluye `.vscode/launch.json` con la configuración `BackendAp
 
 No hay nada que configurar. Solo asegurarse de que el `.env` tenga el `KC_BACKEND_SECRET` correcto y luego arrancar con `F5` o desde el menú **Run > Start Debugging > BackendApplication**.
 
-Si por algún motivo el `.vscode/launch.json` no existe, crearlo con este contenido:
+Si por algún motivo el `.vscode/launch.json` no existe, crearlo en la raíz del proyecto con este contenido exacto:
 
 ```json
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "type": "java",
-      "name": "BackendApplication",
-      "request": "launch",
-      "mainClass": "com.leydata.backend.BackendApplication",
-      "projectName": "backend",
-      "envFile": "${workspaceFolder}/.env"
-    }
-  ]
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Current File",
+            "request": "launch",
+            "mainClass": "${file}"
+        },
+        {
+            "type": "java",
+            "name": "BackendApplication",
+            "request": "launch",
+            "mainClass": "com.leydata.backend.BackendApplication",
+            "projectName": "backend",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
 }
 ```
+
+La clave es `"envFile": "${workspaceFolder}/.env"` en la configuración `BackendApplication`. Sin esa línea, VS Code no carga las variables y el backend arranca sin `KC_BACKEND_SECRET`, causando que `POST /api/users` falle con 500.
 
 El backend está listo cuando aparece en consola:
 
