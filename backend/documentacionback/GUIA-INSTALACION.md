@@ -106,7 +106,19 @@ La primera vez que inicia `leydata-consent-keycloak` puede tardar entre 30 y 60 
 
 ## 5. Configurar Keycloak
 
-Este paso solo es necesario la primera vez, o después de un reset completo de volúmenes. El script es idempotente: si algo ya existe lo omite sin fallar, por lo que puede ejecutarse más de una vez sin problema.
+### ¿Cuándo hay que ejecutar este script?
+
+| Situación | ¿Ejecutar el script? |
+|---|---|
+| Primera instalación (clone nuevo) | **Sí** |
+| Después de `docker-compose down -v` (reset total) | **Sí** |
+| Después de borrar el volumen `keycloak_data` manualmente | **Sí** |
+| `docker-compose stop` + `docker-compose up -d` (parada normal) | No |
+| Reiniciar la PC y volver a levantar contenedores | No |
+| `git pull` + reiniciar el backend | No |
+| Reiniciar solo el backend | No |
+
+El script es idempotente: si el realm y los clientes ya existen, los omite sin fallar. Se puede ejecutar más de una vez sin problema. Lo importante es que después de ejecutarlo siempre hay que **actualizar `KC_BACKEND_SECRET` en el `.env`** con el valor que imprime.
 
 ### Requisito previo
 
@@ -227,22 +239,23 @@ cd backend
 
 ### VS Code
 
-Crear o editar `.vscode/launch.json` (reemplazar `<secret>` con el valor del `.env`):
+El repositorio ya incluye `.vscode/launch.json` con la configuración `BackendApplication`. Esta configuración tiene `"envFile": "${workspaceFolder}/.env"`, lo que significa que VS Code **lee el `.env` automáticamente** cada vez que se arranca el backend.
+
+No hay nada que configurar. Solo asegurarse de que el `.env` tenga el `KC_BACKEND_SECRET` correcto y luego arrancar con `F5` o desde el menú **Run > Start Debugging > BackendApplication**.
+
+Si por algún motivo el `.vscode/launch.json` no existe, crearlo con este contenido:
 
 ```json
 {
+  "version": "0.2.0",
   "configurations": [
     {
       "type": "java",
-      "name": "Backend",
+      "name": "BackendApplication",
       "request": "launch",
       "mainClass": "com.leydata.backend.BackendApplication",
-      "env": {
-        "DB_USER": "admin",
-        "DB_PASS": "admin",
-        "DB_NAME": "leydata_db",
-        "KC_BACKEND_SECRET": "<secret>"
-      }
+      "projectName": "backend",
+      "envFile": "${workspaceFolder}/.env"
     }
   ]
 }
@@ -403,14 +416,22 @@ bash scripts/setup-keycloak.sh
 
 ---
 
-### `POST /api/users` retorna 500
+### `POST /api/users` retorna 500 — `Invalid client or Invalid client credentials`
 
-El backend no puede crear usuarios en Keycloak. Causas posibles:
+El `KC_BACKEND_SECRET` que usa el backend no coincide con el que tiene Keycloak. Ocurre típicamente después de un reset de contenedores, cuando el script genera un nuevo secret y el `.env` todavía tiene el valor anterior.
 
-- `KC_BACKEND_SECRET` incorrecto o no configurado en el `.env`.
-- El service account de `leydata-backend` no tiene los roles necesarios.
+**El secret NO cambia en reinicios normales.** Solo cambia cuando se hace `docker-compose down -v` o se borra el volumen `keycloak_data`. `GET /api/users` y otros endpoints siguen funcionando porque solo validan el JWT del usuario — no necesitan el service account.
 
-Verificar que el `.env` tenga el valor correcto de `KC_BACKEND_SECRET`. Si se perdió el valor, ejecutar nuevamente el script del paso 5 — imprimirá el secret actual.
+Solución:
+
+```bash
+# 1. Obtener el secret actual
+bash scripts/setup-keycloak.sh   # o .\scripts\setup-keycloak.ps1 en Windows
+
+# 2. Copiar el KC_BACKEND_SECRET que imprime y pegarlo en el .env
+
+# 3. Reiniciar el backend (VS Code: F5, o desde terminal con export $(cat ../.env | xargs))
+```
 
 Verificar también en Keycloak Admin (http://localhost:8180) > Clients > leydata-backend > Service account roles. Deben aparecer `manage-users` y `view-realm` del cliente `realm-management`. Si no están, ejecutar el script de configuración nuevamente.
 
