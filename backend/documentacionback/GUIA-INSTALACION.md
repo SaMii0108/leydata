@@ -79,8 +79,16 @@ Los contenedores del paso 3 deben estar corriendo. El script espera Keycloak en 
 
 ### Ejecutar el script
 
+Usar el script correspondiente al sistema operativo:
+
+**WSL / macOS / Linux:**
 ```bash
 bash scripts/setup-keycloak.sh
+```
+
+**Windows PowerShell (sin WSL):**
+```powershell
+.\scripts\setup-keycloak.ps1
 ```
 
 ### Qué hace el script paso a paso
