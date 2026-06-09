@@ -13,8 +13,9 @@
 4. [Configurar Keycloak](#4-configurar-keycloak)
 5. [Levantar el backend](#5-levantar-el-backend)
 6. [Verificar que todo funciona](#6-verificar-que-todo-funciona)
-7. [Comandos del día a día](#7-comandos-del-día-a-día)
-8. [Problemas frecuentes](#8-problemas-frecuentes)
+7. [Actualizar el proyecto](#7-actualizar-el-proyecto)
+8. [Comandos del día a día](#8-comandos-del-día-a-día)
+9. [Problemas frecuentes](#9-problemas-frecuentes)
 
 ---
 
@@ -228,7 +229,54 @@ Para autenticarse en Swagger UI: click en el botón Authorize, ingresar `Bearer 
 
 ---
 
-## 7. Comandos del día a día
+## 7. Actualizar el proyecto
+
+Cuando alguien del equipo hace `git pull` para traer cambios nuevos, es necesario limpiar el directorio `target/` antes de volver a levantar el backend. El `target/` contiene las clases Java compiladas de la versión anterior. Si no se limpia, Maven puede levantar el backend con código viejo mezclado con código nuevo, causando errores difíciles de diagnosticar.
+
+### Cuándo limpiar obligatoriamente
+
+Limpiar siempre que el pull incluya cambios en:
+
+- `pom.xml` — dependencias nuevas o versiones actualizadas
+- Cualquier archivo `.java` — clases modificadas, agregadas o eliminadas
+- `application.properties` — cambios de configuración
+
+En la práctica, lo más seguro es limpiar siempre después de un `git pull`.
+
+### Cómo actualizar correctamente
+
+```bash
+# 1. Traer los cambios
+git pull
+
+# 2. Limpiar el compilado anterior y levantar desde cero
+cd backend
+DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<secret> ./mvnw clean spring-boot:run
+```
+
+El flag `clean` elimina la carpeta `target/` completa antes de compilar. Tarda un poco más en la primera compilación después del pull, pero garantiza que no hay clases obsoletas.
+
+### Si solo quieres compilar sin levantar
+
+```bash
+cd backend
+./mvnw clean package -DskipTests
+```
+
+Genera el JAR en `target/`. Útil para verificar que el código compila antes de levantar.
+
+### Señales de que olvidaste limpiar
+
+- El backend arranca pero se comporta diferente a lo que el código indica
+- Errores como `NoSuchMethodError`, `ClassNotFoundException` o `IncompatibleClassChangeError`
+- Cambios en el código que no tienen efecto al correr el backend
+
+En cualquiera de esos casos, detener el backend, ejecutar `./mvnw clean spring-boot:run` y volver a probar.
+
+---
+
+## 8. Comandos del día a día
+
 
 ### Levantar el entorno completo
 
@@ -275,7 +323,7 @@ cd backend
 
 ---
 
-## 8. Problemas frecuentes
+## 9. Problemas frecuentes
 
 ---
 
