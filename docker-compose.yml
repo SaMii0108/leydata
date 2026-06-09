@@ -1,9 +1,9 @@
 services:
 
-  #  Base de datos principal de la aplicación 
+  #  Base de datos principal de la aplicación
   db:
-    image: postgres:15
-    container_name: leydata-db
+    image: postgres:16
+    container_name: leydata-consent-db
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
@@ -15,12 +15,12 @@ services:
       - ./postgres_data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
     networks:
-      - leydata-network
+      - leydata-consent-network
 
-  #  Base de datos exclusiva para Keycloak 
+  #  Base de datos exclusiva para Keycloak
   keycloak-db:
-    image: postgres:15
-    container_name: keycloak-db
+    image: postgres:16
+    container_name: leydata-consent-keycloak-db
     restart: always
     environment:
       POSTGRES_DB: keycloak
@@ -29,9 +29,9 @@ services:
     volumes:
       - keycloak_data:/var/lib/postgresql/data
     networks:
-      - leydata-network
+      - leydata-consent-network
 
-  #  Keycloak: Identity Provider (IAM) 
+  #  Keycloak 26: Identity Provider (IAM)
   # Acceder al panel de administración en: http://localhost:8180
   # Credenciales iniciales: admin / admin
   #
@@ -39,10 +39,12 @@ services:
   #   1. Crear realm: "leydata"
   #   2. Crear realm roles: ADMIN, DPO, JEFE_DOMINIO
   #   3. Crear cliente: "leydata-frontend" (tipo OpenID Connect, public)
-  #   4. Crear usuarios operadores y asignarles los roles correspondientes
+  #   4. Crear cliente: "leydata-backend" (tipo confidential, service account)
+  #   5. Crear usuario admin@leydata.cl y asignarle rol ADMIN
+  #   (los demás usuarios se crean vía POST /api/users)
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0.5
-    container_name: leydata-keycloak
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: leydata-consent-keycloak
     restart: always
     command: start-dev
     environment:
@@ -51,21 +53,21 @@ services:
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak
-      # Credenciales del administrador de Keycloak
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      # Credenciales del administrador de Keycloak (KC 26: reemplaza KEYCLOAK_ADMIN/_PASSWORD)
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       # Puerto interno HTTP
-      KC_HTTP_PORT: 8080
+      KC_HTTP_PORT: "8080"
     ports:
       # Expuesto en 8180 para no colisionar con el backend (8080)
       - "8180:8080"
     depends_on:
       - keycloak-db
     networks:
-      - leydata-network
+      - leydata-consent-network
 
 networks:
-  leydata-network:
+  leydata-consent-network:
     driver: bridge
 
 volumes:

@@ -249,10 +249,10 @@ docker ps
 Resultado esperado:
 
 ```
-NAMES                STATUS    PORTS
-leydata-db           Up        0.0.0.0:5433->5432/tcp
-keycloak-db          Up        5432/tcp
-leydata-keycloak     Up        0.0.0.0:8180->8080/tcp
+NAMES                        STATUS    PORTS
+leydata-consent-db           Up        0.0.0.0:5433->5432/tcp
+leydata-consent-keycloak-db  Up        5432/tcp
+leydata-consent-keycloak     Up        0.0.0.0:8180->8080/tcp
 ```
 
 > La primera vez que se levanta `leydata-keycloak` puede tardar entre 30 y 60 segundos en estar disponible. Esperar antes de continuar.
@@ -586,8 +586,8 @@ docker-compose up -d          # vuelve a crear todo desde cero
 ### Ver logs de un contenedor
 
 ```bash
-docker logs leydata-keycloak --tail 50
-docker logs leydata-db --tail 50
+docker logs leydata-consent-keycloak --tail 50
+docker logs leydata-consent-db --tail 50
 ```
 
 ### Compilar sin levantar
