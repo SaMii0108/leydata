@@ -606,6 +606,42 @@ DB_USER=admin DB_PASS=admin DB_NAME=leydata_db ./mvnw test
 
 ---
 
+### ⚠️ Migración — actualizar nombres de contenedores (leer si ya tenías el entorno levantado)
+
+A partir de este commit los contenedores Docker se renombraron para evitar conflictos con otros proyectos del equipo:
+
+| Nombre anterior | Nombre actual |
+|---|---|
+| `leydata-keycloak` | `leydata-consent-keycloak` |
+| `leydata-db` | `leydata-consent-db` |
+| `keycloak-db` | `leydata-consent-keycloak-db` |
+
+**El orden importa.** Si ya tenías los contenedores corriendo con los nombres anteriores, seguir estos pasos:
+
+```bash
+# 1. Bajar los contenedores ANTES de hacer git pull
+#    (mientras el compose aún conoce los nombres viejos, los encuentra bien)
+docker-compose down
+
+# 2. Traer los cambios del repositorio
+git pull
+
+# 3. Levantar con los nuevos nombres
+docker-compose up -d
+```
+
+> `docker-compose down` sin `-v` **conserva los volúmenes** — la configuración de Keycloak y la BD no se pierden. Solo se recrea el contenedor con el nuevo nombre.
+
+**Si ya hiciste `git pull` antes de bajar los contenedores**, elimina los viejos a mano:
+
+```bash
+docker stop leydata-keycloak leydata-db keycloak-db 2>/dev/null
+docker rm   leydata-keycloak leydata-db keycloak-db 2>/dev/null
+docker-compose up -d
+```
+
+---
+
 ## 10. Solución de problemas frecuentes
 
 ### ❌ `docker-compose: command not found` (WSL)
