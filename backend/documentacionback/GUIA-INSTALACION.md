@@ -70,30 +70,64 @@ La primera vez que inicia `leydata-consent-keycloak` puede tardar entre 30 y 60 
 
 ## 4. Configurar Keycloak
 
-Este paso solo es necesario la primera vez, o después de un reset completo de volúmenes.
+Este paso solo es necesario la primera vez, o después de un reset completo de volúmenes. El script es idempotente: si algo ya existe lo omite sin fallar, por lo que puede ejecutarse más de una vez sin problema.
 
-Ejecutar el script de configuración automática desde la raíz del proyecto:
+### Requisito previo
+
+Los contenedores del paso 3 deben estar corriendo. El script espera Keycloak en `http://localhost:8180` con credenciales `admin / admin`. Si Keycloak todavía está iniciando, el script espera automáticamente hasta 90 segundos antes de fallar.
+
+### Ejecutar el script
 
 ```bash
 bash scripts/setup-keycloak.sh
 ```
 
-El script realiza lo siguiente:
+### Qué hace el script paso a paso
 
-- Crea el realm `leydata`
-- Crea los roles `ADMIN`, `DPO` y `JEFE_DOMINIO`
-- Crea el cliente `leydata-frontend` (public, para el frontend)
-- Crea el cliente `leydata-backend` (confidential, service account para gestión de usuarios)
-- Asigna los permisos `manage-users` y `view-realm` al service account
-- Crea el usuario `admin@leydata.cl` con contraseña `Admin1234!` y rol `ADMIN`
+**1. Crea el realm `leydata`**  
+Unidad de configuración en Keycloak. Todos los usuarios, roles y clientes del proyecto viven dentro de este realm. Token de acceso configurado con expiración de 5 minutos.
 
-Al finalizar muestra la variable de entorno necesaria para el backend:
+**2. Crea los tres roles del sistema**
+
+| Rol | Uso |
+|---|---|
+| `ADMIN` | Gestión de usuarios, dominios y auditoría |
+| `DPO` | Revisión de solicitudes de propósito |
+| `JEFE_DOMINIO` | Creación de solicitudes de propósito |
+
+**3. Crea el cliente `leydata-frontend`**  
+Cliente público (sin secret). Es el que usa el frontend para autenticar usuarios. Permite el flujo `password` (necesario para pruebas con Postman o curl) y el flujo estándar de redirección.
+
+**4. Crea el cliente `leydata-backend`**  
+Cliente confidencial con service account habilitado. El backend lo usa para llamar a la API de administración de Keycloak cuando un admin crea un usuario nuevo vía `POST /api/users`. Sin este cliente, la creación de usuarios falla.
+
+**5. Asigna permisos al service account de `leydata-backend`**  
+Le otorga los roles `manage-users` y `view-realm` del cliente interno `realm-management`. Estos permisos son los que le permiten al backend crear, leer y modificar usuarios en Keycloak.
+
+**6. Crea el usuario administrador**  
+Crea `admin@leydata.cl` con contraseña `Admin1234!` y le asigna el rol `ADMIN`. Este es el único usuario que se crea directamente en Keycloak. Los demás usuarios del sistema (DPO, JEFE_DOMINIO) se crean desde la API del backend con `POST /api/users`, que los registra simultáneamente en Keycloak y en la base de datos local.
+
+### Salida esperada al finalizar
 
 ```
-KC_BACKEND_SECRET=<valor generado>
+======================================================
+ Keycloak configurado correctamente.
+
+ Credenciales de acceso:
+   Admin UI:  http://localhost:8180  (admin / admin)
+   App admin: admin@leydata.cl / Admin1234!
+
+ Variable de entorno para el backend:
+   KC_BACKEND_SECRET=<valor>
+
+ Arrancar el backend con:
+   DB_USER=admin DB_PASS=admin DB_NAME=leydata_db \
+   KC_BACKEND_SECRET=<valor> \
+   ./mvnw spring-boot:run
+======================================================
 ```
 
-Copiar ese valor antes de continuar.
+Copiar el valor de `KC_BACKEND_SECRET` antes de continuar. Este valor cambia cada vez que se recrea el cliente `leydata-backend` (es decir, después de cada reset completo).
 
 ---
 
