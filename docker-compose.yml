@@ -1,6 +1,6 @@
-version: '3.8'
-
 services:
+
+  #  Base de datos principal de la aplicación 
   db:
     image: postgres:15
     container_name: leydata-db
@@ -14,7 +14,59 @@ services:
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
+    networks:
+      - leydata-network
+
+  #  Base de datos exclusiva para Keycloak 
+  keycloak-db:
+    image: postgres:15
+    container_name: keycloak-db
+    restart: always
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - keycloak_data:/var/lib/postgresql/data
+    networks:
+      - leydata-network
+
+  #  Keycloak: Identity Provider (IAM) 
+  # Acceder al panel de administración en: http://localhost:8180
+  # Credenciales iniciales: admin / admin
+  #
+  # Configuración manual requerida tras el primer inicio:
+  #   1. Crear realm: "leydata"
+  #   2. Crear realm roles: ADMIN, DPO, JEFE_DOMINIO
+  #   3. Crear cliente: "leydata-frontend" (tipo OpenID Connect, public)
+  #   4. Crear usuarios operadores y asignarles los roles correspondientes
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.5
+    container_name: leydata-keycloak
+    restart: always
+    command: start-dev
+    environment:
+      # Conexión a la BD de Keycloak
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      # Credenciales del administrador de Keycloak
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      # Puerto interno HTTP
+      KC_HTTP_PORT: 8080
+    ports:
+      # Expuesto en 8180 para no colisionar con el backend (8080)
+      - "8180:8080"
+    depends_on:
+      - keycloak-db
+    networks:
+      - leydata-network
 
 networks:
   leydata-network:
     driver: bridge
+
+volumes:
+  keycloak_data:

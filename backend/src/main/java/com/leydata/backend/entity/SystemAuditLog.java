@@ -2,20 +2,31 @@ package com.leydata.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.domain.Persistable;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+//Implementa Persistable<UUID> para controlar isNew():
+//Spring Data JPA llama save() → isNew()=true → persist() (INSERT) en vez de merge() (UPDATE).
+//Necesario porque asignamos el UUID manualmente antes de guardar (para incluirlo en el hash SHA-256).
 @Entity
 @Table(name = "system_audit_log")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class SystemAuditLog {
+public class SystemAuditLog implements Persistable<UUID> {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    //isNew() siempre retorna true: este objeto nunca es "detachado", siempre es nuevo.
+    //Sin esto, Spring Data JPA ve id!=null → merge() → falla en fila inexistente.
+    @Override
+    @Transient
+    public boolean isNew() {
+        return true;
+    }
 
     @Column(name = "table_name", nullable = false)
     private String tableName; // "users", "domains", "purpose_requests"

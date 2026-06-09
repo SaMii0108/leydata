@@ -31,3 +31,7 @@ postgres_data/
 
 # Git Hub
 .github/
+
+# Claude AI
+CLAUDE.md
+.claude/
