@@ -1,19 +1,14 @@
 package com.leydata.backend.config;
 
-import com.leydata.backend.security.filter.JwtAuthFilter;
+import com.leydata.backend.security.KeycloakJwtAuthConverter;
+import com.leydata.backend.security.UserStatusFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.AuthenticationProvider;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -22,80 +17,77 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+//Configuración central de seguridad.
+//Con Keycloak, el backend actúa como Resource Server: no gestiona passwords ni sesiones.
+//Solo valida los tokens JWT firmados por Keycloak usando la clave pública del realm.
 @Configuration
 @EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthFilter jwtAuthFilter;
-    private final UserDetailsService userDetailsService;
+    private final KeycloakJwtAuthConverter keycloakJwtAuthConverter;
+    private final UserStatusFilter userStatusFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // 1. Desactivar CSRF: Seguro porque usamos tokens JWT (Stateless).
+                //CSRF deshabilitado: usamos JWT stateless, no cookies de sesión
                 .csrf(csrf -> csrf.disable())
 
-                // 2. Configuración CORS: Permite que el Frontend se comunique sin bloqueos.
+                //CORS configurado para el frontend
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-                // 3. Sesiones Stateless: Cada petición debe traer su propio token JWT.
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                //Stateless: cada petición debe traer su token JWT de Keycloak en Authorization: Bearer
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // 4. Reglas de Autorización de Rutas (El "Portero" de la API)
+                //Reglas de autorización por endpoint y rol
                 .authorizeHttpRequests(authorize -> authorize
-                        // Ruta pública: Cualquiera puede intentar iniciar sesión.
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
 
-                        // Rutas protegidas (Primera Capa)
-                        .requestMatchers(HttpMethod.POST, "/api/users").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/users/profile").authenticated()
-                        .requestMatchers("/api/users/**").hasRole("ADMIN")
+                        //Swagger UI y especificación OpenAPI: acceso público (solo documentación)
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs.yaml"
+                        ).permitAll()
+
+                        //Gestión de usuarios (CRUD, bloqueo, activación): solo ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")
+
+                        //Gestión de dominios: solo ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/domains/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/domains/**").hasRole("ADMIN")
-                        // del slash final
-                        .requestMatchers(HttpMethod.POST, "/api/purpose-requests").hasRole("JEFE_DOMINIO")
 
-                        // Cualquier otra ruta requiere estar autenticado
+                        //Solicitudes de propósito: crear = JEFE_DOMINIO, revisar = DPO o ADMIN
+                        .requestMatchers(HttpMethod.POST, "/api/purpose-requests").hasRole("JEFE_DOMINIO")
+                        .requestMatchers(HttpMethod.GET, "/api/purpose-requests/my").hasRole("JEFE_DOMINIO")
+                        .requestMatchers(HttpMethod.GET, "/api/purpose-requests/**").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/purpose-requests/*/review").hasAnyRole("DPO", "ADMIN")
+
+                        //Auditoría: consulta de logs de operadores, solo ADMIN
+                        .requestMatchers("/api/audit/**").hasRole("ADMIN")
+
+                        //Cualquier otra ruta requiere autenticación válida
                         .anyRequest().authenticated())
 
-                // 5. Configurar el motor de autenticación
-                .authenticationProvider(authenticationProvider())
+                //Configurar el backend como Resource Server OAuth2 con validación de JWT de Keycloak
+                //Spring descarga automáticamente la clave pública desde el endpoint JWKS del realm
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtAuthConverter)))
 
-                // 6. Añadir Filtro JWT ANTES del filtro estándar de Spring.
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                //Filtro propio: verifica estado activo/bloqueado en nuestra BD después de validar el JWT
+                .addFilterAfter(userStatusFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
-    }
-
-    // Proveedor de Autenticación: Conecta la base de datos con el encriptador de
-    // contraseñas.
-    @Bean
-    public AuthenticationProvider authenticationProvider() {
-        // Usa exactamente la lógica original que funciona en tu versión
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
-        provider.setPasswordEncoder(passwordEncoder());
-        return provider;
-    }
-
-    // Gestor de Autenticación: Maneja el flujo de login.
-    @Bean
-    public AuthenticationManager authenticationManager(
-            org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration authConfig)
-            throws Exception {
-        return authConfig.getAuthenticationManager();
-    }
-
-    // Motor de encriptación de contraseñas con BCrypt.
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-
-        // Permite cualquier origen (para desarrollo). Cambiar en producción.
+        //En desarrollo se permiten todos los orígenes; restringir en producción
         configuration.setAllowedOrigins(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Cache-Control", "Content-Type"));

@@ -1,12 +1,10 @@
 package com.leydata.backend.config;
 
-import com.leydata.backend.security.exception.UserBlockedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.context.request.WebRequest;
@@ -43,50 +41,8 @@ public class GlobalExceptionHandler {
 
     // EXCEPCIONES DE AUTENTICACIÓN
 
-    /**
-     * Usuario intenta acceder pero su cuenta está bloqueada o desactivada
-     */
-    @ExceptionHandler(UserBlockedException.class)
-    public ResponseEntity<Map<String, Object>> handleUserBlockedException(
-            UserBlockedException ex,
-            WebRequest request) {
-
-        log.warn("Acceso denegado por usuario bloqueado/desactivado: {}", ex.getMessage());
-
-        Map<String, Object> body = buildErrorResponse(
-                "FORBIDDEN",
-                ex.getMessage(),
-                HttpStatus.FORBIDDEN);
-
-        return ResponseEntity
-                .status(HttpStatus.FORBIDDEN)
-                .body(body);
-    }
-
-    /**
-     * Usuario no encontrado (credenciales inválidas, token con usuario eliminado,
-     * etc.)
-     */
-    @ExceptionHandler(UsernameNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleUsernameNotFoundException(
-            UsernameNotFoundException ex,
-            WebRequest request) {
-
-        log.warn("Usuario no encontrado: {}", ex.getMessage());
-
-        Map<String, Object> body = buildErrorResponse(
-                "UNAUTHORIZED",
-                "Credenciales inválidas o usuario no encontrado",
-                HttpStatus.UNAUTHORIZED);
-
-        return ResponseEntity
-                .status(HttpStatus.UNAUTHORIZED)
-                .body(body);
-    }
-
-    /**
-     * Error de autenticación genérico (token expirado, inválido, etc.)
-     */
+    //Error de autenticación genérico: token expirado, inválido, sin token, etc.
+    //Keycloak devuelve 401 directamente, pero por si algún error pasa al handler
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> handleAuthenticationException(
             AuthenticationException ex,
