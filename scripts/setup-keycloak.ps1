@@ -29,7 +29,7 @@ for ($i = 1; $i -le 30; $i++) {
         $r = Invoke-WebRequest -Uri "$KC_URL/realms/master" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
         if ($r.StatusCode -eq 200) { $ready = $true; break }
     } catch {}
-    Write-Host "   Intento $i/30 — esperando 3 segundos..."
+    Write-Host "   Intento $i/30 - esperando 3 segundos..."
     Start-Sleep -Seconds 3
 }
 if (-not $ready) {
@@ -86,9 +86,9 @@ foreach ($ROLE in @("ADMIN","DPO","JEFE_DOMINIO")) {
         Write-Host "   Rol $ROLE creado."
     } catch {
         if ($_.Exception.Response.StatusCode.value__ -eq 409) {
-            Write-Host "   Rol $ROLE ya existe, omitido."
+            Write-Host "   Rol {$ROLE} ya existe, omitido."
         } else {
-            Write-Host "   Rol $ROLE: $($_.Exception.Message)"
+            Write-Host "   Rol {$ROLE}: $($_.Exception.Message)"
         }
     }
 }
@@ -163,13 +163,14 @@ try {
 # ── 6. Crear usuario admin@leydata.cl ─────────────────────────────────────────
 Write-Host "-> Creando usuario admin@leydata.cl..."
 $adminBody = @{
-    username      = "admin"
-    email         = "admin@leydata.cl"
-    firstName     = "Administrador"
-    lastName      = "LeyData"
-    enabled       = $true
-    emailVerified = $true
-    credentials   = @(@{ type = "password"; value = "Admin1234!"; temporary = $false })
+    username        = "admin"
+    email           = "admin@leydata.cl"
+    firstName       = "Administrador"
+    lastName        = "LeyData"
+    enabled         = $true
+    emailVerified   = $true
+    requiredActions = @()
+    credentials     = @(@{ type = "password"; value = "Admin1234!"; temporary = $false })
 } | ConvertTo-Json -Depth 5
 
 $USER_ID = $null
