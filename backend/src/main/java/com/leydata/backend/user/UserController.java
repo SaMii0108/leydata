@@ -125,14 +125,9 @@ public class UserController {
         }
     }
 
-    // ==================== NUEVOS ENDPOINTS ATÓMICOS ====================
-
-    /**
-     * POST /api/users/{userId}/deactivate
-     * Desactiva un usuario (active = false) sin bloquearlo permanentemente.
-     * Solo ADMIN. El usuario puede reactivarse.
-     * Acción auditada: USER_DEACTIVATED
-     */
+    // POST /api/users/{userId}/deactivate
+    // Desactiva un usuario (active = false) sin bloquearlo permanentemente. Solo
+    // ADMIN. El usuario puede reactivarse.
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{userId}/deactivate")
     public ResponseEntity<?> deactivateUser(@PathVariable UUID userId) {
@@ -149,12 +144,32 @@ public class UserController {
         }
     }
 
-    /**
-     * POST /api/users/{userId}/reactivate
-     * Reactiva un usuario desactivado (active = true).
-     * Solo ADMIN. No puede reactivar bloqueados permanentemente.
-     * Acción auditada: USER_REACTIVATED
-     */
+    // POST /api/users/{userId}/reset-password
+    // Restablece contraseña y fuerza cambio en próximo login. Solo ADMIN.
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{userId}/reset-password")
+    public ResponseEntity<?> resetUserPassword(
+            @PathVariable UUID userId,
+            @RequestBody ResetPasswordRequest request) {
+        try {
+            UserSummaryDto updated = userService.resetUserPassword(userId, request.getNewPassword());
+            return ResponseEntity.ok(Map.of(
+                    "status", "success",
+                    "message", "Contraseña restablecida. El usuario deberá cambiarla en su próximo inicio de sesión.",
+                    "user", updated));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // POST /api/users/{userId}/reactivate
+    // Reactiva un usuario desactivado (active = true).
+    // Solo ADMIN. No puede reactivar bloqueados permanentemente.
+
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{userId}/reactivate")
     public ResponseEntity<?> reactivateUser(@PathVariable UUID userId) {

@@ -43,8 +43,17 @@ public class AuthService {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
                 String token = jwtService.generateToken(userDetails);
 
+                if (Boolean.TRUE.equals(user.getMustChangePassword())) {
+                        return new AuthResponse(token, user.getEmail(),
+                                        userDetails.getAuthorities().stream()
+                                                        .map(Object::toString)
+                                                        .toList(),
+                                        true); // mustChangePassword = true
+                }
+
                 return new AuthResponse(token, user.getEmail(), userDetails.getAuthorities().stream()
                                 .map(Object::toString)
-                                .toList());
+                                .toList(),
+                                false); // mustChangePassword = false
         }
 }

@@ -335,6 +335,31 @@ public class UserService {
         return toSummaryDto(usersRepository.save(user));
     }
 
+    // MÉTODO ATÓMICO 6: Reset de contraseña por ADMIN
+    @Transactional
+    public UserSummaryDto resetUserPassword(UUID userId, String newPassword) {
+        Users adminUser = getAuthenticatedAdmin();
+
+        if (adminUser.getId().equals(userId)) {
+            throw new IllegalArgumentException(
+                    "El ADMIN no puede resetear su propia contraseña desde este endpoint");
+        }
+
+        Users user = usersRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + userId));
+
+        if (Boolean.TRUE.equals(user.getBlocked())) {
+            throw new IllegalStateException(
+                    "No se puede modificar un usuario bloqueado permanentemente");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setMustChangePassword(true); // <- fuerza cambio en próximo login
+
+        return toSummaryDto(usersRepository.save(user));
+
+    }
+
     // BLOQUEO PERMANENTE solo ADMIN, irreversible desde la API
     @Transactional
     public UserSummaryDto blockUser(UUID targetUserId) {
@@ -389,7 +414,6 @@ public class UserService {
         return user;
     }
 
-    //
     private UserSummaryDto toSummaryDto(Users user) {
         return new UserSummaryDto(
                 user.getId(),
