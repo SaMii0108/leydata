@@ -1,4 +1,4 @@
-package com.leydata.backend.repository;
+package com.leydata.backend.user;
 
 import com.leydata.backend.entity.UsersRole;
 import org.springframework.data.jpa.repository.JpaRepository;

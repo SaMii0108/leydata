@@ -99,13 +99,9 @@ Aurora Gonzalez — Frontend & UI
 
 ## Instalación y Despliegue
 
-Este proyecto utiliza Docker Compose para levantar todos los servicios:
+El sistema utiliza Docker Compose para levantar todos los servicios (base de datos, Keycloak y backend).
 
-```text
-docker compose up -d
-```
-
-Nota: El sistema está diseñado para operar bajo infraestructura controlada por el cliente, garantizando la confidencialidad de los datos.
+> Para instrucciones detalladas de instalación en **Windows con WSL**, **Windows nativo** y **macOS**, ver `backend/documentacionback/GUIA-INSTALACION.md`.
 
 ## Enfoque
 
@@ -114,47 +110,3 @@ Ley Data implementa el principio de:
 Privacy by Design & Privacy by Default
 
 Protección de datos desde el diseño y por defecto.
-
-# Guía Levantando backend LeyData
-
-Esta guía explica cómo correr el proyecto en **Windows (PowerShell)**, **Windows (WSL)** y **macOS**.
-
-## 1. Requisitos Previos (Para todos)
-
-- **Docker Desktop:** Instalado y corriendo.
-- **Java 17:** Instalado (pueden verificar con `java -version`).
-- **Archivo `.env`**
-
-## 2. Paso 1: Levantar la Base de Datos
-
-En cualquier sistema, abre la terminal en la raíz del proyecto (`/leydata`) y ejecuta:
-`docker-compose up -d`
-_Si usas Docker Desktop en Windows o Mac, asegúrate de que el motor esté encendido._
-
-## 3. Paso 2: Correr el Backend (Spring Boot)
-
-Entra a la carpeta `backend/`. El comando cambia según tu sistema:
-
-### macOS y Windows (WSL / Ubuntu)
-
-1. **Dar permisos (Solo la primera vez):**
-   ```
-   chmod +x mvnw
-   ```
-2. **Ejecutar:**
-   ```
-   DB_USER= DB_PASS= DB_NAME=leydata_db ./mvnw spring-boot:run
-   ```
-
-### Windows (PowerShell) - Nativo
-
-En la terminal azul de Windows:
-
-1. **Configurar variables y ejecutar:**
-   ```
-   $env:DB_USER=""; $env:DB_PASS=""; $env:DB_NAME="leydata_db"; .\mvnw.cmd spring-boot:run
-   ```
-
-- **Uso de VS Code (Recomendado):**
-  Para no estar escribiendo las variables en la terminal a cada rato, se recomienda instalar la extensión **"Spring Boot Extension Pack"**.
-  Luego, pueden ir a la pestaña **Spring Boot Dashboard**, darle click derecho al proyecto -> **Debug** o **Run**.

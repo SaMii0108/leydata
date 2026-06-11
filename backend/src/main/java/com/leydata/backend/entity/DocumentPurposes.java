@@ -2,6 +2,7 @@ package com.leydata.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -29,6 +30,11 @@ public class DocumentPurposes {
     private Purposes purpose;
 
     @Embeddable
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @EqualsAndHashCode
     public static class DocumentPurposesId implements Serializable {
         private java.util.UUID documentId;
         private java.util.UUID purposeId;

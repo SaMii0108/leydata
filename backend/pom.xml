@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.0.5</version>
+		<version>4.0.6</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.leydata</groupId>
@@ -27,16 +27,32 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>17</java.version>
+		<java.version>21</java.version>
 	</properties>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
+		<!--
+			Keycloak actúa como Identity Provider: nuestro backend es un Resource Server
+			que solo valida los tokens JWT emitidos por Keycloak (RS256).
+			Este starter incluye spring-security-oauth2-jose para validación de JWT.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+		</dependency>
+
+		<!-- Jackson 3 (tools.jackson): Spring Boot 4.x migró de com.fasterxml.jackson a tools.jackson.
+			 El ObjectMapper se auto-configura desde spring-boot-starter-webmvc, no es necesario declararlo. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -47,6 +63,17 @@
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
+		</dependency>
+
+		<!--
+			SpringDoc OpenAPI: genera la especificación OpenAPI automáticamente desde
+			las anotaciones de Spring MVC y expone Swagger UI para probar endpoints.
+			Acceso: http://localhost:8080/swagger-ui.html
+		-->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>2.8.6</version>
 		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>

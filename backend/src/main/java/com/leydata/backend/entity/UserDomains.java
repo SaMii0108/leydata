@@ -1,11 +1,9 @@
 package com.leydata.backend.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import java.io.Serializable;
+import java.util.UUID;
 
 @Entity
 @Table(name = "user_domains")
@@ -16,7 +14,7 @@ import java.io.Serializable;
 public class UserDomains {
 
     @EmbeddedId
-    private UserDomainsId id;
+    private UserDomainsId id = new UserDomainsId();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("userId")
@@ -29,8 +27,13 @@ public class UserDomains {
     private Domains domain;
 
     @Embeddable
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @EqualsAndHashCode
     public static class UserDomainsId implements Serializable {
-        private java.util.UUID userId;
-        private java.util.UUID domainId;
+        private UUID userId;
+        private UUID domainId;
     }
 }

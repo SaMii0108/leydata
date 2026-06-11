@@ -1,20 +1,23 @@
 # FRONTEND
 frontend/node_modules/
 frontend/dist/
+frontend/.pnpm/pnpm-lock.yaml
 
 # BACKEND
 backend/target/
 backend/*.log
 backend/*.class
-
-# GENERAL
-.env
-.env.local
 backend/.mvn/
 backend/*.jar
 backend/.classpath
 backend/.project
 backend/.settings/
+
+# GENERAL
+.env
+.env.local
+.github/
+
 
 # IDEs
 .vscode/
@@ -26,3 +29,11 @@ backend/.settings/
 # BBDD
 postgres_data/frontend/.claude/
 postgres_data/
+
+
+# Git Hub
+.github/
+
+# Claude AI
+CLAUDE.md
+.claude/

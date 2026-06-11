@@ -1,4 +1,4 @@
-package com.leydata.backend.repository;
+package com.leydata.backend.domain;
 
 import com.leydata.backend.entity.Domains;
 import org.springframework.data.jpa.repository.JpaRepository;
