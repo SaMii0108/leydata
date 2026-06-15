@@ -24,10 +24,10 @@ const App = () => (
         <Route path="/login"          element={<LoginPage />} />
         <Route path="/titular/login"  element={<TitularLoginPage />} />
 
-        {/* Portal operativo (ADMIN, DPO, USER) */}
+        {/* Portal operativo (ADMIN, DPO, JEFE_DOMINIO) */}
         <Route
           element={
-            <ProtectedRoute roles={['ADMIN', 'DPO', 'USER']}>
+            <ProtectedRoute roles={['ADMIN', 'DPO', 'JEFE_DOMINIO']}>
               <DashboardLayout />
             </ProtectedRoute>
           }
@@ -41,7 +41,7 @@ const App = () => (
             }
           />
           <Route path="consentimientos" element={
-            <ProtectedRoute roles={['DPO', 'USER']}>
+            <ProtectedRoute roles={['DPO', 'JEFE_DOMINIO']}>
               <ConsentimientosPage />
             </ProtectedRoute>
           } />
@@ -71,7 +71,7 @@ const App = () => (
             </ProtectedRoute>
           } />
           <Route path="perfil" element={
-            <ProtectedRoute roles={['ADMIN', 'DPO', 'USER']}>
+            <ProtectedRoute roles={['ADMIN', 'DPO', 'JEFE_DOMINIO']}>
               <PerfilPage />
             </ProtectedRoute>
           } />

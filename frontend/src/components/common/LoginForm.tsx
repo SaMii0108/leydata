@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import styles from './LoginForm.module.css';
 
 interface LoginFormProps {
-  onSubmit: (email: string, password: string) => string | null;
+  onSubmit: (email: string, password: string) => Promise<string | null>;
   demoHintContent?: ReactNode;
   footer?: ReactNode;
 }
@@ -13,12 +13,15 @@ const LoginForm = ({ onSubmit, demoHintContent, footer }: LoginFormProps) => {
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
   const [showHint, setShowHint] = useState(false);
+  const [loading, setLoading]   = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const result = onSubmit(email.trim(), password);
+    setLoading(true);
+    const result = await onSubmit(email.trim(), password);
     if (result) setError(result);
+    setLoading(false);
   };
 
   return (
@@ -54,8 +57,8 @@ const LoginForm = ({ onSubmit, demoHintContent, footer }: LoginFormProps) => {
 
         {error && <p className={styles.error}>{error}</p>}
 
-        <button type="submit" className={styles.submitBtn}>
-          Ingresar
+        <button type="submit" className={styles.submitBtn} disabled={loading}>
+          {loading ? 'Verificando...' : 'Ingresar'}
         </button>
       </form>
 
