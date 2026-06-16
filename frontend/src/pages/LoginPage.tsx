@@ -1,5 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth, parseKeycloakToken } from '../features/auth/AuthContext';
+import { findUser } from '../features/auth/mockUsers';
 import LoginForm, { HintBox, HintRow } from '../components/common/LoginForm';
 import styles from './LoginPage.module.css';
 
@@ -7,10 +8,25 @@ const KEYCLOAK_TOKEN_URL =
   `${import.meta.env.VITE_KEYCLOAK_URL ?? 'http://localhost:8180/realms/leydata'}/protocol/openid-connect/token`;
 
 const LoginPage = () => {
-  const { login } = useAuth();
+  const { login, setPendingUser } = useAuth();
   const navigate  = useNavigate();
 
   const handleSubmit = async (email: string, password: string): Promise<string | null> => {
+    // ── Mock auth (usuarios internos de prueba) ───────────────────────────
+    const mockUser = findUser(email, password);
+    if (mockUser && mockUser.role !== 'TITULAR') {
+      const operationalRoles = mockUser.roles?.filter((r) => r !== 'TITULAR') ?? [mockUser.role];
+      if (operationalRoles.length > 1) {
+        setPendingUser(mockUser);
+        navigate('/seleccionar-rol', { replace: true });
+        return null;
+      }
+      login(mockUser);
+      navigate(mockUser.role === 'JEFE_DOMINIO' ? '/consentimientos' : '/', { replace: true });
+      return null;
+    }
+
+    // ── Keycloak (usuarios reales — admin@leydata.cl) ─────────────────────
     try {
       const params = new URLSearchParams({
         grant_type: 'password',
@@ -55,8 +71,11 @@ const LoginPage = () => {
         <LoginForm
           onSubmit={handleSubmit}
           demoHintContent={
-            <HintBox password="Admin1234!">
-              <HintRow role="ADMIN" email="admin@leydata.cl" />
+            <HintBox password="ley2024">
+              <HintRow role="ADMIN"        email="ana@leydata.cl"    />
+              <HintRow role="DPO"          email="carlos@leydata.cl" />
+              <HintRow role="JEFE_DOMINIO" email="pedro@leydata.cl"  label="Jefe Marketing" />
+              <HintRow role="ADMIN"        email="aurora@leydata.cl" label="ADMIN+DPO" />
             </HintBox>
           }
           footer={

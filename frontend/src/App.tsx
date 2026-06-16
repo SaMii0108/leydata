@@ -6,6 +6,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import TitularLayout from './layouts/TitularLayout';
 import LoginPage from './pages/LoginPage';
 import TitularLoginPage from './pages/TitularLoginPage';
+import RoleSelectPage from './pages/RoleSelectPage';
 import DashboardPage from './pages/DashboardPage';
 import ConsentimientosPage from './pages/ConsentimientosPage';
 import NuevoConsentimientoPage from './pages/NuevoConsentimientoPage';
@@ -27,8 +28,9 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           {/* Portales de login */}
-          <Route path="/login"          element={<LoginPage />} />
-          <Route path="/titular/login"  element={<TitularLoginPage />} />
+          <Route path="/login"           element={<LoginPage />} />
+          <Route path="/titular/login"   element={<TitularLoginPage />} />
+          <Route path="/seleccionar-rol" element={<RoleSelectPage />} />
 
           {/* Portal operativo (ADMIN, DPO, JEFE_DOMINIO) */}
           <Route
