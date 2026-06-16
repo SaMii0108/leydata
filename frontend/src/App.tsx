@@ -35,7 +35,7 @@ const App = () => (
           <Route
             index
             element={
-              <ProtectedRoute roles={['ADMIN', 'DPO']} fallback="/consentimientos">
+              <ProtectedRoute roles={['ADMIN', 'DPO']}>
                 <DashboardPage />
               </ProtectedRoute>
             }
@@ -81,7 +81,7 @@ const App = () => (
         <Route
           path="titular"
           element={
-            <ProtectedRoute roles={['TITULAR']} fallback="/titular/login">
+            <ProtectedRoute roles={['TITULAR']}>
               <TitularLayout />
             </ProtectedRoute>
           }
