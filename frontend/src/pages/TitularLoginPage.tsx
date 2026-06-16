@@ -8,7 +8,7 @@ const TitularLoginPage = () => {
   const { login } = useAuth();
   const navigate  = useNavigate();
 
-  const handleSubmit = (email: string, password: string): string | null => {
+  const handleSubmit = async (email: string, password: string): Promise<string | null> => {
     const user = findUser(email, password);
     if (!user || user.role !== 'TITULAR') return 'Correo o contraseña incorrectos.';
     login(user);
