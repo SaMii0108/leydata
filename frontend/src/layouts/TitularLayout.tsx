@@ -1,10 +1,12 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
+import ErrorBoundary from '../components/common/ErrorBoundary';
 import styles from './TitularLayout.module.css';
 
 const TitularLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
@@ -40,7 +42,13 @@ const TitularLayout = () => {
       </header>
 
       <main className={styles.main}>
-        <Outlet />
+        <ErrorBoundary
+          key={location.pathname}
+          title="No se pudo cargar esta sección"
+          message="Ocurrió un error al mostrar esta página. Puedes intentar de nuevo o navegar a otra sección desde el menú."
+        >
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );
