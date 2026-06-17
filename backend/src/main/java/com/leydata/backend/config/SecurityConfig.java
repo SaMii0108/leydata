@@ -70,6 +70,18 @@ public class SecurityConfig {
                         //Auditoría: consulta de logs de operadores, solo ADMIN
                         .requestMatchers("/api/audit/**").hasRole("ADMIN")
 
+                        // ── Documentos de Privacidad — roles gestionados por @PreAuthorize ──────
+                        // Escritura (create, edit, delete, workflow) → DPO (aplicado en controller)
+                        .requestMatchers(HttpMethod.POST, "/api/privacy-documents").hasRole("DPO")
+                        .requestMatchers(HttpMethod.PATCH, "/api/privacy-documents/**").hasRole("DPO")
+                        .requestMatchers(HttpMethod.DELETE, "/api/privacy-documents/**").hasRole("DPO")
+                        .requestMatchers(HttpMethod.POST, "/api/privacy-documents/**").hasRole("DPO")
+                        // Lectura → cualquier usuario autenticado
+                        .requestMatchers(HttpMethod.GET, "/api/privacy-documents/**").authenticated()
+
+                        // ── Notificaciones in-app ──────────────────────────────────────────────
+                        .requestMatchers("/api/notifications/**").authenticated()
+
                         //Cualquier otra ruta requiere autenticación válida
                         .anyRequest().authenticated())
 

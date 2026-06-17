@@ -1,5 +1,11 @@
 package com.leydata.backend.config;
 
+import com.leydata.backend.orgdomain.domain.exception.DomainNotFoundException;
+import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
+import com.leydata.backend.privacydoc.domain.exception.DocumentNotFoundException;
+import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionException;
+import com.leydata.backend.user.domain.exception.UserAlreadyExistsException;
+import com.leydata.backend.user.domain.exception.UserNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +43,48 @@ public class GlobalExceptionHandler {
         body.put("code", httpStatus.value());
         body.put("message", message);
         return body;
+    }
+
+    // ── MÓDULO USER ──────────────────────────────────────────────────────────────
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleUserNotFound(UserNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleUserAlreadyExists(UserAlreadyExistsException ex) {
+        Map<String, Object> body = buildErrorResponse("CONFLICT", ex.getMessage(), HttpStatus.CONFLICT);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    // ── MÓDULO ORGDOMAIN ─────────────────────────────────────────────────────────
+
+    @ExceptionHandler(DomainNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleDomainNotFound(DomainNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    // ── MÓDULO PRIVACY DOCUMENTS ─────────────────────────────────────────────────
+
+    @ExceptionHandler(DocumentNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleDocumentNotFound(DocumentNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(InvalidTransitionException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidTransition(InvalidTransitionException ex) {
+        Map<String, Object> body = buildErrorResponse("CONFLICT", ex.getMessage(), HttpStatus.CONFLICT);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(BusinessValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleBusinessValidation(BusinessValidationException ex) {
+        Map<String, Object> body = buildErrorResponse("UNPROCESSABLE_ENTITY", ex.getMessage(), HttpStatus.UNPROCESSABLE_ENTITY);
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
     }
 
     // EXCEPCIONES DE AUTENTICACIÓN
