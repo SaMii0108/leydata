@@ -67,6 +67,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/purpose-requests/**").hasAnyRole("DPO", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/purpose-requests/*/review").hasAnyRole("DPO", "ADMIN")
 
+                        //Bases legales: consulta para selección en propósitos, DPO y ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/legal-basis/**").hasAnyRole("ADMIN", "DPO")
+
                         //Auditoría: consulta de logs de operadores, solo ADMIN
                         .requestMatchers("/api/audit/**").hasRole("ADMIN")
 
