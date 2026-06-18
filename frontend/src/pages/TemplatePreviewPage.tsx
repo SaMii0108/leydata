@@ -34,7 +34,7 @@ const TemplatePreviewPage = () => {
     buttonSize: 'md',
     buttonRadius: 'sm',
     domain: tpl.dominio,
-    purpose: tpl.finalidad,
+    purpose: tpl.descripcion,
     requiredFields: [],
   };
 
@@ -82,7 +82,7 @@ const TemplatePreviewPage = () => {
                 <p className={styles.checkedLabel}>Datos autorizados:</p>
                 {tpl.dataItems
                   .filter((d) => checkedIds.includes(d.id))
-                  .map((d) => <span key={d.id} className={styles.checkedItem}>✓ {d.titulo}</span>)}
+                  .map((d) => <span key={d.id} className={styles.checkedItem}>✓ {d.nombre}</span>)}
               </div>
             )}
             <p className={styles.resultNote}>

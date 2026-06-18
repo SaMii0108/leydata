@@ -36,7 +36,7 @@ const MockRegisterPage = () => {
     buttonSize: 'md',
     buttonRadius: 'sm',
     domain: tpl.dominio,
-    purpose: tpl.finalidad,
+    purpose: tpl.descripcion,
     requiredFields: [],
   };
 
@@ -233,7 +233,7 @@ const MockRegisterPage = () => {
                     {tpl.dataItems
                       .filter((d) => checkedItems.includes(d.id))
                       .map((d) => (
-                        <span key={d.id} className={styles.checkedItem}>✓ {d.titulo}</span>
+                        <span key={d.id} className={styles.checkedItem}>✓ {d.nombre}</span>
                       ))}
                   </div>
                 )}

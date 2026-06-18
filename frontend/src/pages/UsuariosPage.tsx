@@ -19,7 +19,7 @@ const UsuariosPage = () => {
   const internalUsers = MOCK_USERS.filter((u) => u.role !== 'TITULAR');
   const [users, setUsers] = useState<AppUser[]>(internalUsers);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', area: AREAS[0] });
+  const [form, setForm] = useState<{ name: string; email: string; area: string }>({ name: '', email: '', area: AREAS[0] });
   const [provisionalPassword, setProvisionalPassword] = useState<string | null>(null);
 
   const handleCreate = () => {
