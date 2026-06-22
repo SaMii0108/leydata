@@ -95,7 +95,8 @@
 }
 .card:hover { box-shadow: var(--shadow-md); }
 
-.cardPendiente { border-left: 4px solid #fbbf24; }
+.cardPendiente   { border-left: 4px solid #fbbf24; }
+.cardEnRevision  { border-left: 4px solid #93c5fd; }
 
 .cardMain {
   padding: 20px 24px;
@@ -120,9 +121,10 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.badge_pendiente { background: #fffbeb; color: #d97706; border: 1px solid #fbbf24; }
-.badge_aprobada  { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
-.badge_rechazada { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+.badge_pendiente   { background: #fffbeb; color: #d97706; border: 1px solid #fbbf24; }
+.badge_en_revision { background: #eff6ff; color: #2563eb; border: 1px solid #93c5fd; }
+.badge_aprobada    { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
+.badge_rechazada   { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
 
 .dominioPill {
   font-size: var(--text-xs);

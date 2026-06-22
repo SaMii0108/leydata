@@ -152,9 +152,26 @@ export const getDocumento = (id: string): DocumentoPrivacidad | undefined =>
 export const getDocumentosVigentes = (): DocumentoPrivacidad[] =>
   DOCUMENTOS_PRIVACIDAD.filter((d) => d.estado === 'vigente');
 
+let _docCounter = DOCUMENTOS_PRIVACIDAD.length + 1;
+
+export const addDocumento = (data: Omit<DocumentoPrivacidad, 'id'>): DocumentoPrivacidad => {
+  const doc: DocumentoPrivacidad = {
+    ...data,
+    id: `doc-${String(_docCounter++).padStart(3, '0')}`,
+  };
+  DOCUMENTOS_PRIVACIDAD.push(doc);
+  return doc;
+};
+
+export const updateDocumento = (id: string, updates: Partial<Omit<DocumentoPrivacidad, 'id'>>): void => {
+  const idx = DOCUMENTOS_PRIVACIDAD.findIndex((d) => d.id === id);
+  if (idx === -1) return;
+  DOCUMENTOS_PRIVACIDAD[idx] = { ...DOCUMENTOS_PRIVACIDAD[idx], ...updates };
+};
+
 // ── Solicitudes de Finalidad ───────────────────────────────────────────────────
 
-export type SolicitudEstado = 'pendiente' | 'aprobada' | 'rechazada';
+export type SolicitudEstado = 'pendiente' | 'en_revision' | 'aprobada' | 'rechazada';
 
 export interface SolicitudDato {
   nombre: string;
@@ -202,6 +219,12 @@ export const addSolicitudFinalidad = (
   };
   SOLICITUDES.push(solicitud);
   return solicitud;
+};
+
+export const marcarEnRevision = (id: string): void => {
+  const idx = SOLICITUDES.findIndex((s) => s.id === id);
+  if (idx === -1 || SOLICITUDES[idx].estado !== 'pendiente') return;
+  SOLICITUDES[idx] = { ...SOLICITUDES[idx], estado: 'en_revision' };
 };
 
 export const rechazarSolicitud = (id: string, revisadoPor: string, nota: string): void => {

@@ -6,9 +6,10 @@ import styles from './FinalidadesPage.module.css';
 type Filtro = 'todas' | SolicitudEstado;
 
 const ESTADO_LABEL: Record<SolicitudEstado, string> = {
-  pendiente: 'Pendiente',
-  aprobada:  'Aprobada',
-  rechazada: 'Rechazada',
+  pendiente:   'Pendiente',
+  en_revision: 'En revisión',
+  aprobada:    'Aprobada',
+  rechazada:   'Rechazada',
 };
 
 const FinalidadesPage = () => {
@@ -19,10 +20,11 @@ const FinalidadesPage = () => {
   const lista = filtro === 'todas' ? SOLICITUDES : SOLICITUDES.filter((s) => s.estado === filtro);
 
   const counts = {
-    todas:     SOLICITUDES.length,
-    pendiente: SOLICITUDES.filter((s) => s.estado === 'pendiente').length,
-    aprobada:  SOLICITUDES.filter((s) => s.estado === 'aprobada').length,
-    rechazada: SOLICITUDES.filter((s) => s.estado === 'rechazada').length,
+    todas:       SOLICITUDES.length,
+    pendiente:   SOLICITUDES.filter((s) => s.estado === 'pendiente').length,
+    en_revision: SOLICITUDES.filter((s) => s.estado === 'en_revision').length,
+    aprobada:    SOLICITUDES.filter((s) => s.estado === 'aprobada').length,
+    rechazada:   SOLICITUDES.filter((s) => s.estado === 'rechazada').length,
   };
 
   return (
@@ -41,16 +43,14 @@ const FinalidadesPage = () => {
 
       {/* Filtros */}
       <div className={styles.filters}>
-        {(['todas', 'pendiente', 'aprobada', 'rechazada'] as Filtro[]).map((f) => (
+        {(['todas', 'pendiente', 'en_revision', 'aprobada', 'rechazada'] as Filtro[]).map((f) => (
           <button
             key={f}
             className={[styles.filterBtn, filtro === f ? styles.filterActive : ''].join(' ')}
             onClick={() => setFiltro(f)}
           >
             {f === 'todas' ? 'Todas' : ESTADO_LABEL[f as SolicitudEstado]}
-            <span className={styles.filterCount}>
-              {counts[f as keyof typeof counts]}
-            </span>
+            <span className={styles.filterCount}>{counts[f as keyof typeof counts]}</span>
           </button>
         ))}
       </div>

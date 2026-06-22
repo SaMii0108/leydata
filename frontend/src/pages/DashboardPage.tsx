@@ -183,7 +183,7 @@ const DashboardPage = () => {
     <section className={styles.tableSection}>
       <div className={styles.tableHeader}>
         <h3 className={styles.tableTitle}>Registros recientes</h3>
-        <Button variant="ghost" size="sm">Ver todos →</Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate('/consentimientos')}>Ver todos →</Button>
       </div>
       <div className={styles.tableWrapper}>
         <table className={styles.table}>

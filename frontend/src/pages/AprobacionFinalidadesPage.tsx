@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../features/auth/AuthContext';
 import {
-  SOLICITUDES, aprobarSolicitud, rechazarSolicitud, getDocumentosVigentes,
+  SOLICITUDES, aprobarSolicitud, rechazarSolicitud, marcarEnRevision, getDocumentosVigentes,
   type SolicitudEstado, type SolicitudFinalidad,
 } from '../utils/mockData';
 import styles from './AprobacionFinalidadesPage.module.css';
@@ -9,14 +9,15 @@ import styles from './AprobacionFinalidadesPage.module.css';
 type Filtro = 'todas' | SolicitudEstado;
 
 const ESTADO_LABEL: Record<SolicitudEstado, string> = {
-  pendiente: 'Pendiente',
-  aprobada:  'Aprobada',
-  rechazada: 'Rechazada',
+  pendiente:   'Pendiente',
+  en_revision: 'En revisión',
+  aprobada:    'Aprobada',
+  rechazada:   'Rechazada',
 };
 
 const AprobacionFinalidadesPage = () => {
   const { user } = useAuth();
-  const [filtro, setFiltro] = useState<Filtro>('pendiente');
+  const [filtro, setFiltro] = useState<Filtro>('todas');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [rechazandoId, setRechazandoId] = useState<string | null>(null);
   const [notaRechazo, setNotaRechazo] = useState('');
@@ -31,10 +32,11 @@ const AprobacionFinalidadesPage = () => {
   const lista = filtro === 'todas' ? SOLICITUDES : SOLICITUDES.filter((s) => s.estado === filtro);
 
   const counts = {
-    todas:     SOLICITUDES.length,
-    pendiente: SOLICITUDES.filter((s) => s.estado === 'pendiente').length,
-    aprobada:  SOLICITUDES.filter((s) => s.estado === 'aprobada').length,
-    rechazada: SOLICITUDES.filter((s) => s.estado === 'rechazada').length,
+    todas:       SOLICITUDES.length,
+    pendiente:   SOLICITUDES.filter((s) => s.estado === 'pendiente').length,
+    en_revision: SOLICITUDES.filter((s) => s.estado === 'en_revision').length,
+    aprobada:    SOLICITUDES.filter((s) => s.estado === 'aprobada').length,
+    rechazada:   SOLICITUDES.filter((s) => s.estado === 'rechazada').length,
   };
 
   const handleIniciarAprobacion = (id: string) => {
@@ -82,16 +84,16 @@ const AprobacionFinalidadesPage = () => {
             Revisa y aprueba o rechaza las solicitudes enviadas por los Jefes de Dominio. Al aprobar, debes seleccionar el Documento de Privacidad que respaldará la finalidad.
           </p>
         </div>
-        {counts.pendiente > 0 && (
+        {(counts.pendiente + counts.en_revision) > 0 && (
           <div className={styles.pendienteAlert}>
-            {counts.pendiente} solicitud{counts.pendiente !== 1 ? 'es' : ''} pendiente{counts.pendiente !== 1 ? 's' : ''}
+            {counts.pendiente + counts.en_revision} solicitud{(counts.pendiente + counts.en_revision) !== 1 ? 'es' : ''} por resolver
           </div>
         )}
       </div>
 
       {/* Filtros */}
       <div className={styles.filters}>
-        {(['todas', 'pendiente', 'aprobada', 'rechazada'] as Filtro[]).map((f) => (
+        {(['todas', 'pendiente', 'en_revision', 'aprobada', 'rechazada'] as Filtro[]).map((f) => (
           <button
             key={f}
             className={[styles.filterBtn, filtro === f ? styles.filterActive : ''].join(' ')}
@@ -113,14 +115,23 @@ const AprobacionFinalidadesPage = () => {
           {lista.map((sol) => (
             <div
               key={sol.id}
-              className={[styles.card, sol.estado === 'pendiente' ? styles.cardPendiente : ''].join(' ')}
+              className={[
+                styles.card,
+                sol.estado === 'pendiente'   ? styles.cardPendiente   : '',
+                sol.estado === 'en_revision' ? styles.cardEnRevision  : '',
+              ].join(' ')}
             >
               {/* Cabecera */}
               <div
                 className={styles.cardMain}
                 onClick={() => {
                   if (rechazandoId === sol.id || aprobandoId === sol.id) return;
-                  setExpanded(expanded === sol.id ? null : sol.id);
+                  const next = expanded === sol.id ? null : sol.id;
+                  if (next && sol.estado === 'pendiente') {
+                    marcarEnRevision(sol.id);
+                    forceUpdate((n) => n + 1);
+                  }
+                  setExpanded(next);
                 }}
               >
                 <div className={styles.cardTop}>
@@ -189,8 +200,8 @@ const AprobacionFinalidadesPage = () => {
                     </div>
                   )}
 
-                  {/* Acciones (solo pendientes) */}
-                  {sol.estado === 'pendiente' && (
+                  {/* Acciones (pendientes y en revisión) */}
+                  {(sol.estado === 'pendiente' || sol.estado === 'en_revision') && (
                     <div className={styles.actions}>
                       {aprobandoId === sol.id ? (
                         <div className={styles.aprobarForm}>
