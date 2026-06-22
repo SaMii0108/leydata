@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { MOCK_USERS, AREAS, addMockUser } from '../features/auth/mockUsers';
-import type { AppUser } from '../features/auth/mockUsers';
+import { useState, useEffect } from 'react';
+import { AREAS } from '../features/auth/mockUsers';
+import { useAuth } from '../features/auth/AuthContext';
+import { getUsers, getUser, createUser, ApiError } from '../api/usersApi';
+import type { UserSummaryDto } from '../api/usersApi';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import { ROLE_LABEL } from '../constants/labels';
@@ -15,33 +17,64 @@ const USUARIO_LABEL: Record<string, string> = {
 const generatePassword = () =>
   'LEY-' + Math.random().toString(36).slice(2, 8).toUpperCase();
 
+const primaryRole = (u: UserSummaryDto): string => u.roles[0] ?? '';
+const primaryArea = (u: UserSummaryDto): string | null => u.domains[0] ?? null;
+
 const UsuariosPage = () => {
-  const internalUsers = MOCK_USERS.filter((u) => u.role !== 'TITULAR');
-  const [users, setUsers] = useState<AppUser[]>(internalUsers);
+  const { accessToken } = useAuth();
+  const [users, setUsers] = useState<UserSummaryDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', area: AREAS[0] });
+  const [form, setForm] = useState<{ name: string; email: string; area: string }>({ name: '', email: '', area: AREAS[0] });
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [provisionalPassword, setProvisionalPassword] = useState<string | null>(null);
 
-  const handleCreate = () => {
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setFetchError(null);
+    getUsers(accessToken)
+      .then((data) => {
+        if (!cancelled) setUsers(data.filter((u) => !u.roles.every((r) => r === 'TITULAR')));
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setFetchError(err instanceof ApiError ? err.message : 'No se pudieron cargar los usuarios');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [accessToken]);
+
+  const handleCreate = async () => {
     if (!form.name.trim() || !form.email.trim()) return;
     const password = generatePassword();
-    const newUser: AppUser = {
-      id: `u${Date.now()}`,
-      name: form.name.trim(),
-      email: form.email.trim(),
-      password,
-      role: 'JEFE_DOMINIO',
-      area: form.area,
-    };
-    addMockUser(newUser);
-    setUsers((prev) => [...prev, newUser]);
-    setForm({ name: '', email: '', area: AREAS[0] });
-    setProvisionalPassword(password);
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const userId = await createUser(
+        { name: form.name.trim(), email: form.email.trim(), password, roleCode: 'JEFE_DOMINIO' },
+        accessToken,
+      );
+      setForm({ name: '', email: '', area: AREAS[0] });
+      setProvisionalPassword(password);
+      getUser(userId, accessToken)
+        .then((created) => setUsers((prev) => [...prev, created]))
+        .catch(() => {});
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err.message : 'Error al crear el usuario');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleCloseModal = () => {
     setShowModal(false);
     setProvisionalPassword(null);
+    setCreateError(null);
   };
 
   return (
@@ -58,49 +91,59 @@ const UsuariosPage = () => {
         </div>
       </div>
 
+      {fetchError && (
+        <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-danger)' }}>
+          {fetchError}
+        </p>
+      )}
+
       <section className={styles.tableSection}>
         <div className={styles.tableWrapper}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Usuario</th>
-                <th>Correo</th>
-                <th>Rol</th>
-                <th>Área</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td>
-                    <div className={styles.userCell}>
-                      <span className={[styles.avatar, styles[`avatar_${user.role.toLowerCase()}`]].join(' ')}>
-                        {initials(user.name)}
-                      </span>
-                      <span className={styles.userName}>{user.name}</span>
-                    </div>
-                  </td>
-                  <td className={styles.cellMono}>{user.email}</td>
-                  <td>
-                    <span className={[styles.roleBadge, styles[`role_${user.role.toLowerCase()}`]].join(' ')}>
-                      {USUARIO_LABEL[user.role]}
-                    </span>
-                  </td>
-                  <td className={styles.cellArea}>
-                    {user.area ?? <span className={styles.noArea}>—</span>}
-                  </td>
+          {loading ? (
+            <p style={{ padding: '24px 16px', margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+              Cargando usuarios…
+            </p>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Correo</th>
+                  <th>Rol</th>
+                  <th>Área</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td>
+                      <div className={styles.userCell}>
+                        <span className={[styles.avatar, styles[`avatar_${primaryRole(user).toLowerCase()}`]].join(' ')}>
+                          {initials(user.name)}
+                        </span>
+                        <span className={styles.userName}>{user.name}</span>
+                      </div>
+                    </td>
+                    <td className={styles.cellMono}>{user.email}</td>
+                    <td>
+                      <span className={[styles.roleBadge, styles[`role_${primaryRole(user).toLowerCase()}`]].join(' ')}>
+                        {USUARIO_LABEL[primaryRole(user)] ?? primaryRole(user)}
+                      </span>
+                    </td>
+                    <td className={styles.cellArea}>
+                      {primaryArea(user) ?? <span className={styles.noArea}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 
-      {/* Create user modal */}
       <Modal open={showModal} onClose={handleCloseModal} variant="center">
         <div className={styles.modal}>
           {provisionalPassword ? (
-            /* ── Success view ── */
             <>
               <div className={styles.modalHeader}>
                 <h3 className={styles.modalTitle}>Usuario creado</h3>
@@ -129,7 +172,6 @@ const UsuariosPage = () => {
               </div>
             </>
           ) : (
-            /* ── Form view ── */
             <>
               <div className={styles.modalHeader}>
                 <h3 className={styles.modalTitle}>Agregar responsable de área</h3>
@@ -177,14 +219,20 @@ const UsuariosPage = () => {
                 </div>
               </div>
 
+              {createError && (
+                <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-danger)' }}>
+                  {createError}
+                </p>
+              )}
+
               <div className={styles.modalFooter}>
                 <Button variant="ghost" onClick={handleCloseModal}>Cancelar</Button>
                 <Button
                   variant="primary"
                   onClick={handleCreate}
-                  disabled={!form.name.trim() || !form.email.trim()}
+                  disabled={!form.name.trim() || !form.email.trim() || creating}
                 >
-                  Crear usuario
+                  {creating ? 'Creando…' : 'Crear usuario'}
                 </Button>
               </div>
             </>
