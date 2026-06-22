@@ -1,0 +1,41 @@
+-- ==========================================================================================
+-- TABLA: AGREEMENTS_PURPOSES
+-- Detalle inmutable de cada finalidad aceptada o rechazada dentro de un acuerdo
+-- Snapshot de los atributos de la finalidad al momento del consentimiento (nombre, hash...) 
+-- PURPOSE-HASH permite verificar que la finalidad no fue alterada post-consentimiento
+-- La combinación (AGREEMENT_ID, PURPOSE_ID) es única dentro de un mismo acuerdo
+-- ==========================================================================================
+CREATE TABLE AGREEMENTS_PURPOSES (
+	ID UUID PRIMARY KEY DEFAULT GEN_RANDOM_UUID(),
+	AGREEMENT_ID UUID NOT NULL,
+	PURPOSE_ID UUID NOT NULL, 
+	ACCEPTED BOOLEAN NOT NULL,
+
+	PURPOSE_CODE VARCHAR(50) NOT NULL,
+	PURPOSE_NAME VARCHAR(200) NOT NULL,
+	PURPOSE_DESCRIPTION TEXT NOT NULL,
+	PURPOSE_SHORT_DESCRIPTION VARCHAR(300) NOT NULL,
+
+	PURPOSE_REQUIRED BOOLEAN NOT NULL,
+		CHECK (NOT (PURPOSE_REQUIRED = TRUE AND ACCEPTED = FALSE)),
+	PURPOSE_REVOCABLE BOOLEAN NOT NULL,
+
+	PURPOSE_HASH VARCHAR(64) NOT NULL,
+
+	LEGAL_BASIS_CODE VARCHAR(50) NOT NULL,
+
+	CREATED_AT TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+	HASH_SHA256 VARCHAR(64),
+
+	UNIQUE (AGREEMENT_ID, PURPOSE_ID)
+);
+
+ALTER TABLE AGREEMENTS_PURPOSES ADD CONSTRAINT FK_AP_AGREEMENT
+FOREIGN KEY (AGREEMENT_ID) REFERENCES AGREEMENTS(ID) ON DELETE CASCADE;
+
+-- Consultas por finalidad
+CREATE INDEX IDX_AP_PURPOSE ON AGREEMENTS_PURPOSES(PURPOSE_ID);
+
+-- Consultas por acuerdo
+CREATE INDEX IDX_AP_AGREEMENT ON AGREEMENTS_PURPOSES(AGREEMENT_ID);

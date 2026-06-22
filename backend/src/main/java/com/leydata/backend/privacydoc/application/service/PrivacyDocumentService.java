@@ -17,7 +17,7 @@ import com.leydata.backend.privacydoc.infrastructure.pdf.PdfGeneratorService;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
 import com.leydata.backend.repository.PurposesRepository;
-import com.leydata.backend.repository.TemplatesRepository;
+import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
 import com.leydata.backend.shared.EmailService;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
