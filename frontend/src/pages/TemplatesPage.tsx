@@ -65,9 +65,14 @@ const TemplatesPage = () => {
             Gestiona las plantillas de consentimiento del módulo · Ley 21.719
           </p>
         </div>
-        <Button variant="primary" size="sm" onClick={() => navigate('/plantillas/nueva')}>
-          + Crear Plantilla
-        </Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/mock/register')}>
+            Demo de registro
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => navigate('/plantillas/nueva')}>
+            + Crear Plantilla
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}

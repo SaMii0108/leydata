@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
-import { DOMINIOS, addSolicitudFinalidad, type SolicitudDato, type TipoDato } from '../utils/mockData';
+import { addSolicitudFinalidad, type SolicitudDato, type TipoDato } from '../utils/mockData';
 import styles from './SolicitarFinalidadPage.module.css';
 
 const TIPOS_DATO: TipoDato[] = ['Texto', 'Email', 'Teléfono', 'Fecha', 'Número', 'RUT'];
@@ -20,18 +20,16 @@ interface FormState {
   justificacion: string;
 }
 
-const EMPTY_FORM: FormState = {
-  nombre: '',
-  descripcion: '',
-  dominio: DOMINIOS[0],
-  justificacion: '',
-};
-
 const SolicitarFinalidadPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [form, setForm] = useState<FormState>({
+    nombre: '',
+    descripcion: '',
+    dominio: user?.area ?? '',
+    justificacion: '',
+  });
   const [datos, setDatos] = useState<DatoRow[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'datos', string>>>({});
   const [saved, setSaved] = useState(false);
@@ -150,14 +148,10 @@ const SolicitarFinalidadPage = () => {
             </div>
 
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>Área o dominio solicitante <span className={styles.req}>*</span></label>
-              <select
-                className={styles.select}
-                value={form.dominio}
-                onChange={(e) => set('dominio', e.target.value)}
-              >
-                {DOMINIOS.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
+              <label className={styles.label}>Área o dominio solicitante</label>
+              <div className={styles.dominioValue}>
+                {user?.area ?? <span className={styles.dominioMuted}>Sin área asignada</span>}
+              </div>
             </div>
           </div>
         </section>
