@@ -9,4 +9,7 @@ import java.util.UUID;
 public interface PurposeRequestsRepository extends JpaRepository<PurposeRequests, UUID> {
     List<PurposeRequests> findByRequesterId(UUID requesterId);
     List<PurposeRequests> findByStatus(String status);
+
+    boolean existsByRequesterIdAndDomainIdAndTitleAndStatus(
+            UUID requesterId, UUID domainId, String title, String status);
 }

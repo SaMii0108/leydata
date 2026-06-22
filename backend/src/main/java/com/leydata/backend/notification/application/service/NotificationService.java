@@ -52,7 +52,7 @@ public class NotificationService {
     public NotificationResponse markAsRead(UUID notificationId) {
         UUID userId = securityContextHelper.getAuthenticatedUser().getId();
         Notification n = repo.findById(notificationId)
-                .orElseThrow(() -> new IllegalArgumentException("Notificación no encontrada: " + notificationId));
+                .orElseThrow(() -> new java.util.NoSuchElementException("Notificación no encontrada: " + notificationId));
         if (!n.getRecipientId().equals(userId)) {
             throw new IllegalArgumentException("No puedes marcar notificaciones de otro usuario");
         }

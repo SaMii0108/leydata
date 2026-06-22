@@ -354,8 +354,14 @@ public class UserService {
         }
     }
 
-    // Asigna dominios activos a un usuario. Solo permitido si tiene rol JEFE_DOMINIO.
+    // Asigna dominios activos a un usuario. Si la lista está vacía, limpia dominios existentes.
+    // Solo se exige rol JEFE_DOMINIO cuando se intenta asignar dominios específicos.
     private void assignUserDomains(Users user, List<UUID> domainIds) {
+        if (domainIds.isEmpty()) {
+            user.getUserDomains().clear();
+            return;
+        }
+
         boolean hasJefeDominio = user.getUserRoles().stream()
                 .anyMatch(ur -> "JEFE_DOMINIO".equals(ur.getRole().getCode()));
 
@@ -365,10 +371,10 @@ public class UserService {
 
         Set<UUID> requestedDomainIds = new HashSet<>(domainIds);
         Set<UUID> currentDomainIds = user.getUserDomains().stream()
-                .map(ud -> ud.getDomain().getId())
+                .map(ud -> ud.getId().getDomainId())
                 .collect(Collectors.toSet());
 
-        user.getUserDomains().removeIf(ud -> !requestedDomainIds.contains(ud.getDomain().getId()));
+        user.getUserDomains().removeIf(ud -> !requestedDomainIds.contains(ud.getId().getDomainId()));
 
         for (UUID domainId : requestedDomainIds) {
             if (!currentDomainIds.contains(domainId)) {

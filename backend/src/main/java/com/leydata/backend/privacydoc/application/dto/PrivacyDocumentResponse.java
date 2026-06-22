@@ -61,4 +61,31 @@ public class PrivacyDocumentResponse {
                 )
                 .build();
     }
+
+    /** Versión sin content ni rejectionReason, para usuarios no privilegiados (no DPO/ADMIN). */
+    public static PrivacyDocumentResponse fromPublic(PrivacyDocuments e) {
+        return PrivacyDocumentResponse.builder()
+                .id(e.getId())
+                .documentFamilyId(e.getDocumentFamilyId())
+                .templateId(e.getTemplateId())
+                .category(e.getCategory())
+                .status(e.getStatus())
+                .version(e.getVersion())
+                .name(e.getName())
+                .hasPdf(e.getPdfContent() != null && e.getPdfContent().length > 0)
+                .hashSha256(e.getHashSha256())
+                .publishAt(e.getPublishAt())
+                .createdBy(e.getCreatedBy())
+                .approvedBy(e.getApprovedBy())
+                .createdAt(e.getCreatedAt())
+                .updatedAt(e.getUpdatedAt())
+                .isActive(e.getIsActive())
+                .purposeIds(
+                        e.getDocumentPurposes().stream()
+                                .filter(dp -> Boolean.TRUE.equals(dp.getIsActive()))
+                                .map(dp -> dp.getId().getPurposeId())
+                                .toList()
+                )
+                .build();
+    }
 }
