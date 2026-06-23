@@ -13,8 +13,11 @@ const PerfilPage = () => {
   };
 
   const handleSavePassword = (_current: string, next: string): string | null => {
-    updateMockUser(user.id, { password: next });
-    login({ ...user, password: next });
+    // Solo aplica para titulares (auth mock). Usuarios Keycloak gestionan su contraseña externamente.
+    if (user.role === 'TITULAR') {
+      updateMockUser(user.id, { password: next });
+      login({ ...user, password: next });
+    }
     return null;
   };
 

@@ -65,19 +65,20 @@ const IconUser = () => (
 );
 
 const navItems: NavItem[] = [
-  { to: '/',               label: 'Métricas Generales', icon: <IconGrid />,    roles: ['ADMIN', 'DPO'] },
-  { to: '/consentimientos', label: 'Consentimientos',   icon: <IconList />,    roles: ['DPO', 'USER'] },
-  { to: '/usuarios',       label: 'Usuarios',           icon: <IconUsers />,   roles: ['ADMIN'] },
-  { to: '/auditoria',      label: 'Auditoría',          icon: <IconAudit />,   roles: ['ADMIN', 'DPO'] },
-  { to: '/cumplimiento',   label: 'Cumplimiento Legal', icon: <IconShield />,  roles: ['ADMIN', 'DPO'] },
-  { to: '/plantillas',     label: 'Plantillas',         icon: <IconPalette />, roles: ['DPO'] },
-  { to: '/perfil',         label: 'Mi Perfil',          icon: <IconUser />,    roles: ['ADMIN', 'DPO', 'USER'] },
+  { to: '/',                label: 'Métricas Generales', icon: <IconGrid />,    roles: ['ADMIN', 'DPO'] },
+  { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,    roles: ['DPO', 'JEFE_DOMINIO'] },
+  { to: '/usuarios',        label: 'Usuarios',           icon: <IconUsers />,   roles: ['ADMIN'] },
+  { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,   roles: ['ADMIN', 'DPO'] },
+  { to: '/cumplimiento',    label: 'Cumplimiento Legal', icon: <IconShield />,  roles: ['ADMIN', 'DPO'] },
+  { to: '/plantillas',      label: 'Plantillas',         icon: <IconPalette />, roles: ['DPO'] },
+  { to: '/perfil',          label: 'Mi Perfil',          icon: <IconUser />,    roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
 ];
 
 const ROLE_COLOR: Record<Role, string> = {
-  ADMIN: '#4361ee',
-  DPO: '#7c3aed',
-  USER: '#059669',
+  ADMIN:        '#4361ee',
+  DPO:          '#7c3aed',
+  JEFE_DOMINIO: '#059669',
+  TITULAR:      '#0891b2',
 };
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
