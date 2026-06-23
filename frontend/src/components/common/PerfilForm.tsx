@@ -6,7 +6,7 @@ import styles from './PerfilForm.module.css';
 interface PerfilFormProps {
   initialName: string;
   initialEmail: string;
-  currentPassword: string;
+  currentPassword?: string;
   role: string;
   area: string | null;
   onSaveProfile: (name: string, email: string) => void;
@@ -122,53 +122,62 @@ const PerfilForm = ({
           {pwdSaved && <span className={styles.savedMsg}>✓ Contraseña actualizada</span>}
         </div>
 
-        <div className={styles.fields}>
-          <div className={styles.fieldGroup}>
-            <label className={styles.label} htmlFor="pf-current">Contraseña actual</label>
-            <input
-              id="pf-current"
-              type="password"
-              className={styles.input}
-              value={currentPwd}
-              onChange={(e) => setCurrentPwd(e.target.value)}
-              placeholder="••••••••"
-            />
-          </div>
-          <div className={styles.fieldGroup}>
-            <label className={styles.label} htmlFor="pf-new">Nueva contraseña</label>
-            <input
-              id="pf-new"
-              type="password"
-              className={styles.input}
-              value={newPwd}
-              onChange={(e) => setNewPwd(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
-            />
-          </div>
-          <div className={styles.fieldGroup}>
-            <label className={styles.label} htmlFor="pf-confirm">Confirmar contraseña</label>
-            <input
-              id="pf-confirm"
-              type="password"
-              className={styles.input}
-              value={confirmPwd}
-              onChange={(e) => setConfirmPwd(e.target.value)}
-              placeholder="Repite la nueva contraseña"
-            />
-          </div>
-          {pwdError && <p className={styles.errorMsg}>{pwdError}</p>}
-        </div>
+        {currentPassword === undefined ? (
+          <p className={styles.externalAuthMsg}>
+            Tu contraseña es gestionada por el proveedor de identidad corporativo.
+            Para cambiarla, contacta al administrador del sistema.
+          </p>
+        ) : (
+          <>
+            <div className={styles.fields}>
+              <div className={styles.fieldGroup}>
+                <label className={styles.label} htmlFor="pf-current">Contraseña actual</label>
+                <input
+                  id="pf-current"
+                  type="password"
+                  className={styles.input}
+                  value={currentPwd}
+                  onChange={(e) => setCurrentPwd(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div className={styles.fieldGroup}>
+                <label className={styles.label} htmlFor="pf-new">Nueva contraseña</label>
+                <input
+                  id="pf-new"
+                  type="password"
+                  className={styles.input}
+                  value={newPwd}
+                  onChange={(e) => setNewPwd(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </div>
+              <div className={styles.fieldGroup}>
+                <label className={styles.label} htmlFor="pf-confirm">Confirmar contraseña</label>
+                <input
+                  id="pf-confirm"
+                  type="password"
+                  className={styles.input}
+                  value={confirmPwd}
+                  onChange={(e) => setConfirmPwd(e.target.value)}
+                  placeholder="Repite la nueva contraseña"
+                />
+              </div>
+              {pwdError && <p className={styles.errorMsg}>{pwdError}</p>}
+            </div>
 
-        <div className={styles.cardFooter}>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSavePwd}
-            disabled={!currentPwd || !newPwd || !confirmPwd}
-          >
-            Actualizar contraseña
-          </Button>
-        </div>
+            <div className={styles.cardFooter}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSavePwd}
+                disabled={!currentPwd || !newPwd || !confirmPwd}
+              >
+                Actualizar contraseña
+              </Button>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );

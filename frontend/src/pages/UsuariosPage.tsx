@@ -9,7 +9,7 @@ import styles from './UsuariosPage.module.css';
 
 const USUARIO_LABEL: Record<string, string> = {
   ...ROLE_LABEL,
-  USER: 'Responsable de área',
+  JEFE_DOMINIO: 'Responsable de área',
 };
 
 const generatePassword = () =>
@@ -30,7 +30,7 @@ const UsuariosPage = () => {
       name: form.name.trim(),
       email: form.email.trim(),
       password,
-      role: 'USER',
+      role: 'JEFE_DOMINIO',
       area: form.area,
     };
     addMockUser(newUser);

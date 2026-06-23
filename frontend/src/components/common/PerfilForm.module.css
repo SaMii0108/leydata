@@ -105,6 +105,17 @@
   font-weight: 500;
 }
 
+.externalAuthMsg {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
 .cardFooter {
   padding: 14px 24px;
   border-top: 1px solid var(--color-border);
