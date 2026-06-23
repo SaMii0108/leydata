@@ -16,7 +16,8 @@ import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionExceptio
 import com.leydata.backend.privacydoc.infrastructure.pdf.PdfGeneratorService;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
-import com.leydata.backend.repository.PurposesRepository;
+import com.leydata.backend.purpose.infrastructure.persistence.PurposeRequestsRepository;
+import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.repository.TemplatesRepository;
 import com.leydata.backend.shared.EmailService;
 import com.leydata.backend.shared.SecurityContextHelper;
@@ -44,6 +45,7 @@ public class PrivacyDocumentService {
     private final DocumentPurposesRepository purposeRepo;
     private final DomainsRepository domainsRepo;
     private final PurposesRepository purposesRepo;
+    private final PurposeRequestsRepository purposeRequestsRepo;
     private final TemplatesRepository templatesRepo;
     private final PdfGeneratorService pdfGenerator;
     private final NotificationService notificationService;
@@ -402,6 +404,18 @@ public class PrivacyDocumentService {
                         es.sendDocumentPublishedEmail(jefe.getEmail(), jefe.getName(), doc.getName(), domainName));
             });
         });
+
+        // Notificar al solicitante original del PurposeRequest (trazabilidad del ticket)
+        activePurposes.stream()
+                .map(dp -> dp.getPurpose())
+                .filter(p -> p.getPurposeRequestId() != null)
+                .forEach(purpose -> purposeRequestsRepo.findById(purpose.getPurposeRequestId())
+                        .ifPresent(pr -> notificationService.create(
+                                pr.getRequesterId(),
+                                NotificationType.PURPOSE_REQUEST_FULFILLED,
+                                "Tu solicitud fue publicada: " + purpose.getName(),
+                                "La finalidad '" + purpose.getName() + "' derivada de tu solicitud ha sido publicada en el documento '" + doc.getName() + "'.",
+                                purpose.getId())));
 
         return PrivacyDocumentResponse.from(saved);
     }

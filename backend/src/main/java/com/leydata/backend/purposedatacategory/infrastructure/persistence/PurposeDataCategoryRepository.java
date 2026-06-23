@@ -16,4 +16,6 @@ public interface PurposeDataCategoryRepository extends JpaRepository<PurposeData
     boolean existsByPurposeIdAndDataCategoryId(UUID purposeId, UUID dataCategoryId);
 
     boolean existsByDataCategoryId(UUID dataCategoryId);
+
+    boolean existsByPurposeId(UUID purposeId);
 }

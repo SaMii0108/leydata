@@ -15,12 +15,14 @@ El sistema no gestiona directamente los datos personales de los ciudadanos — g
 El flujo de trabajo completo de la organización es el siguiente:
 
 1. El **ADMIN** crea los usuarios del sistema y los dominios organizacionales (áreas de la empresa).
-2. El **JEFE_DOMINIO** solicita al DPO crear una nueva finalidad de tratamiento para su área. Ejemplo: "quiero enviar newsletters a clientes de marketing".
-3. El **DPO** revisa la solicitud. Si la aprueba, queda registrada una Finalidad en el sistema con su base legal (ej. consentimiento, contrato, obligación legal).
-4. El **DPO** configura qué categorías de datos procesa esa finalidad y por cuánto tiempo se retienen.
-5. El **DPO** crea un Documento de Privacidad que agrupa una o más finalidades, lo somete a revisión, lo aprueba y lo publica. Al publicarlo se genera un PDF firmado con SHA-256.
-6. El titular recibe o puede consultar ese documento publicado para conocer el tratamiento que se hace de sus datos.
-7. Toda acción del sistema queda registrada en un log de auditoría con cadena de hashes inmutable.
+2. El **JEFE_DOMINIO** abre una solicitud de finalidad (PurposeRequest) para su área. Ejemplo: "quiero enviar newsletters a clientes de marketing".
+3. El **DPO** revisa y aprueba la solicitud.
+4. El **DPO** crea formalmente la **Finalidad** (Purpose) — la unidad atómica de permiso que el sistema evaluará como `true/false` antes de dejar que cualquier proceso interno toque un dato. La finalidad declara: qué hace, su base legal, si es obligatoria, si es revocable.
+5. El **DPO** configura qué categorías de datos procesa esa finalidad y por cuánto tiempo se retienen (política de retención por combinación finalidad+categoría).
+6. El **DPO** crea un Documento de Privacidad que agrupa una o más finalidades, lo somete a revisión, lo aprueba y lo publica. Al publicarlo se genera un PDF firmado con SHA-256 y la finalidad queda inmutable.
+7. El JEFE_DOMINIO que originó la solicitud recibe una notificación de que su finalidad fue publicada.
+8. El titular recibe o puede consultar ese documento publicado para conocer el tratamiento que se hace de sus datos.
+9. Toda acción del sistema queda registrada en un log de auditoría con cadena de hashes inmutable.
 
 ---
 
@@ -30,13 +32,14 @@ El flujo de trabajo completo de la organización es el siguiente:
 2. [Usuarios](#2-usuarios)
 3. [Dominios](#3-dominios)
 4. [Solicitudes de Finalidad](#4-solicitudes-de-finalidad)
-5. [Legal Basis](#5-legal-basis)
-6. [Categorías de Datos](#6-categorías-de-datos)
-7. [Categorías por Finalidad + Retención](#7-categorías-por-finalidad--retención)
-8. [Documentos de Privacidad](#8-documentos-de-privacidad)
-9. [Auditoría](#9-auditoría)
-10. [Notificaciones](#10-notificaciones)
-11. [Referencia de errores](#11-referencia-rápida-de-códigos-de-error)
+5. [Finalidades](#5-finalidades)
+6. [Legal Basis](#6-legal-basis)
+7. [Categorías de Datos](#7-categorías-de-datos)
+8. [Categorías por Finalidad + Retención](#8-categorías-por-finalidad--retención)
+9. [Documentos de Privacidad](#9-documentos-de-privacidad)
+10. [Auditoría](#10-auditoría)
+11. [Notificaciones](#11-notificaciones)
+12. [Referencia de errores](#12-referencia-rápida-de-códigos-de-error)
 
 ---
 
@@ -427,7 +430,174 @@ Una vez que el DPO tomó una decisión, no puede revisarla nuevamente. Si hay un
 
 ---
 
-## 5. Legal Basis
+## 5. Finalidades
+
+### ¿Qué es una Finalidad?
+
+La Finalidad es la **unidad atómica de permiso** del sistema. Es la respuesta exacta a la pregunta que exige la Ley 21.719: *"¿Para qué vas a usar mi información?"*
+
+Cada Finalidad define **una sola acción específica** (ej. "Enviar promociones", "Facturar servicio", "Compartir con terceros"). Es el permiso individual que el motor evaluará como `true/false` antes de dejar que cualquier proceso interno toque un dato.
+
+**Distinción clave:**
+- **PurposeRequest** → el ticket de solicitud (JEFE_DOMINIO pide, DPO revisa)
+- **Purpose** → la definición formal operacional que el DPO crea y que el motor consulta
+- **Template** → la agrupación visual que el titular lee (agrupa múltiples Purposes)
+
+**Campos clave:**
+- `consentStatement` → texto exacto que el titular lee y acepta (ej. *"Al aceptar, autorizo a [X] a utilizar mi correo para enviar ofertas durante 365 días."*). Nullable — puede definirse después de crear la finalidad.
+- `required: true` → el titular no puede rechazar esta finalidad (ej. facturación)
+- `required: false` → el titular puede optar por no aceptarla (ej. marketing)
+- `revocable: true` → puede retirar su consentimiento después de otorgarlo
+- `locked: true` → la finalidad está en un documento PUBLISHED y es inmutable
+
+### Endpoints
+
+| Método | URL | Rol mínimo | Descripción |
+|--------|-----|-----------|-------------|
+| POST | `/api/purposes` | DPO | Crear finalidad |
+| GET | `/api/purposes` | JEFE_DOMINIO | Listar activas (jefe ve solo su dominio) |
+| GET | `/api/purposes/{id}` | JEFE_DOMINIO | Ver una finalidad |
+| GET | `/api/purposes/domain/{domainId}` | JEFE_DOMINIO | Listar por dominio |
+| PUT | `/api/purposes/{id}` | DPO | Editar (bloqueado si PUBLISHED) |
+| DELETE | `/api/purposes/{id}` | DPO | Desactivar (soft delete) |
+
+---
+
+### CU-5.1 — DPO crea una finalidad
+
+**Flujo:** El DPO define una nueva actividad de tratamiento de datos. Puede referenciar un PurposeRequest aprobado (para trazabilidad) o crearla directamente.
+
+**Request exitoso:**
+```
+POST /api/purposes
+Authorization: Bearer <token-DPO>
+
+{
+  "code": "MARKETING_NEWSLETTER",
+  "name": "Envío de ofertas y promociones",
+  "description": "Uso del correo electrónico y teléfono para enviar descuentos, boletines y material publicitario.",
+  "shortDescription": "Envío de newsletters",
+  "consentStatement": "Al aceptar, autorizo a [Organización] a utilizar mi correo electrónico para enviar ofertas y descuentos durante 365 días.",
+  "required": false,
+  "revocable": true,
+  "presentationOrder": 3,
+  "legalBasisId": "uuid-consentimiento",
+  "domainId": "uuid-dominio-marketing",
+  "purposeRequestId": "uuid-request-aprobado"
+}
+```
+
+**Respuesta 201:**
+```json
+{
+  "id": "uuid-purpose",
+  "code": "MARKETING_NEWSLETTER",
+  "name": "Envío de ofertas y promociones",
+  "consentStatement": "Al aceptar, autorizo a [Organización] a utilizar mi correo electrónico para enviar ofertas y descuentos durante 365 días.",
+  "required": false,
+  "revocable": true,
+  "legalBasisCode": "CONSENTIMIENTO",
+  "domainName": "Marketing",
+  "isActive": true,
+  "locked": false,
+  "approvedBy": "uuid-dpo",
+  "createdAt": "2026-06-21T10:00:00"
+}
+```
+
+**Regla de negocio:** `code` se normaliza a MAYÚSCULAS y es único en todo el sistema. `approvedBy` se registra automáticamente con el ID del DPO que crea — trazabilidad exacta en organizaciones con múltiples DPOs.
+
+---
+
+### CU-5.2 — Código duplicado
+
+```
+POST /api/purposes
+Body: { "code": "MARKETING_NEWSLETTER", ... }  ← mismo código ya existente
+```
+
+**Respuesta 422:** `"Ya existe una finalidad con código: MARKETING_NEWSLETTER"`
+
+---
+
+### CU-5.3 — JEFE_DOMINIO lista las finalidades de su dominio
+
+**Flujo:** El jefe del área de Marketing quiere ver qué finalidades están activas para su dominio.
+
+```
+GET /api/purposes
+Authorization: Bearer <token-JEFE-marketing>
+```
+
+**Respuesta 200:** Solo las finalidades cuyo `domainId` pertenece a los dominios del jefe autenticado.
+
+---
+
+### CU-5.4 — JEFE_DOMINIO intenta ver finalidad de otro dominio
+
+```
+GET /api/purposes/{id-de-finalidad-de-RRHH}
+Authorization: Bearer <token-JEFE-marketing>
+```
+
+**Respuesta 403:** `FORBIDDEN` — el jefe solo puede acceder a las finalidades de sus propios dominios.
+
+---
+
+### CU-5.5 — Editar finalidad no bloqueada
+
+```
+PUT /api/purposes/{id}
+Authorization: Bearer <token-DPO>
+
+{
+  "name": "Envío de newsletter mensual",
+  "required": false,
+  "revocable": true
+}
+```
+
+**Respuesta 200** — campos actualizados. `code` y `domainId` no se pueden cambiar.
+
+---
+
+### CU-5.6 — Editar finalidad bloqueada (en documento PUBLISHED)
+
+```
+PUT /api/purposes/{id}   ← finalidad vinculada a documento PUBLISHED
+```
+
+**Respuesta 422:** `"La finalidad 'Envío de newsletter mensual' está publicada en un documento activo y no puede modificarse. Crea una nueva versión del documento para desbloquearla."`
+
+**Flujo de desbloqueo:** `POST /api/privacy-documents/{docId}/new-version` → crea nuevo DRAFT → la finalidad queda editable.
+
+---
+
+### CU-5.7 — Desactivar finalidad con categorías activas
+
+```
+DELETE /api/purposes/{id}   ← tiene PurposeDataCategories activos
+```
+
+**Respuesta 422:** `"La finalidad 'Newsletter' tiene categorías de datos activas. Desvincula primero todas las categorías antes de desactivar la finalidad."`
+
+**Orden correcto:**
+1. `DELETE /api/purposes/{id}/data-categories/{pdcId}` — desvincular cada categoría
+2. `DELETE /api/purposes/{id}` — ahora sí, desactivar
+
+---
+
+### CU-5.8 — Notificación al publicar: el ticket del JEFE_DOMINIO queda cerrado
+
+**Flujo:** El DPO publica un documento que contiene la finalidad "Newsletter" vinculada al PurposeRequest #42 de Juan (JEFE de Marketing).
+
+- Al momento de la publicación, el sistema detecta que la finalidad tiene `purposeRequestId` apuntando al ticket de Juan.
+- Se genera automáticamente una notificación `PURPOSE_REQUEST_FULFILLED` para Juan: *"La finalidad 'Envío de newsletter mensual' derivada de tu solicitud ha sido publicada en el documento 'Política de Marketing'."*
+- Juan no necesita consultar el sistema activamente — recibe el cierre del ciclo en su bandeja.
+
+---
+
+## 6. Legal Basis (Bases de Licitud)
 
 ### ¿Qué hace este módulo?
 
@@ -474,7 +644,7 @@ Devuelve solo las bases donde `consentRequired = true`. El frontend usa este end
 
 ---
 
-## 6. Categorías de Datos
+## 7. Categorías de Datos
 
 ### ¿Qué hace este módulo?
 
@@ -577,11 +747,22 @@ El sistema verifica antes de desactivar que ninguna finalidad activa esté usand
 
 ---
 
-## 7. Categorías por Finalidad + Retención
+## 8. Categorías por Finalidad + Retención
 
 ### ¿Qué hace este módulo?
 
-Una vez que existe una finalidad aprobada (ej. "Newsletter de Marketing"), el DPO debe declarar exactamente qué tipos de datos procesa esa finalidad y por cuánto tiempo los retiene. Esto es un requisito explícito de la Ley 21.719: el titular tiene derecho a saber qué datos se usan y cuándo serán eliminados o anonimizados.
+Una vez que existe una finalidad aprobada (ej. "Newsletter de Marketing"), el DPO debe declarar exactamente qué tipos de datos procesa esa finalidad, **cómo los usa**, y por cuánto tiempo los retiene. Esto es un requisito explícito de la Ley 21.719: el titular tiene derecho a saber qué datos se usan, para qué y cuándo serán eliminados o anonimizados.
+
+**`dataUses` — usos declarados por categoría de dato:**
+
+Cada vínculo finalidad-categoría debe declarar al menos un uso. Los valores posibles son:
+- `STORAGE` — almacenamiento
+- `PROCESSING` — procesamiento interno
+- `TRANSFER_TO_THIRD_PARTIES` — cesión a terceros (máxima relevancia legal — Ley 21.719 exige mención explícita)
+- `PROFILING` — elaboración de perfiles del titular
+- `ANALYSIS` — análisis estadístico o interno
+
+Una categoría puede tener múltiples usos simultáneos.
 
 La política de retención (cuánto tiempo y bajo qué criterio) se define **por combinación de finalidad y categoría**. No es global. Por ejemplo: para la finalidad "Salud Ocupacional", los datos de salud se retienen 10 años, pero los datos de identificación solo 5 años.
 
@@ -606,6 +787,7 @@ Devuelve todas las categorías vinculadas a una finalidad. El campo `retentionLo
     "id": "uuid",
     "dataCategory": { "code": "SALUD", "name": "Datos de salud", "isSensitive": true },
     "required": true,
+    "dataUses": ["STORAGE", "PROCESSING"],
     "retention": {
       "retentionPeriod": 10,
       "retentionUnit": "YEARS",
@@ -629,6 +811,7 @@ Vincula una categoría a la finalidad y define su política de retención en un 
 {
   "dataCategoryId": "uuid-salud",
   "required": true,
+  "dataUses": ["STORAGE", "PROCESSING"],
   "retention": {
     "retentionPeriod": 10,
     "retentionUnit": "YEARS",
@@ -638,7 +821,7 @@ Vincula una categoría a la finalidad y define su política de retención en un 
 }
 
 // Response 201
-{ "id": "uuid", "retentionLocked": false }
+{ "id": "uuid", "dataUses": ["STORAGE", "PROCESSING"], "retentionLocked": false }
 ```
 
 **Caso negativo — la finalidad está en un documento PUBLISHED**
@@ -670,6 +853,12 @@ Agregar una nueva categoría a una finalidad publicada amplía el alcance del co
 ```json
 // Response 422
 { "status": "UNPROCESSABLE_ENTITY", "code": 422, "message": "Esta categoría de datos ya está vinculada a la finalidad." }
+```
+
+**Caso negativo — `dataUses` vacío o ausente**
+```json
+// Response 400
+{ "status": "BAD_REQUEST", "code": 400, "message": "dataUses: Debe declarar al menos un uso de la categoría de datos" }
 ```
 
 **Caso negativo — unidad de retención inválida**
@@ -718,7 +907,7 @@ Response 204 No Content
 
 ---
 
-## 8. Documentos de Privacidad
+## 9. Documentos de Privacidad
 
 ### ¿Qué hace este módulo?
 
@@ -943,7 +1132,7 @@ Verifica la integridad del PDF almacenado comparando su SHA-256 actual con el ha
 
 ---
 
-## 9. Auditoría
+## 10. Auditoría
 
 ### ¿Qué hace este módulo?
 
@@ -1019,7 +1208,7 @@ Recorre toda la cadena de hashes y verifica que ningún registro fue alterado. E
 
 ---
 
-## 10. Notificaciones
+## 11. Notificaciones
 
 ### ¿Qué hace este módulo?
 
@@ -1078,7 +1267,7 @@ Response 200 — sin cuerpo
 
 ---
 
-## 11. Referencia rápida de códigos de error
+## 12. Referencia rápida de códigos de error
 
 | Código HTTP | Status JSON | Cuándo ocurre |
 |-------------|-------------|---------------|

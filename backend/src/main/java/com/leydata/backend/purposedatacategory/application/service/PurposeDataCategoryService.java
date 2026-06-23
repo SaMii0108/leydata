@@ -15,7 +15,7 @@ import com.leydata.backend.purposedatacategory.domain.exception.PurposeDataCateg
 import com.leydata.backend.purposedatacategory.domain.exception.RetentionPolicyLockedException;
 import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
 import com.leydata.backend.purposedatacategory.infrastructure.persistence.RetentionPolicyRepository;
-import com.leydata.backend.repository.PurposesRepository;
+import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -72,6 +72,7 @@ public class PurposeDataCategoryService {
         pdc.setPurposeId(purposeId);
         pdc.setDataCategoryId(req.getDataCategoryId());
         pdc.setRequired(req.getRequired());
+        pdc.setDataUses(req.getDataUses());
         PurposeDataCategories saved = pdcRepo.save(pdc);
 
         // La política de retención se crea junto con el vínculo — nunca puede quedar sin definir
@@ -86,6 +87,7 @@ public class PurposeDataCategoryService {
                 .newData(Map.of(
                         "purposeId",       purposeId.toString(),
                         "dataCategoryId",  req.getDataCategoryId().toString(),
+                        "dataUses",        req.getDataUses().toString(),
                         "retentionPeriod", req.getRetention().getRetentionPeriod(),
                         "retentionUnit",   req.getRetention().getRetentionUnit()))
                 .actorId(securityContextHelper.getAuthenticatedDpo().getId())

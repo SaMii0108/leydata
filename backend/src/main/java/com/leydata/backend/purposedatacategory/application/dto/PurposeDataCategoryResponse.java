@@ -2,9 +2,11 @@ package com.leydata.backend.purposedatacategory.application.dto;
 
 import com.leydata.backend.entity.DataRetentionPolicies;
 import com.leydata.backend.entity.PurposeDataCategories;
+import com.leydata.backend.purposedatacategory.domain.enums.DataUseType;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -20,6 +22,7 @@ public class PurposeDataCategoryResponse {
     private String dataCategoryName;
     private Boolean isSensitive;
     private Boolean required;
+    private Set<DataUseType> dataUses;
 
     // Política de retención embebida
     private UUID retentionPolicyId;
@@ -41,6 +44,7 @@ public class PurposeDataCategoryResponse {
                 .dataCategoryName(e.getDataCategory() != null ? e.getDataCategory().getName() : null)
                 .isSensitive(e.getDataCategory() != null ? e.getDataCategory().getIsSensitive() : null)
                 .required(e.getRequired())
+                .dataUses(e.getDataUses())
                 .retentionPolicyId(ret != null ? ret.getId() : null)
                 .retentionPeriod(ret != null ? ret.getRetentionPeriod() : null)
                 .retentionUnit(ret != null ? ret.getRetentionUnit() : null)

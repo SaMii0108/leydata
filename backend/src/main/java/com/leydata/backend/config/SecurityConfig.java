@@ -79,11 +79,17 @@ public class SecurityConfig {
                         // Catálogo de bases de licitud — solo lectura para operadores
                         .requestMatchers(HttpMethod.GET, "/api/legal-basis/**").hasAnyRole("DPO", "ADMIN", "JEFE_DOMINIO")
 
-                        // Categorías de datos por finalidad + políticas de retención
+                        // Categorías de datos por finalidad + políticas de retención (más específico → va primero)
                         .requestMatchers(HttpMethod.GET, "/api/purposes/*/data-categories/**").hasAnyRole("DPO", "ADMIN", "JEFE_DOMINIO")
                         .requestMatchers(HttpMethod.POST, "/api/purposes/*/data-categories/**").hasAnyRole("DPO", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/purposes/*/data-categories/**").hasAnyRole("DPO", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/purposes/*/data-categories/**").hasAnyRole("DPO", "ADMIN")
+
+                        // Finalidades — lectura DPO/ADMIN/JEFE, escritura DPO/ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/purposes", "/api/purposes/**").hasAnyRole("DPO", "ADMIN", "JEFE_DOMINIO")
+                        .requestMatchers(HttpMethod.POST, "/api/purposes").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/purposes/**").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/purposes/**").hasAnyRole("DPO", "ADMIN")
 
                         // ── Documentos de Privacidad — roles gestionados por @PreAuthorize ──────
                         // Escritura (create, edit, delete, workflow) → DPO (aplicado en controller)
