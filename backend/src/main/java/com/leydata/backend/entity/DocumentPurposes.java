@@ -29,6 +29,10 @@ public class DocumentPurposes {
     @JoinColumn(name = "purpose_id")
     private Purposes purpose;
 
+    // Soft delete: false = desvinculada pero conservada para auditoría
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
     @Embeddable
     @Getter
     @Setter

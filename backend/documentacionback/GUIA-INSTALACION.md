@@ -1,7 +1,8 @@
 # Guía de Instalación — Ley Data
 
 **Stack:** Java 21 · Spring Boot 3.x · PostgreSQL 15 · Keycloak 26 · Docker  
-**Repositorio:** https://github.com/SaMii0108/leydata
+**Repositorio:** https://github.com/SaMii0108/leydata  
+**Arquitectura:** Modular DDD — cada módulo tiene capas `web/`, `application/`, `infrastructure/`, `domain/` — ver [ESTRUCTURA-PROYECTO.md](ESTRUCTURA-PROYECTO.md)
 
 ---
 
@@ -274,6 +275,8 @@ El backend está listo cuando aparece en consola:
 ```
 Started BackendApplication in X.XXX seconds
 ```
+
+> Para entender cómo está organizado el código fuente del backend, ver [ESTRUCTURA-PROYECTO.md](ESTRUCTURA-PROYECTO.md).
 
 ---
 
