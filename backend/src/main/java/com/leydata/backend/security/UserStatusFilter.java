@@ -1,7 +1,7 @@
 package com.leydata.backend.security;
 
 import com.leydata.backend.entity.Users;
-import com.leydata.backend.user.UsersRepository;
+import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

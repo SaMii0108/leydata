@@ -65,10 +65,46 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/purpose-requests").hasRole("JEFE_DOMINIO")
                         .requestMatchers(HttpMethod.GET, "/api/purpose-requests/my").hasRole("JEFE_DOMINIO")
                         .requestMatchers(HttpMethod.GET, "/api/purpose-requests/**").hasAnyRole("DPO", "ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/purpose-requests/*/review").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/purpose-requests/*/review").hasAnyRole("DPO", "ADMIN")
 
                         //Auditoría: consulta de logs de operadores, solo ADMIN
                         .requestMatchers("/api/audit/**").hasRole("ADMIN")
+
+                        // Catálogo de categorías de datos — lectura DPO/ADMIN/JEFE, escritura DPO/ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/data-categories/**").hasAnyRole("DPO", "ADMIN", "JEFE_DOMINIO")
+                        .requestMatchers(HttpMethod.POST, "/api/data-categories/**").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/data-categories/**").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/data-categories/**").hasAnyRole("DPO", "ADMIN")
+
+                        // Catálogo de bases de licitud — solo lectura para operadores
+                        .requestMatchers(HttpMethod.GET, "/api/legal-basis/**").hasAnyRole("DPO", "ADMIN", "JEFE_DOMINIO")
+
+                        // Categorías de datos por finalidad + políticas de retención (más específico → va primero)
+                        .requestMatchers(HttpMethod.GET, "/api/purposes/*/data-categories/**").hasAnyRole("DPO", "ADMIN", "JEFE_DOMINIO")
+                        .requestMatchers(HttpMethod.POST, "/api/purposes/*/data-categories/**").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/purposes/*/data-categories/**").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/purposes/*/data-categories/**").hasAnyRole("DPO", "ADMIN")
+
+                        // Finalidades — lectura DPO/ADMIN/JEFE, escritura DPO/ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/purposes", "/api/purposes/**").hasAnyRole("DPO", "ADMIN", "JEFE_DOMINIO")
+                        .requestMatchers(HttpMethod.POST, "/api/purposes").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/purposes/**").hasAnyRole("DPO", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/purposes/**").hasAnyRole("DPO", "ADMIN")
+
+                        // ── Documentos de Privacidad — roles gestionados por @PreAuthorize ──────
+                        // Escritura (create, edit, delete, workflow) → DPO (aplicado en controller)
+                        .requestMatchers(HttpMethod.POST, "/api/privacy-documents").hasRole("DPO")
+                        .requestMatchers(HttpMethod.PATCH, "/api/privacy-documents/**").hasRole("DPO")
+                        .requestMatchers(HttpMethod.DELETE, "/api/privacy-documents/**").hasRole("DPO")
+                        .requestMatchers(HttpMethod.POST, "/api/privacy-documents/**").hasRole("DPO")
+                        // Lectura pública: PDF y verificación de integridad (titulares sin cuenta)
+                        .requestMatchers(HttpMethod.GET, "/api/privacy-documents/{id}/pdf").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/privacy-documents/{id}/verify").permitAll()
+                        // Resto de lectura → cualquier usuario autenticado
+                        .requestMatchers(HttpMethod.GET, "/api/privacy-documents/**").authenticated()
+
+                        // ── Notificaciones in-app ──────────────────────────────────────────────
+                        .requestMatchers("/api/notifications/**").authenticated()
 
                         //Cualquier otra ruta requiere autenticación válida
                         .anyRequest().authenticated())
@@ -89,7 +125,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         //En desarrollo se permiten todos los orígenes; restringir en producción
         configuration.setAllowedOrigins(List.of("*"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Cache-Control", "Content-Type"));
         configuration.setAllowCredentials(false);
 
