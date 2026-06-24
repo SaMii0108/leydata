@@ -2,7 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthContext';
 import { ROLE_LABEL } from '../../constants/labels';
-import { initials } from '../../utils/formatters';
+import { initials, formatRelativeTime } from '../../utils/formatters';
+import {
+  getNotifications,
+  getUnreadCount,
+  markAsRead,
+  markAllAsRead,
+} from '../../api/notificationsApi';
+import type { NotificationDto } from '../../api/notificationsApi';
 import styles from './Header.module.css';
 
 interface HeaderProps {
@@ -33,26 +40,40 @@ const IconLogout = () => (
 );
 
 const Header = ({ onMenuToggle }: HeaderProps) => {
-  const { user, logout } = useAuth();
+  const { user, logout, accessToken } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationDto[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const notifWrapRef = useRef<HTMLDivElement>(null);
+
   const userInitials = user ? initials(user.name) : '?';
 
-  // Cerrar al hacer clic fuera
+  useEffect(() => {
+    if (!accessToken) return;
+    getUnreadCount(accessToken).then(setUnreadCount).catch(() => {});
+  }, [accessToken]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
         setConfirmLogout(false);
       }
+      if (notifWrapRef.current && !notifWrapRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
     };
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setDropdownOpen(false);
         setConfirmLogout(false);
+        setNotifOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -73,6 +94,41 @@ const Header = ({ onMenuToggle }: HeaderProps) => {
     navigate('/perfil');
   };
 
+  const handleNotifToggle = async () => {
+    const next = !notifOpen;
+    setNotifOpen(next);
+    if (!next) return;
+    setNotifLoading(true);
+    try {
+      const [items, count] = await Promise.all([
+        getNotifications(accessToken),
+        getUnreadCount(accessToken),
+      ]);
+      setNotifications(items);
+      setUnreadCount(count);
+    } catch {
+      // silently ignore fetch errors in the panel
+    } finally {
+      setNotifLoading(false);
+    }
+  };
+
+  const handleMarkRead = async (id: string) => {
+    const updated = await markAsRead(id, accessToken).catch(() => null);
+    if (updated) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    await markAllAsRead(accessToken).catch(() => {});
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+  };
+
   return (
     <header className={styles.header}>
       <button className={styles.menuBtn} onClick={onMenuToggle} aria-label="Abrir menú">
@@ -91,13 +147,61 @@ const Header = ({ onMenuToggle }: HeaderProps) => {
       </div>
 
       <div className={styles.right}>
-        <button className={styles.notifBtn} aria-label="Notificaciones">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-          <span className={styles.notifDot} />
-        </button>
+        {/* Notificaciones */}
+        <div className={styles.notifWrap} ref={notifWrapRef}>
+          <button
+            className={styles.notifBtn}
+            aria-label="Notificaciones"
+            aria-expanded={notifOpen}
+            onClick={handleNotifToggle}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            {unreadCount > 0 && <span className={styles.notifDot} />}
+          </button>
+
+          {notifOpen && (
+            <div className={styles.notifPanel}>
+              <div className={styles.notifPanelHead}>
+                <span className={styles.notifPanelTitle}>Notificaciones</span>
+                {unreadCount > 0 && (
+                  <button className={styles.notifMarkAll} onClick={handleMarkAllRead}>
+                    Marcar todas como leídas
+                  </button>
+                )}
+              </div>
+
+              {notifLoading ? (
+                <p className={styles.notifEmpty}>Cargando…</p>
+              ) : notifications.length === 0 ? (
+                <p className={styles.notifEmpty}>No tienes notificaciones</p>
+              ) : (
+                <ul className={styles.notifList}>
+                  {notifications.map((n) => (
+                    <li
+                      key={n.id}
+                      className={[
+                        styles.notifItem,
+                        !n.read ? styles.notifItemUnread : '',
+                      ].join(' ').trim()}
+                      onClick={() => { if (!n.read) handleMarkRead(n.id); }}
+                    >
+                      <span className={styles.notifItemTitle}>{n.title}</span>
+                      {n.message && (
+                        <span className={styles.notifItemMsg}>{n.message}</span>
+                      )}
+                      <span className={styles.notifItemTime}>
+                        {formatRelativeTime(n.createdAt)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Avatar + dropdown */}
         <div className={styles.avatarWrap} ref={dropdownRef}>
@@ -112,7 +216,6 @@ const Header = ({ onMenuToggle }: HeaderProps) => {
 
           {dropdownOpen && (
             <div className={styles.dropdown}>
-              {/* Mini encabezado */}
               <div className={styles.dropdownHeader}>
                 <span className={styles.dropdownName}>{user?.name}</span>
                 <span className={styles.dropdownRole}>
@@ -123,7 +226,6 @@ const Header = ({ onMenuToggle }: HeaderProps) => {
 
               <div className={styles.dropdownDivider} />
 
-              {/* Editar perfil */}
               <button className={styles.dropdownItem} onClick={handleProfile}>
                 <IconUser />
                 Editar perfil
@@ -131,7 +233,6 @@ const Header = ({ onMenuToggle }: HeaderProps) => {
 
               <div className={styles.dropdownDivider} />
 
-              {/* Cerrar sesión */}
               {!confirmLogout ? (
                 <button
                   className={[styles.dropdownItem, styles.dropdownItemDanger].join(' ')}
