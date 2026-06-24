@@ -75,6 +75,7 @@ const UsuariosPage = () => {
     setShowModal(false);
     setProvisionalPassword(null);
     setCreateError(null);
+    setCreating(false);
   };
 
   return (

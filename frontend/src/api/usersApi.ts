@@ -45,7 +45,7 @@ async function request<T>(
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    const message = body?.error ?? res.statusText ?? `Error ${res.status}`;
+    const message = body?.message ?? body?.error ?? res.statusText ?? `Error ${res.status}`;
     throw new ApiError(res.status, message);
   }
   return res.json() as Promise<T>;
