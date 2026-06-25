@@ -58,6 +58,13 @@ public class PurposeRequestService {
                     "No puedes crear solicitudes para un dominio que no te pertenece");
         }
 
+        if (purposeRequestsRepository.existsByRequesterIdAndDomainIdAndTitleAndStatus(
+                requester.getId(), domain.getId(), request.getTitle(), "PENDING")) {
+            throw new IllegalStateException(
+                    "Ya tienes una solicitud pendiente con el título '" + request.getTitle() +
+                    "' para este dominio. Espera la revisión del DPO antes de reenviarla.");
+        }
+
         PurposeRequests purposeRequest = new PurposeRequests();
         purposeRequest.setDomainId(domain.getId());
         purposeRequest.setRequesterId(requester.getId());

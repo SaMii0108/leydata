@@ -1,6 +1,7 @@
 package com.leydata.backend.privacydoc.infrastructure.persistence;
 
 import com.leydata.backend.entity.DocumentPurposes;
+import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -25,4 +26,9 @@ public interface DocumentPurposesRepository
     boolean existsByDocument_IdAndPurpose_IdAndIsActiveTrue(UUID documentId, UUID purposeId);
 
     boolean existsByDocument_IdAndIsActiveTrue(UUID documentId);
+
+    // Opción B — bloqueo de retención:
+    // Verifica si una finalidad está vinculada activamente a algún documento en el estado dado.
+    // Si status=PUBLISHED → la política de retención de esa finalidad es inmutable.
+    boolean existsByPurpose_IdAndDocument_StatusAndIsActiveTrue(UUID purposeId, DocumentStatus status);
 }

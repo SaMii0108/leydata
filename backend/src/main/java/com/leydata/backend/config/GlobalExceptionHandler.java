@@ -1,6 +1,9 @@
 package com.leydata.backend.config;
 
+import com.leydata.backend.datacategory.domain.exception.DataCategoryNotFoundException;
 import com.leydata.backend.orgdomain.domain.exception.DomainNotFoundException;
+import com.leydata.backend.purposedatacategory.domain.exception.PurposeDataCategoryNotFoundException;
+import com.leydata.backend.purposedatacategory.domain.exception.RetentionPolicyLockedException;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.domain.exception.DocumentNotFoundException;
 import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionException;
@@ -11,13 +14,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 /**
  * Manejador global de excepciones para la aplicación.
@@ -45,6 +55,51 @@ public class GlobalExceptionHandler {
         return body;
     }
 
+    // ── VALIDACIÓN DE CAMPOS (@Valid / @NotBlank / @NotNull) ─────────────────────
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidationException(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+                .collect(Collectors.joining(", "));
+        Map<String, Object> body = buildErrorResponse("BAD_REQUEST", message, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String message = "Valor inválido para el parámetro '" + ex.getName() + "': " + ex.getValue();
+        Map<String, Object> body = buildErrorResponse("BAD_REQUEST", message, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleNotReadable(HttpMessageNotReadableException ex) {
+        Map<String, Object> body = buildErrorResponse("BAD_REQUEST", "Cuerpo de la solicitud inválido o con formato incorrecto", HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<Map<String, Object>> handleNoSuchElement(NoSuchElementException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    // ── HTTP ROUTING ─────────────────────────────────────────────────────────────
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        String message = "Método " + ex.getMethod() + " no soportado en esta ruta";
+        Map<String, Object> body = buildErrorResponse("METHOD_NOT_ALLOWED", message, HttpStatus.METHOD_NOT_ALLOWED);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResource(NoResourceFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", "Ruta no encontrada: " + ex.getResourcePath(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
     // ── MÓDULO USER ──────────────────────────────────────────────────────────────
 
     @ExceptionHandler(UserNotFoundException.class)
@@ -65,6 +120,28 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleDomainNotFound(DomainNotFoundException ex) {
         Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    // ── MÓDULO DATA CATEGORIES ───────────────────────────────────────────────────
+
+    @ExceptionHandler(DataCategoryNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleDataCategoryNotFound(DataCategoryNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    // ── MÓDULO PURPOSE DATA CATEGORIES ──────────────────────────────────────────
+
+    @ExceptionHandler(PurposeDataCategoryNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handlePdcNotFound(PurposeDataCategoryNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(RetentionPolicyLockedException.class)
+    public ResponseEntity<Map<String, Object>> handleRetentionLocked(RetentionPolicyLockedException ex) {
+        Map<String, Object> body = buildErrorResponse("RETENTION_LOCKED", ex.getMessage(), HttpStatus.CONFLICT);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
     // ── MÓDULO PRIVACY DOCUMENTS ─────────────────────────────────────────────────
@@ -256,21 +333,28 @@ public class GlobalExceptionHandler {
 
     /**
      * RuntimeException (cualquier excepción de tiempo de ejecución no capturada)
+     * NOTA: MethodArgumentTypeMismatchException extiende RuntimeException; se maneja
+     * en handleTypeMismatch() arriba. Este handler es el último recurso.
      */
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntimeException(
             RuntimeException ex,
             WebRequest request) {
 
-        log.error("RuntimeException: ", ex);
+        // Re-delegate type mismatch to the proper handler (e.g. invalid UUID path variable)
+        if (ex.getClass().getName().contains("TypeMismatch") || ex.getClass().getName().contains("MethodArgumentType")) {
+            String paramName = "parámetro";
+            try { paramName = ((org.springframework.beans.TypeMismatchException) ex).getPropertyName(); } catch (Exception ignored) {}
+            String message2 = "Valor inválido para '" + paramName + "': formato incorrecto";
+            Map<String, Object> body2 = buildErrorResponse("BAD_REQUEST", message2, HttpStatus.BAD_REQUEST);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body2);
+        }
 
-        // Algunos RuntimeException pueden contener información útil al usuario
-        String userMessage = ex.getMessage() != null ? ex.getMessage()
-                : "Error al procesar la solicitud";
+        log.error("RuntimeException: ", ex);
 
         Map<String, Object> body = buildErrorResponse(
                 "INTERNAL_SERVER_ERROR",
-                userMessage,
+                "Error al procesar la solicitud",
                 HttpStatus.INTERNAL_SERVER_ERROR);
 
         return ResponseEntity

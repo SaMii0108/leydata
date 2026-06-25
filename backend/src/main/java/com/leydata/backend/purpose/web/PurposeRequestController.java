@@ -41,7 +41,7 @@ public class PurposeRequestController {
     }
 
     // GET /api/purpose-requests/pending
-    @PreAuthorize("hasRole('DPO')")
+    @PreAuthorize("hasAnyRole('DPO', 'ADMIN')")
     @GetMapping("/pending")
     public Map<String, Object> getPendingRequests() {
         List<PurposeRequestSummaryDto> requests = purposeRequestService.getPendingRequests();
@@ -49,7 +49,7 @@ public class PurposeRequestController {
     }
 
     // GET /api/purpose-requests
-    @PreAuthorize("hasRole('DPO')")
+    @PreAuthorize("hasAnyRole('DPO', 'ADMIN')")
     @GetMapping
     public Map<String, Object> getAllRequests() {
         List<PurposeRequestSummaryDto> requests = purposeRequestService.getAllRequests();

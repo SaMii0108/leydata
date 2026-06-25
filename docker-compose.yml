@@ -66,6 +66,7 @@ services:
     networks:
       - leydata-consent-network
 
+
 networks:
   leydata-consent-network:
     driver: bridge

@@ -35,14 +35,18 @@ public class AuditService {
     private final SystemAuditLogRepository auditLogRepository;
     private final ObjectMapper objectMapper;
 
-    // Self-injection con @Lazy: permite llamar a log() a través del proxy AOP de Spring.
-    // Sin esto, this.log() bypassea el proxy y @Transactional(REQUIRES_NEW) no tiene efecto.
+    // Self-injection con @Lazy: permite llamar a log() a través del proxy AOP de
+    // Spring.
+    // Sin esto, this.log() bypassea el proxy y @Transactional(REQUIRES_NEW) no
+    // tiene efecto.
     @Autowired
     @Lazy
     private AuditService self;
 
-    // REQUIRED: el log de auditoría se persiste en la MISMA transacción que la operación de negocio.
-    // Si el log falla → toda la transacción hace rollback → la operación no se completa.
+    // REQUIRED: el log de auditoría se persiste en la MISMA transacción que la
+    // operación de negocio.
+    // Si el log falla → toda la transacción hace rollback → la operación no se
+    // completa.
     // Si la operación falla antes de llegar aquí → no se crea el log.
     // Garantía de atomicidad: sin log de auditoría no hay operación (Ley 21.719).
     @Transactional(propagation = Propagation.REQUIRED)
@@ -57,14 +61,16 @@ public class AuditService {
 
         UUID logId = UUID.randomUUID();
         // Truncar a microsegundos: PostgreSQL timestamp(6) guarda hasta 6 decimales.
-        // LocalDateTime.now() en Java 21/Linux puede retornar nanosegundos (9 decimales).
-        // Si el hash se computa con nanosegundos pero el DB guarda microsegundos, la verificación falla.
+        // LocalDateTime.now() en Java 21/Linux puede retornar nanosegundos (9
+        // decimales).
+        // Si el hash se computa con nanosegundos pero el DB guarda microsegundos, la
+        // verificación falla.
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
 
         String oldDataJson = toJson(context.getOldData());
         String newDataJson = toJson(context.getNewData());
 
-        String logHash = computeHash(logId, context, now, newDataJson, previousHash);
+        String logHash = computeHash(logId, context, now, newDataJson, previousHash, ipAddress);
 
         SystemAuditLog auditLog = new SystemAuditLog();
         auditLog.setId(logId);
@@ -81,8 +87,10 @@ public class AuditService {
         auditLog.setLogHash(logHash);
         auditLog.setPreviousLogHash(previousHash);
 
-        // save() llama isNew() en la entidad → retorna true (via Persistable<UUID>) → persist() → INSERT.
-        // Necesario porque el ID se asigna manualmente antes de persistir (para incluirlo en el hash SHA-256).
+        // save() llama isNew() en la entidad → retorna true (via Persistable<UUID>) →
+        // persist() → INSERT.
+        // Necesario porque el ID se asigna manualmente antes de persistir (para
+        // incluirlo en el hash SHA-256).
         auditLogRepository.save(auditLog);
         log.info("Auditoría registrada: accion={} tabla={} actor={}", context.getAction(), context.getTableName(),
                 context.getActorId());
@@ -102,7 +110,8 @@ public class AuditService {
     }
 
     // Recorre todos los logs en orden cronológico y recomputa cada hash.
-    // Si algún registro fue alterado o eliminado, la cadena se rompe y retorna false.
+    // Si algún registro fue alterado o eliminado, la cadena se rompe y retorna
+    // false.
     @Transactional(readOnly = true)
     public boolean verifyChainIntegrity() {
         List<SystemAuditLog> logs = auditLogRepository.findAllByOrderByCreatedAtAsc();
@@ -127,7 +136,7 @@ public class AuditService {
     }
 
     private String computeHash(UUID id, AuditContext ctx, LocalDateTime createdAt,
-            String newDataJson, String previousHash) {
+            String newDataJson, String previousHash, String ipAddress) {
         String input = String.join("|",
                 id.toString(),
                 ctx.getTableName(),
@@ -137,7 +146,8 @@ public class AuditService {
                 ctx.getActorRole() != null ? ctx.getActorRole() : "null",
                 createdAt.toString(),
                 newDataJson != null ? newDataJson : "null",
-                previousHash);
+                previousHash,
+                ipAddress != null ? ipAddress : "UNKNOWN");
 
         return sha256(input);
     }
@@ -152,7 +162,8 @@ public class AuditService {
                 entry.getActorRole() != null ? entry.getActorRole() : "null",
                 entry.getCreatedAt().toString(),
                 entry.getNewData() != null ? entry.getNewData() : "null",
-                entry.getPreviousLogHash() != null ? entry.getPreviousLogHash() : "GENESIS");
+                entry.getPreviousLogHash() != null ? entry.getPreviousLogHash() : "GENESIS",
+                entry.getIpAddress() != null ? entry.getIpAddress() : "UNKNOWN");
 
         return sha256(input);
     }
@@ -187,11 +198,8 @@ public class AuditService {
         try {
             HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes())
                     .getRequest();
-            // X-Forwarded-For contiene la IP original cuando hay un proxy o load balancer
-            String forwarded = request.getHeader("X-Forwarded-For");
-            if (forwarded != null && !forwarded.isBlank()) {
-                return forwarded.split(",")[0].trim();
-            }
+            // Usamos remoteAddr (IP de la conexión TCP real) para que la IP en el log sea
+            // inmutable: un cliente no puede falsificar X-Forwarded-For para alterar el registro.
             return request.getRemoteAddr();
         } catch (Exception e) {
             return "UNKNOWN";

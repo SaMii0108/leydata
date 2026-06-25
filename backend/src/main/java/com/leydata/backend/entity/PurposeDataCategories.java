@@ -1,10 +1,13 @@
 package com.leydata.backend.entity;
 
+import com.leydata.backend.purposedatacategory.domain.enums.DataUseType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -38,4 +41,13 @@ public class PurposeDataCategories {
 
     @Column(name = "required", nullable = false)
     private Boolean required;
+
+    @ElementCollection(targetClass = DataUseType.class, fetch = FetchType.EAGER)
+    @Enumerated(EnumType.STRING)
+    @CollectionTable(
+        name = "purpose_data_category_data_uses",
+        joinColumns = @JoinColumn(name = "purpose_data_category_id")
+    )
+    @Column(name = "data_use")
+    private Set<DataUseType> dataUses = new HashSet<>();
 }

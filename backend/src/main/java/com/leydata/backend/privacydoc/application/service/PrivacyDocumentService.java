@@ -16,13 +16,16 @@ import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionExceptio
 import com.leydata.backend.privacydoc.infrastructure.pdf.PdfGeneratorService;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
-import com.leydata.backend.repository.PurposesRepository;
+import com.leydata.backend.purpose.infrastructure.persistence.PurposeRequestsRepository;
+import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
 import com.leydata.backend.shared.EmailService;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +45,7 @@ public class PrivacyDocumentService {
     private final DocumentPurposesRepository purposeRepo;
     private final DomainsRepository domainsRepo;
     private final PurposesRepository purposesRepo;
+    private final PurposeRequestsRepository purposeRequestsRepo;
     private final TemplatesRepository templatesRepo;
     private final PdfGeneratorService pdfGenerator;
     private final NotificationService notificationService;
@@ -78,7 +82,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("CREAR_DOCUMENTO")
+                .action("DOCUMENT_CREATED")
                 .oldData(null)
                 .newData(Map.of(
                         "id",       String.valueOf(saved.getId()),
@@ -94,14 +98,23 @@ public class PrivacyDocumentService {
 
     @Transactional(readOnly = true)
     public PrivacyDocumentResponse getById(UUID id) {
-        return PrivacyDocumentResponse.from(findOrThrow(id));
+        PrivacyDocuments doc = findOrThrow(id);
+        if (!isPrivilegedUser()) {
+            if (doc.getStatus() != DocumentStatus.PUBLISHED) {
+                throw new AccessDeniedException("No tienes permiso para ver este documento");
+            }
+            return PrivacyDocumentResponse.fromPublic(doc);
+        }
+        return PrivacyDocumentResponse.from(doc);
     }
 
     @Transactional(readOnly = true)
     public List<PrivacyDocumentResponse> list(DocumentCategory category, DocumentStatus status) {
-        return documentRepo.findByFilters(category, status)
+        boolean privileged = isPrivilegedUser();
+        DocumentStatus effectiveStatus = privileged ? status : DocumentStatus.PUBLISHED;
+        return documentRepo.findByFilters(category, effectiveStatus)
                 .stream()
-                .map(PrivacyDocumentResponse::from)
+                .map(privileged ? PrivacyDocumentResponse::from : PrivacyDocumentResponse::fromPublic)
                 .toList();
     }
 
@@ -125,7 +138,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("EDITAR_DOCUMENTO")
+                .action("DOCUMENT_UPDATED")
                 .oldData(oldData)
                 .newData(Map.of(
                         "name",    saved.getName() != null ? saved.getName() : "",
@@ -153,7 +166,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("DESACTIVAR_DOCUMENTO")
+                .action("DOCUMENT_DEACTIVATED")
                 .oldData(Map.of("isActive", true,  "status", String.valueOf(doc.getStatus())))
                 .newData(Map.of("isActive", false, "status", String.valueOf(saved.getStatus())))
                 .actorId(securityContextHelper.getAuthenticatedDpo().getId())
@@ -193,7 +206,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(documentId)
-                .action("VINCULAR_PROPOSITO")
+                .action("DOCUMENT_PURPOSE_ADDED")
                 .oldData(null)
                 .newData(Map.of(
                         "documentId", String.valueOf(documentId),
@@ -204,7 +217,8 @@ public class PrivacyDocumentService {
     }
 
     public void removePurpose(UUID documentId, UUID purposeId) {
-        findOrThrow(documentId);
+        PrivacyDocuments doc = findOrThrow(documentId);
+        requireStatus(doc, DocumentStatus.DRAFT);
 
         DocumentPurposes link = purposeRepo.findByDocument_IdAndPurpose_Id(documentId, purposeId)
                 .filter(l -> Boolean.TRUE.equals(l.getIsActive()))
@@ -218,7 +232,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(documentId)
-                .action("DESVINCULAR_PROPOSITO")
+                .action("DOCUMENT_PURPOSE_REMOVED")
                 .oldData(Map.of(
                         "documentId", String.valueOf(documentId),
                         "purposeId",  String.valueOf(purposeId)))
@@ -232,6 +246,7 @@ public class PrivacyDocumentService {
 
     public PrivacyDocumentResponse submit(UUID id) {
         PrivacyDocuments doc = findOrThrow(id);
+        requireStatus(doc, DocumentStatus.DRAFT);
         validateTransition(doc.getStatus(), DocumentStatus.IN_REVIEW);
         validateReadyForReview(doc);
 
@@ -242,7 +257,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("ENVIAR_A_REVISION")
+                .action("DOCUMENT_SUBMITTED")
                 .oldData(Map.of("status", previousStatus))
                 .newData(Map.of("status", String.valueOf(saved.getStatus())))
                 .actorId(securityContextHelper.getAuthenticatedDpo().getId())
@@ -254,6 +269,7 @@ public class PrivacyDocumentService {
 
     public PrivacyDocumentResponse resubmit(UUID id) {
         PrivacyDocuments doc = findOrThrow(id);
+        requireStatus(doc, DocumentStatus.REJECTED);
         validateTransition(doc.getStatus(), DocumentStatus.IN_REVIEW);
         validateReadyForReview(doc);
 
@@ -264,7 +280,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("REENVIAR_A_REVISION")
+                .action("DOCUMENT_RESUBMITTED")
                 .oldData(Map.of("status", "REJECTED"))
                 .newData(Map.of("status", String.valueOf(saved.getStatus())))
                 .actorId(securityContextHelper.getAuthenticatedDpo().getId())
@@ -287,7 +303,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("APROBAR_DOCUMENTO")
+                .action("DOCUMENT_APPROVED")
                 .oldData(Map.of("status", "IN_REVIEW"))
                 .newData(Map.of(
                         "status",     String.valueOf(saved.getStatus()),
@@ -310,7 +326,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("RECHAZAR_DOCUMENTO")
+                .action("DOCUMENT_REJECTED")
                 .oldData(Map.of("status", "IN_REVIEW"))
                 .newData(Map.of(
                         "status",          String.valueOf(saved.getStatus()),
@@ -331,6 +347,18 @@ public class PrivacyDocumentService {
         PrivacyDocuments doc = findOrThrow(id);
         validateTransition(doc.getStatus(), DocumentStatus.PUBLISHED);
 
+        List<DocumentPurposes> activePurposes = purposeRepo.findByDocument_IdAndIsActiveTrue(id);
+        if (activePurposes.isEmpty()) {
+            throw new BusinessValidationException(
+                "El documento debe tener al menos una finalidad activa para publicarse.");
+        }
+        boolean allApproved = activePurposes.stream()
+            .allMatch(dp -> dp.getPurpose().getApprovedBy() != null && Boolean.TRUE.equals(dp.getPurpose().getIsActive()));
+        if (!allApproved) {
+            throw new BusinessValidationException(
+                "Todas las finalidades vinculadas deben estar en estado APPROVED para publicar el documento.");
+        }
+
         // Generar PDF en memoria y almacenar bytes + hash
         doc.setPublishAt(LocalDateTime.now());
         PdfGeneratorService.PdfResult result = pdfGenerator.generate(doc);
@@ -345,7 +373,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("PUBLICAR_DOCUMENTO")
+                .action("DOCUMENT_PUBLISHED")
                 .oldData(Map.of("status", "APPROVED"))
                 .newData(Map.of(
                         "status",     String.valueOf(saved.getStatus()),
@@ -377,11 +405,27 @@ public class PrivacyDocumentService {
             });
         });
 
+        // Notificar al solicitante original del PurposeRequest (trazabilidad del ticket)
+        activePurposes.stream()
+                .map(dp -> dp.getPurpose())
+                .filter(p -> p.getPurposeRequestId() != null)
+                .forEach(purpose -> purposeRequestsRepo.findById(purpose.getPurposeRequestId())
+                        .ifPresent(pr -> notificationService.create(
+                                pr.getRequesterId(),
+                                NotificationType.PURPOSE_REQUEST_FULFILLED,
+                                "Tu solicitud fue publicada: " + purpose.getName(),
+                                "La finalidad '" + purpose.getName() + "' derivada de tu solicitud ha sido publicada en el documento '" + doc.getName() + "'.",
+                                purpose.getId())));
+
         return PrivacyDocumentResponse.from(saved);
     }
 
     public PrivacyDocumentResponse archive(UUID id) {
         PrivacyDocuments doc = findOrThrow(id);
+        if (purposeRepo.existsByDocument_IdAndIsActiveTrue(id)) {
+            throw new BusinessValidationException(
+                "No se puede archivar el documento: tiene finalidades activas. Desvinculálas primero.");
+        }
         validateTransition(doc.getStatus(), DocumentStatus.ARCHIVED);
 
         String previousStatus = String.valueOf(doc.getStatus());
@@ -391,7 +435,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("ARCHIVAR_DOCUMENTO")
+                .action("DOCUMENT_ARCHIVED")
                 .oldData(Map.of("status", previousStatus))
                 .newData(Map.of("status", String.valueOf(saved.getStatus())))
                 .actorId(securityContextHelper.getAuthenticatedDpo().getId())
@@ -459,6 +503,12 @@ public class PrivacyDocumentService {
 
     public PrivacyDocumentResponse newVersion(UUID sourceId) {
         PrivacyDocuments source = findOrThrow(sourceId);
+
+        if (source.getStatus() == DocumentStatus.ARCHIVED) {
+            throw new BusinessValidationException(
+                    "No se puede crear una nueva versión desde un documento archivado.");
+        }
+
         UUID familyId = source.getDocumentFamilyId() != null
                 ? source.getDocumentFamilyId()
                 : source.getId();
@@ -496,7 +546,7 @@ public class PrivacyDocumentService {
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
                 .recordId(saved.getId())
-                .action("NUEVA_VERSION_DOCUMENTO")
+                .action("DOCUMENT_NEW_VERSION_CREATED")
                 .oldData(Map.of(
                         "sourceId", String.valueOf(sourceId),
                         "familyId", String.valueOf(familyId),
@@ -514,9 +564,11 @@ public class PrivacyDocumentService {
 
     @Transactional(readOnly = true)
     public List<PrivacyDocumentResponse> getByFamily(UUID familyId) {
+        boolean privileged = isPrivilegedUser();
         return documentRepo.findByDocumentFamilyIdAndIsActiveTrueOrderByVersionDesc(familyId)
                 .stream()
-                .map(PrivacyDocumentResponse::from)
+                .filter(doc -> privileged || doc.getStatus() == DocumentStatus.PUBLISHED)
+                .map(privileged ? PrivacyDocumentResponse::from : PrivacyDocumentResponse::fromPublic)
                 .toList();
     }
 
@@ -564,6 +616,13 @@ public class PrivacyDocumentService {
             throw new BusinessValidationException(
                     "La operación requiere estado " + required + " (actual: " + doc.getStatus() + ")");
         }
+    }
+
+    private boolean isPrivilegedUser() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_DPO") || a.getAuthority().equals("ROLE_ADMIN"));
     }
 
     private void validateTransition(DocumentStatus current, DocumentStatus target) {

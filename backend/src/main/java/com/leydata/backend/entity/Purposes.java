@@ -79,6 +79,9 @@ public class Purposes {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "consent_statement", columnDefinition = "TEXT")
+    private String consentStatement;
+
     @Column(name = "hash_sha256")
     private String hashSha256;
 
