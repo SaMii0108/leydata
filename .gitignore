@@ -17,6 +17,7 @@ backend/.settings/
 .env
 .env.local
 .github/
+graphify-out/
 
 
 # IDEs
