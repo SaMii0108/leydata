@@ -13,6 +13,7 @@ import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.domain.exception.DocumentNotFoundException;
 import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionException;
+import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
 import com.leydata.backend.privacydoc.infrastructure.pdf.PdfGeneratorService;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
@@ -189,7 +190,7 @@ public class PrivacyDocumentService {
         validatePurposeApproved(purposeId);
 
         var purposeEntity = purposesRepo.findById(purposeId)
-                .orElseThrow(() -> new BusinessValidationException("Finalidad no encontrada: " + purposeId));
+                .orElseThrow(() -> new PurposeNotFoundException(purposeId));
 
         // Si existía un vínculo inactivo (soft-deleted), lo reactivamos en lugar de insertar
         DocumentPurposes link = purposeRepo.findByDocument_IdAndPurpose_Id(documentId, purposeId)
@@ -576,7 +577,7 @@ public class PrivacyDocumentService {
 
     private void validateTemplateActive(UUID templateId) {
         var template = templatesRepo.findById(templateId)
-                .orElseThrow(() -> new BusinessValidationException("La template " + templateId + " no existe"));
+                .orElseThrow(() -> new java.util.NoSuchElementException("La template " + templateId + " no existe"));
         if (!Boolean.TRUE.equals(template.getIsActive())) {
             throw new BusinessValidationException("La template " + templateId + " no está activa");
         }
@@ -584,7 +585,7 @@ public class PrivacyDocumentService {
 
     private void validatePurposeApproved(UUID purposeId) {
         var purpose = purposesRepo.findById(purposeId)
-                .orElseThrow(() -> new BusinessValidationException("La finalidad " + purposeId + " no existe"));
+                .orElseThrow(() -> new PurposeNotFoundException(purposeId));
         if (!Boolean.TRUE.equals(purpose.getIsActive()) || purpose.getApprovedBy() == null) {
             throw new BusinessValidationException(
                     "La finalidad " + purposeId + " debe estar aprobada y activa para vincularse a un documento");
