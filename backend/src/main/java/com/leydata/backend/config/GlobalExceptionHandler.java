@@ -7,6 +7,7 @@ import com.leydata.backend.purposedatacategory.domain.exception.RetentionPolicyL
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.domain.exception.DocumentNotFoundException;
 import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionException;
+import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
 import com.leydata.backend.user.domain.exception.UserAlreadyExistsException;
 import com.leydata.backend.user.domain.exception.UserNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -126,6 +127,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataCategoryNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleDataCategoryNotFound(DataCategoryNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    // ── MÓDULO PURPOSES ───────────────────────────────────────────────────────────
+
+    @ExceptionHandler(PurposeNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handlePurposeNotFound(PurposeNotFoundException ex) {
         Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
