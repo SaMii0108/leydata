@@ -1,6 +1,6 @@
 # Estructura del Proyecto — Backend LeyData
 
-**Fecha:** 2026-06-16
+**Fecha:** 2026-06-22
 
 Guía de referencia rápida sobre cómo está organizado el código fuente del backend y qué hace cada carpeta.
 
@@ -22,7 +22,7 @@ backend/src/main/java/com/leydata/backend/
 │   ├── SecurityContextHelper.java
 │   └── EmailService.java
 │
-├── entity/                              ← 21 entidades JPA compartidas
+├── entity/                              ← entidades JPA compartidas
 │   ├── Users.java
 │   ├── Domains.java
 │   ├── Role.java
@@ -30,6 +30,7 @@ backend/src/main/java/com/leydata/backend/
 │   ├── UserDomains.java
 │   ├── PurposeRequests.java
 │   ├── Purposes.java
+│   ├── PurposeDataCategories.java
 │   ├── SystemAuditLog.java
 │   ├── PrivacyDocuments.java
 │   ├── DocumentPurposes.java
@@ -43,22 +44,18 @@ backend/src/main/java/com/leydata/backend/
 │   ├── DataSubjects.java
 │   ├── DataCategories.java
 │   ├── DataRetentionPolicies.java
-│   ├── LegalBasisCatalog.java
-│   └── PurposeDataCategories.java
+│   └── LegalBasisCatalog.java
 │
-├── repository/                          ← repositorios compartidos (legacy)
-│   ├── AgreementsRepository.java
+├── repository/                          ← repositorios legacy (sin módulo dueño aún)
+│   ├── AgreementsRepository.java        ← Agreements / consentimientos
 │   ├── AgreementsPurposesRepository.java
 │   ├── AgreementIntegrityLogRepository.java
 │   ├── AgreementMetadataRepository.java
 │   ├── DataSubjectsRepository.java
-│   ├── DataCategoriesRepository.java
+│   ├── DataCategoriesRepository.java    ← legacy; el módulo activo es datacategory/
 │   ├── DataRetentionPoliciesRepository.java
-│   ├── DocumentPurposesRepository.java
-│   ├── LegalBasisCatalogRepository.java
-│   ├── PrivacyDocumentsRepository.java
-│   ├── PurposeDataCategoriesRepository.java
-│   ├── PurposesRepository.java
+│   ├── LegalBasisCatalogRepository.java ← legacy; el módulo activo es legalbasis/
+│   ├── PurposeDataCategoriesRepository.java ← legacy; el módulo activo es purposedatacategory/
 │   ├── TemplatePurposesRepository.java
 │   └── TemplatesRepository.java
 │
@@ -67,8 +64,10 @@ backend/src/main/java/com/leydata/backend/
 │   ├── KeycloakAdminService.java
 │   └── UserStatusFilter.java
 │
-├── seeder/                              ← inicialización de datos base
-│   └── DataSeeder.java
+├── seeder/                              ← inicialización de datos al arrancar
+│   ├── DataSeeder.java                  ← roles y usuario admin en BD local
+│   ├── CatalogSeeder.java               ← catálogos fijos (bases de licitud, etc.)
+│   └── TestDataSeeder.java              ← datos de prueba (solo entorno dev)
 │
 ├── user/                                ← módulo: gestión de usuarios
 │   ├── domain/
@@ -107,7 +106,7 @@ backend/src/main/java/com/leydata/backend/
 │   └── web/
 │       └── DomainController.java
 │
-├── purpose/                             ← módulo: solicitudes de propósito
+├── purpose/                             ← módulo: solicitudes de propósito (workflow JEFE → DPO)
 │   ├── application/
 │   │   ├── dto/
 │   │   │   ├── PurposeRequestDto.java
@@ -120,6 +119,70 @@ backend/src/main/java/com/leydata/backend/
 │   │       └── PurposeRequestsRepository.java
 │   └── web/
 │       └── PurposeRequestController.java
+│
+├── legalbasis/                          ← módulo: catálogo de bases de licitud (Ley 21.719)
+│   ├── application/
+│   │   └── dto/
+│   │       └── LegalBasisResponse.java
+│   ├── infrastructure/
+│   │   └── persistence/
+│   │       └── LegalBasisRepository.java
+│   └── web/
+│       └── LegalBasisController.java
+│
+├── datacategory/                        ← módulo: catálogo de categorías de datos personales
+│   ├── domain/
+│   │   └── exception/
+│   │       └── DataCategoryNotFoundException.java
+│   ├── application/
+│   │   ├── dto/
+│   │   │   ├── DataCategoryRequest.java
+│   │   │   └── DataCategoryResponse.java
+│   │   └── service/
+│   │       └── DataCategoryService.java
+│   ├── infrastructure/
+│   │   └── persistence/
+│   │       └── DataCategoryRepository.java
+│   └── web/
+│       └── DataCategoryController.java
+│
+├── purposes/                            ← módulo: finalidades de tratamiento de datos
+│   ├── domain/
+│   │   └── exception/
+│   │       └── PurposeNotFoundException.java
+│   ├── application/
+│   │   ├── dto/
+│   │   │   ├── CreatePurposeRequest.java
+│   │   │   ├── UpdatePurposeRequest.java
+│   │   │   └── PurposeResponse.java
+│   │   └── service/
+│   │       └── PurposeService.java
+│   ├── infrastructure/
+│   │   └── persistence/
+│   │       └── PurposesRepository.java
+│   └── web/
+│       └── PurposeController.java
+│
+├── purposedatacategory/                 ← módulo: vínculo finalidad ↔ categoría de dato
+│   ├── domain/
+│   │   ├── enums/
+│   │   │   └── DataUseType.java        ← STORAGE · PROCESSING · TRANSFER_TO_THIRD_PARTIES · PROFILING · ANALYSIS
+│   │   └── exception/
+│   │       ├── PurposeDataCategoryNotFoundException.java
+│   │       └── RetentionPolicyLockedException.java
+│   ├── application/
+│   │   ├── dto/
+│   │   │   ├── PurposeDataCategoryRequest.java
+│   │   │   ├── PurposeDataCategoryResponse.java
+│   │   │   └── DataRetentionPolicyRequest.java
+│   │   └── service/
+│   │       └── PurposeDataCategoryService.java
+│   ├── infrastructure/
+│   │   └── persistence/
+│   │       ├── PurposeDataCategoryRepository.java
+│   │       └── RetentionPolicyRepository.java
+│   └── web/
+│       └── PurposeDataCategoryController.java
 │
 ├── audit/                               ← módulo: log de auditoría inmutable
 │   ├── application/
@@ -146,9 +209,9 @@ backend/src/main/java/com/leydata/backend/
 │   ├── application/
 │   │   ├── dto/
 │   │   │   ├── CreateDocumentRequest.java
-│   │   │   ├── PrivacyDocumentResponse.java
-│   │   │   ├── RejectDocumentRequest.java
 │   │   │   ├── UpdateDocumentRequest.java
+│   │   │   ├── RejectDocumentRequest.java
+│   │   │   ├── PrivacyDocumentResponse.java
 │   │   │   └── VerifyResponse.java
 │   │   └── service/
 │   │       └── PrivacyDocumentService.java
@@ -156,8 +219,8 @@ backend/src/main/java/com/leydata/backend/
 │   │   ├── pdf/
 │   │   │   └── PdfGeneratorService.java
 │   │   └── persistence/
-│   │       ├── DocumentPurposesRepository.java
-│   │       └── PrivacyDocumentsRepository.java
+│   │       ├── PrivacyDocumentsRepository.java
+│   │       └── DocumentPurposesRepository.java
 │   └── web/
 │       └── PrivacyDocumentController.java
 │
@@ -170,6 +233,9 @@ backend/src/main/java/com/leydata/backend/
     │   │   └── NotificationResponse.java
     │   └── service/
     │       └── NotificationService.java
+    ├── infrastructure/
+    │   └── persistence/
+    │       └── NotificationRepository.java
     └── web/
         └── NotificationController.java
 ```
@@ -263,7 +329,7 @@ Las 21 entidades JPA que mapean el modelo relacional de PostgreSQL a objetos Jav
 
 ### `repository/`
 
-Repositorios compartidos que aún no tienen un módulo dueño claro: `Agreements`, `DataSubjects`, `Templates`, `LegalBasisCatalog`, etc. Son usados principalmente por `privacydoc/` y en el futuro por módulos de consentimiento.
+Repositorios compartidos que aún no tienen módulo dueño: `Agreements`, `DataSubjects`, `Templates`, etc. Usados principalmente por `privacydoc/` y por el `TestDataSeeder`. Ver la sección [Notas sobre `repository/`](#notas-sobre-repository-paquete-legacy) para reglas de uso.
 
 ### `security/`
 
@@ -277,7 +343,15 @@ Infraestructura de autenticación y autorización que trabaja con Spring Securit
 
 ### `seeder/`
 
-`DataSeeder` implementa `CommandLineRunner`: al arrancar el backend, crea los roles base (`ADMIN`, `DPO`, `JEFE_DOMINIO`) y el usuario `admin@leydata.cl` en la BD local si no existen. Solo toca la base de datos local — Keycloak se configura por separado con el script `scripts/setup-keycloak.sh`.
+Tres `CommandLineRunner` que se ejecutan al arrancar el backend. Cada uno tiene un orden de precedencia (`@Order`) para que los datos se creen en la secuencia correcta:
+
+| Archivo | Qué hace |
+|---|---|
+| `DataSeeder.java` | Crea los roles base (`ADMIN`, `DPO`, `JEFE_DOMINIO`) y el usuario `admin@leydata.cl` en la BD local si no existen. |
+| `CatalogSeeder.java` | Inserta los registros del catálogo de bases de licitud de la Ley 21.719 si la tabla está vacía. |
+| `TestDataSeeder.java` | Crea dominios, usuarios de prueba y datos de ejemplo para el entorno de desarrollo. **No debe ejecutarse en producción.** Condicionado por perfil Spring o variable de entorno. |
+
+Solo tocan la base de datos local — Keycloak se configura por separado con el script `scripts/setup-keycloak.sh`.
 
 ---
 
@@ -287,12 +361,29 @@ Infraestructura de autenticación y autorización que trabaja con Spring Securit
 |---|---|---|---|
 | Usuarios | `user/` | `/api/users/**` | ADMIN |
 | Dominios organizacionales | `orgdomain/` | `/api/domains/**` | ADMIN |
-| Solicitudes de propósito | `purpose/` | `/api/purpose-requests/**` | JEFE_DOMINIO / DPO |
-| Auditoría | `audit/` | `/api/audit/**` | ADMIN |
-| Documentos de privacidad | `privacydoc/` | `/api/privacy-documents/**` | DPO (escritura) · cualquier autenticado (lectura) |
-| Notificaciones in-app | `notification/` | `/api/notifications/**` | Cualquier autenticado (cada uno ve solo las suyas) |
+| Solicitudes de propósito | `purpose/` | `/api/purpose-requests/**` | JEFE_DOMINIO (crear) · DPO/ADMIN (revisar) |
+| Bases de licitud | `legalbasis/` | `/api/legal-basis/**` | DPO · ADMIN · JEFE_DOMINIO (solo lectura) |
+| Categorías de datos | `datacategory/` | `/api/data-categories/**` | DPO · ADMIN (escritura) · JEFE_DOMINIO (lectura) |
+| Finalidades | `purposes/` | `/api/purposes/**` | DPO · ADMIN (escritura) · JEFE_DOMINIO (lectura) |
+| Categorías por finalidad | `purposedatacategory/` | `/api/purposes/{id}/data-categories/**` | DPO · ADMIN (escritura) · JEFE_DOMINIO (lectura) |
+| Auditoría | `audit/` | `/api/audit/logs/**` | ADMIN |
+| Documentos de privacidad | `privacydoc/` | `/api/privacy-documents/**` | DPO (escritura) · cualquier autenticado (lectura) · público (PDF + verify) |
+| Notificaciones in-app | `notification/` | `/api/notifications/**` | Cualquier autenticado (cada usuario ve solo las suyas) |
 
-> El paquete del módulo de dominios es `orgdomain` (no `domain`) para evitar colisión de nombres con la capa de arquitectura `domain/` dentro de cada módulo.
+> El paquete del módulo de dominios organizacionales es `orgdomain` (no `domain`) para evitar colisión con la capa de arquitectura `domain/` dentro de cada módulo.
+
+> El paquete `purposes/` (finalidades de tratamiento) es distinto de `purpose/` (solicitudes de propósito). Son dos módulos separados con responsabilidades diferentes.
+
+---
+
+## Notas sobre `repository/` (paquete legacy)
+
+El paquete `repository/` contiene repositorios que **aún no tienen módulo dueño definido**, principalmente los relacionados con Agreements (consentimientos), DataSubjects (titulares), y Templates. **No agregar repositorios nuevos aquí.** Los módulos nuevos siempre deben colocar sus repositorios en `<modulo>/infrastructure/persistence/`.
+
+Los siguientes repositorios en `repository/` tienen duplicado activo en un módulo y son legacy:
+- `DataCategoriesRepository` → usar `datacategory/infrastructure/persistence/DataCategoryRepository`
+- `LegalBasisCatalogRepository` → usar `legalbasis/infrastructure/persistence/LegalBasisRepository`
+- `PurposeDataCategoriesRepository` → usar `purposedatacategory/infrastructure/persistence/PurposeDataCategoryRepository`
 
 ---
 
@@ -302,5 +393,8 @@ Infraestructura de autenticación y autorización que trabaja con Spring Securit
 - Los servicios devuelven DTOs, nunca entidades JPA
 - Los DTOs de Request llevan el sufijo `Request`; los de respuesta llevan el sufijo `Response` o `Dto`
 - Las excepciones tipadas viven en `<modulo>/domain/exception/` y extienden `RuntimeException`
-- Los repositorios de cada módulo viven en `<modulo>/infrastructure/persistence/`
+- Los repositorios de cada módulo viven en `<modulo>/infrastructure/persistence/` — **no agregar en `repository/`**
 - `SecurityContextHelper` es el único lugar donde se extrae el usuario del contexto de seguridad
+- Los enums con lógica de negocio viven en `<modulo>/domain/enums/`
+- Los módulos nuevos siguen la estructura `domain/ → application/ → infrastructure/ → web/`
+- **No** usar `import com.leydata.backend.repository.*` (wildcard) — importar siempre explícitamente para evitar conflictos de bean con los repositorios de módulo
