@@ -264,20 +264,20 @@ public class TestDataSeeder implements CommandLineRunner {
 
         PurposeRequests approved = new PurposeRequests();
         approved.setDomainId(mkt.getId());
-        approved.setRequesterId(jefeMkt.getId());
+        approved.setRequesterId(jefeMkt.getId().toString());
         approved.setTitle("Campaña de salud preventiva 2025");
         approved.setJustification(
                 "Se requiere enviar campañas de vacunación y control preventivo a afiliados activos con consentimiento.");
         approved.setRequestedData("{\"datos\": [\"EMAIL\", \"NOMBRE_COMPLETO\", \"RUT\"]}");
         approved.setStatus("APPROVED");
-        approved.setReviewerId(dpo.getId());
+        approved.setReviewerId(dpo.getId().toString());
         approved.setReviewNotes("Solicitud aprobada. Base legal ART_12_CONSENTIMIENTO verificada.");
         approved.setCreatedAt(NOW.minusDays(30));
         approved.setUpdatedAt(NOW.minusDays(25));
 
         PurposeRequests pending = new PurposeRequests();
         pending.setDomainId(ti.getId());
-        pending.setRequesterId(jefeTi.getId());
+        pending.setRequesterId(jefeTi.getId().toString());
         pending.setTitle("Análisis de riesgo actuarial anonimizado");
         pending.setJustification(
                 "Análisis estadístico interno para ajuste de prima basado en datos anonimizados de siniestros.");
@@ -287,12 +287,12 @@ public class TestDataSeeder implements CommandLineRunner {
 
         PurposeRequests rejected = new PurposeRequests();
         rejected.setDomainId(mkt.getId());
-        rejected.setRequesterId(jefeMkt.getId());
+        rejected.setRequesterId(jefeMkt.getId().toString());
         rejected.setTitle("Boletín informativo de salud mensual");
         rejected.setJustification("Envío de boletín con consejos de salud y promociones de coberturas adicionales.");
         rejected.setRequestedData("{\"datos\": [\"EMAIL\", \"DATOS_SALUD\"]}");
         rejected.setStatus("REJECTED");
-        rejected.setReviewerId(dpo.getId());
+        rejected.setReviewerId(dpo.getId().toString());
         rejected.setReviewNotes(
                 "Rechazada: incluye DATOS_SALUD sin base legal ART_13 explícita. Reenviar con justificación del Art. 13.");
         rejected.setCreatedAt(NOW.minusDays(15));
@@ -366,8 +366,8 @@ public class TestDataSeeder implements CommandLineRunner {
         p.setLegalBasisId(basis.getId());
         p.setDomainId(domain.getId());
         p.setIsActive(true);
-        p.setCreatedBy(creator.getId());
-        p.setApprovedBy(creator.getId());
+        p.setCreatedBy(creator.getId().toString());
+        p.setApprovedBy(creator.getId().toString());
         p.setCreatedAt(NOW.minusDays(20));
         p.setUpdatedAt(NOW.minusDays(20));
         return p;
@@ -531,8 +531,8 @@ public class TestDataSeeder implements CommandLineRunner {
                 .content(POLITICA_CONTENT)
                 .isActive(true)
                 .publishAt(NOW.minusDays(10))
-                .createdBy(dpo.getId())
-                .approvedBy(dpo.getId())
+                .createdBy(dpo.getId().toString())
+                .approvedBy(dpo.getId().toString())
                 .hashSha256("e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6")
                 .build();
 
@@ -543,7 +543,7 @@ public class TestDataSeeder implements CommandLineRunner {
                 .name("Aviso de Cookies Sitio Web")
                 .content(COOKIES_CONTENT)
                 .isActive(true)
-                .createdBy(dpo.getId())
+                .createdBy(dpo.getId().toString())
                 .build();
 
         PrivacyDocuments sensibles = PrivacyDocuments.builder()
@@ -553,7 +553,7 @@ public class TestDataSeeder implements CommandLineRunner {
                 .name("Tratamiento de Datos Sensibles de Salud")
                 .content(SENSIBLES_CONTENT)
                 .isActive(true)
-                .createdBy(dpo.getId())
+                .createdBy(dpo.getId().toString())
                 .build();
 
         List<PrivacyDocuments> saved = privacyDocsRepo.saveAll(List.of(politica, cookies, sensibles));

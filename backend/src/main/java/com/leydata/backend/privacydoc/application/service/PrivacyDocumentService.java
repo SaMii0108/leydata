@@ -22,7 +22,7 @@ import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepositor
 import com.leydata.backend.repository.TemplatesRepository;
 import com.leydata.backend.shared.EmailService;
 import com.leydata.backend.shared.SecurityContextHelper;
-import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
+import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -51,14 +51,15 @@ public class PrivacyDocumentService {
     private final PdfGeneratorService pdfGenerator;
     private final NotificationService notificationService;
     private final Optional<EmailService> emailService;
-    private final UsersRepository usersRepository;
+    private final UserDomainRepository userDomainRepository;
     private final AuditService auditService;
     private final SecurityContextHelper securityContextHelper;
 
     // ── CRUD DRAFT ───────────────────────────────────────────────────────────────
 
     public PrivacyDocumentResponse create(CreateDocumentRequest req) {
-        UUID actorId = securityContextHelper.getAuthenticatedDpo().getId();
+        String actorId = securityContextHelper.getKeycloakId();
+        String actorName = securityContextHelper.getName();
         if (req.getTemplateId() != null) {
             validateTemplateActive(req.getTemplateId());
         }
@@ -72,6 +73,7 @@ public class PrivacyDocumentService {
                 .content(req.getContent())
                 .isActive(true)
                 .createdBy(actorId)
+                .createdByName(actorName)
                 .build();
 
         PrivacyDocuments saved = documentRepo.save(entity);
@@ -144,7 +146,7 @@ public class PrivacyDocumentService {
                 .newData(Map.of(
                         "name",    saved.getName() != null ? saved.getName() : "",
                         "version", saved.getVersion()))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -170,7 +172,7 @@ public class PrivacyDocumentService {
                 .action("DOCUMENT_DEACTIVATED")
                 .oldData(Map.of("isActive", true,  "status", String.valueOf(doc.getStatus())))
                 .newData(Map.of("isActive", false, "status", String.valueOf(saved.getStatus())))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -212,7 +214,7 @@ public class PrivacyDocumentService {
                 .newData(Map.of(
                         "documentId", String.valueOf(documentId),
                         "purposeId",  String.valueOf(purposeId)))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
     }
@@ -238,7 +240,7 @@ public class PrivacyDocumentService {
                         "documentId", String.valueOf(documentId),
                         "purposeId",  String.valueOf(purposeId)))
                 .newData(null)
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
     }
@@ -261,7 +263,7 @@ public class PrivacyDocumentService {
                 .action("DOCUMENT_SUBMITTED")
                 .oldData(Map.of("status", previousStatus))
                 .newData(Map.of("status", String.valueOf(saved.getStatus())))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -284,7 +286,7 @@ public class PrivacyDocumentService {
                 .action("DOCUMENT_RESUBMITTED")
                 .oldData(Map.of("status", "REJECTED"))
                 .newData(Map.of("status", String.valueOf(saved.getStatus())))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -292,12 +294,14 @@ public class PrivacyDocumentService {
     }
 
     public PrivacyDocumentResponse approve(UUID id) {
-        UUID actorId = securityContextHelper.getAuthenticatedDpo().getId();
+        String actorId = securityContextHelper.getKeycloakId();
+        String actorName = securityContextHelper.getName();
         PrivacyDocuments doc = findOrThrow(id);
         validateTransition(doc.getStatus(), DocumentStatus.APPROVED);
 
         doc.setStatus(DocumentStatus.APPROVED);
         doc.setApprovedBy(actorId);
+        doc.setApprovedByName(actorName);
         doc.setRejectionReason(null);
         PrivacyDocuments saved = documentRepo.save(doc);
 
@@ -332,7 +336,7 @@ public class PrivacyDocumentService {
                 .newData(Map.of(
                         "status",          String.valueOf(saved.getStatus()),
                         "rejectionReason", req.getReason() != null ? req.getReason() : ""))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -344,7 +348,7 @@ public class PrivacyDocumentService {
      * Evento atómico: genera PDF + SHA-256, archiva versión anterior, sella el documento.
      */
     public PrivacyDocumentResponse publish(UUID id) {
-        UUID publishedBy = securityContextHelper.getAuthenticatedDpo().getId();
+        String publishedBy = securityContextHelper.getKeycloakId();
         PrivacyDocuments doc = findOrThrow(id);
         validateTransition(doc.getStatus(), DocumentStatus.PUBLISHED);
 
@@ -394,15 +398,13 @@ public class PrivacyDocumentService {
             String domainName = domainsRepo.findById(domainId)
                     .map(d -> d.getName())
                     .orElse(domainId.toString());
-            usersRepository.findActiveJefesByDomainId(domainId).forEach(jefe -> {
+            userDomainRepository.findByDomain_Id(domainId).forEach(ud -> {
                 notificationService.create(
-                        jefe.getId(),
+                        ud.getKeycloakId(),
                         NotificationType.DOCUMENT_PUBLISHED,
                         "Documento publicado: " + doc.getName(),
                         "El DPO publicó el documento '" + doc.getName() + "' para el dominio " + domainName + ".",
                         doc.getId());
-                emailService.ifPresent(es ->
-                        es.sendDocumentPublishedEmail(jefe.getEmail(), jefe.getName(), doc.getName(), domainName));
             });
         });
 
@@ -439,7 +441,7 @@ public class PrivacyDocumentService {
                 .action("DOCUMENT_ARCHIVED")
                 .oldData(Map.of("status", previousStatus))
                 .newData(Map.of("status", String.valueOf(saved.getStatus())))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -528,7 +530,8 @@ public class PrivacyDocumentService {
                 .max()
                 .orElse(source.getVersion()) + 1;
 
-        UUID actorId = securityContextHelper.getAuthenticatedDpo().getId();
+        String actorId = securityContextHelper.getKeycloakId();
+        String actorName = securityContextHelper.getName();
 
         PrivacyDocuments newDoc = PrivacyDocuments.builder()
                 .documentFamilyId(familyId)
@@ -540,6 +543,7 @@ public class PrivacyDocumentService {
                 .content(source.getContent())
                 .isActive(true)
                 .createdBy(actorId)
+                .createdByName(actorName)
                 .build();
 
         PrivacyDocuments saved = documentRepo.save(newDoc);

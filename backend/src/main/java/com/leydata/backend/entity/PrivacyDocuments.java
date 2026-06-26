@@ -97,19 +97,17 @@ public class PrivacyDocuments {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", insertable = false, updatable = false)
-    private Users createdByUser;
-
     @Column(name = "created_by", nullable = false)
-    private UUID createdBy;
+    private String createdBy;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "approved_by", insertable = false, updatable = false)
-    private Users approvedByUser;
+    @Column(name = "created_by_name")
+    private String createdByName;
 
     @Column(name = "approved_by")
-    private UUID approvedBy;
+    private String approvedBy;
+
+    @Column(name = "approved_by_name")
+    private String approvedByName;
 
     // ── Relaciones ───────────────────────────────────────────────────────────────
 

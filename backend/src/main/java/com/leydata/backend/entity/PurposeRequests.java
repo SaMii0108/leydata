@@ -22,15 +22,14 @@ public class PurposeRequests {
     @JoinColumn(name = "domain_id", insertable = false, updatable = false)
     private Domains domain;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "requester_id", insertable = false, updatable = false)
-    private Users requester;
-
     @Column(name = "domain_id", nullable = false)
     private UUID domainId;
 
     @Column(name = "requester_id", nullable = false)
-    private UUID requesterId;
+    private String requesterId;
+
+    @Column(name = "requester_name")
+    private String requesterName;
 
     @Column(name = "title", nullable = false)
     private String title;
@@ -44,12 +43,11 @@ public class PurposeRequests {
     @Column(name = "status", nullable = false)
     private String status; // PENDING, APPROVED, REJECTED
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reviewer_id", insertable = false, updatable = false)
-    private Users reviewer;
-
     @Column(name = "reviewer_id")
-    private UUID reviewerId;
+    private String reviewerId;
+
+    @Column(name = "reviewer_name")
+    private String reviewerName;
 
     @Column(name = "review_notes", columnDefinition = "TEXT")
     private String reviewNotes;

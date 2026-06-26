@@ -119,7 +119,7 @@ public class UserService {
             throw new RuntimeException("Error al registrar el usuario en el sistema: " + e.getMessage(), e);
         }
 
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
+        securityContextHelper.requireAdmin();
 
         auditService.log(AuditContext.builder()
                 .tableName("users")
@@ -132,7 +132,7 @@ public class UserService {
                         "name", savedUser.getName(),
                         "role", request.getRoleCode(),
                         "active", savedUser.getActive()))
-                .actorId(admin.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -149,11 +149,7 @@ public class UserService {
     // EDITAR USUARIO (ADMIN)
     @Transactional
     public UserResponse updateUserByAdmin(UUID userId, UpdateUserByAdminRequest request) {
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
-
-        if (admin.getId().equals(userId)) {
-            throw new IllegalArgumentException("El ADMIN no puede modificar su propio perfil desde este endpoint");
-        }
+        securityContextHelper.requireAdmin();
 
         Users user = usersRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("Usuario no encontrado: " + userId));
@@ -188,7 +184,7 @@ public class UserService {
                 .newData(Map.of(
                         "name", saved.getName() != null ? saved.getName() : "",
                         "roles", saved.getUserRoles().stream().map(ur -> ur.getRole().getCode()).toList()))
-                .actorId(admin.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -198,11 +194,7 @@ public class UserService {
     // DESACTIVAR USUARIO
     @Transactional
     public UserResponse deactivateUser(UUID userId) {
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
-
-        if (admin.getId().equals(userId)) {
-            throw new IllegalArgumentException("El ADMIN no puede desactivarse a sí mismo");
-        }
+        securityContextHelper.requireAdmin();
 
         Users user = usersRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("Usuario no encontrado: " + userId));
@@ -224,7 +216,7 @@ public class UserService {
                 .action("DESACTIVAR_USUARIO")
                 .oldData(Map.of("active", true))
                 .newData(Map.of("active", false))
-                .actorId(admin.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -234,7 +226,7 @@ public class UserService {
     // REACTIVAR USUARIO
     @Transactional
     public UserResponse reactivateUser(UUID userId) {
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
+        securityContextHelper.requireAdmin();
 
         Users user = usersRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("Usuario no encontrado: " + userId));
@@ -256,7 +248,7 @@ public class UserService {
                 .action("REACTIVAR_USUARIO")
                 .oldData(Map.of("active", false))
                 .newData(Map.of("active", true))
-                .actorId(admin.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -266,11 +258,7 @@ public class UserService {
     // BLOQUEO PERMANENTE (irreversible desde la API)
     @Transactional
     public UserResponse blockUser(UUID targetUserId) {
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
-
-        if (admin.getId().equals(targetUserId)) {
-            throw new IllegalArgumentException("El ADMIN no puede bloquearse a sí mismo");
-        }
+        securityContextHelper.requireAdmin();
 
         Users target = usersRepository.findById(targetUserId)
                 .orElseThrow(() -> new UserNotFoundException("Usuario no encontrado: " + targetUserId));
@@ -293,7 +281,7 @@ public class UserService {
                 .action("BLOQUEAR_USUARIO")
                 .oldData(oldData)
                 .newData(Map.of("active", false, "blocked", true))
-                .actorId(admin.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 

@@ -90,7 +90,7 @@ public class PurposeDataCategoryService {
                         "dataUses",        req.getDataUses().toString(),
                         "retentionPeriod", req.getRetention().getRetentionPeriod(),
                         "retentionUnit",   req.getRetention().getRetentionUnit()))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -130,7 +130,7 @@ public class PurposeDataCategoryService {
                 .newData(Map.of(
                         "retentionPeriod", req.getRetentionPeriod(),
                         "retentionUnit",   req.getRetentionUnit()))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -153,7 +153,7 @@ public class PurposeDataCategoryService {
                         "purposeId",      pdc.getPurposeId().toString(),
                         "dataCategoryId", pdc.getDataCategoryId().toString()))
                 .newData(null)
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 

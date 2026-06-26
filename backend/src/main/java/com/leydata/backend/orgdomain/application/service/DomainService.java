@@ -34,7 +34,7 @@ public class DomainService {
     // CREAR DOMINIO (solo ADMIN)
     @Transactional
     public DomainResponse createDomain(CreateDomainRequest request) {
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
+        securityContextHelper.requireAdmin();
 
         if (domainsRepository.findByCode(request.getCode()).isPresent()) {
             throw new IllegalArgumentException("Ya existe un dominio con ese código");
@@ -82,7 +82,7 @@ public class DomainService {
                         "code", savedDomain.getCode() != null ? savedDomain.getCode() : "",
                         "name", savedDomain.getName(),
                         "active", String.valueOf(savedDomain.getActive())))
-                .actorId(admin.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -100,7 +100,7 @@ public class DomainService {
     // DESACTIVAR DOMINIO (reversible)
     @Transactional
     public DomainResponse deactivateDomain(UUID domainId) {
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
+        securityContextHelper.requireAdmin();
 
         Domains domain = domainsRepository.findById(domainId)
                 .orElseThrow(() -> new DomainNotFoundException("Dominio no encontrado: " + domainId));
@@ -120,7 +120,7 @@ public class DomainService {
                 .action("DESACTIVAR_DOMINIO")
                 .oldData(oldData)
                 .newData(Map.of("active", false, "name", saved.getName()))
-                .actorId(admin.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -130,7 +130,7 @@ public class DomainService {
     // REACTIVAR DOMINIO
     @Transactional
     public DomainResponse reactivateDomain(UUID domainId) {
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
+        securityContextHelper.requireAdmin();
 
         Domains domain = domainsRepository.findById(domainId)
                 .orElseThrow(() -> new DomainNotFoundException("Dominio no encontrado: " + domainId));
@@ -150,7 +150,7 @@ public class DomainService {
                 .action("REACTIVAR_DOMINIO")
                 .oldData(oldData)
                 .newData(Map.of("active", true, "name", saved.getName()))
-                .actorId(admin.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 

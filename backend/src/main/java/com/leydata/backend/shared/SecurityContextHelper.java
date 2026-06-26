@@ -1,55 +1,33 @@
 package com.leydata.backend.shared;
 
-import com.leydata.backend.entity.Users;
-import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
 @Component
-@RequiredArgsConstructor
 public class SecurityContextHelper {
-
-    private final UsersRepository usersRepository;
 
     private static final Set<String> BUSINESS_ROLES =
             Set.of("ADMIN", "DPO", "JEFE_DOMINIO", "USER", "TITULAR");
 
-    public Users getAuthenticatedUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return usersRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Usuario autenticado no encontrado en el sistema"));
+    public String getKeycloakId() {
+        return getJwt().getToken().getSubject();
     }
 
-    public Users getAuthenticatedAdmin() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean isAdmin = auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-        if (!isAdmin) {
-            throw new SecurityException("Acceso denegado: se requiere rol ADMIN");
-        }
-        return usersRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Usuario autenticado no encontrado en el sistema local"));
+    public String getEmail() {
+        String email = getJwt().getToken().getClaimAsString("email");
+        return email != null ? email : getKeycloakId();
     }
 
-    public Users getAuthenticatedDpo() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean isDpoOrAdmin = auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_DPO".equals(a.getAuthority())
-                        || "ROLE_ADMIN".equals(a.getAuthority()));
-        if (!isDpoOrAdmin) {
-            throw new SecurityException(
-                    "Acceso denegado: solo el DPO puede revisar solicitudes de consentimiento");
-        }
-        return usersRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Usuario autenticado no encontrado en el sistema"));
+    public String getName() {
+        String name = getJwt().getToken().getClaimAsString("name");
+        if (name != null) return name;
+        String preferred = getJwt().getToken().getClaimAsString("preferred_username");
+        return preferred != null ? preferred : getEmail();
     }
 
     public String getActorRole() {
@@ -61,5 +39,25 @@ public class SecurityContextHelper {
                 .filter(BUSINESS_ROLES::contains)
                 .findFirst()
                 .orElse("UNKNOWN");
+    }
+
+    public void requireAdmin() {
+        boolean isAdmin = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (!isAdmin) throw new SecurityException("Acceso denegado: se requiere rol ADMIN");
+    }
+
+    public void requireDpoOrAdmin() {
+        boolean ok = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(a -> "ROLE_DPO".equals(a.getAuthority()) || "ROLE_ADMIN".equals(a.getAuthority()));
+        if (!ok) throw new SecurityException("Acceso denegado: se requiere rol DPO o ADMIN");
+    }
+
+    private JwtAuthenticationToken getJwt() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth instanceof JwtAuthenticationToken jwtAuth) return jwtAuth;
+        throw new IllegalStateException("No hay token JWT en el contexto de seguridad");
     }
 }
