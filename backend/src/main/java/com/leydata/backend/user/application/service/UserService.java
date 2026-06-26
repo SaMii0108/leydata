@@ -112,29 +112,29 @@ public class UserService {
                 }
             }
 
+            Users admin = securityContextHelper.getAuthenticatedAdmin();
+
+            auditService.log(AuditContext.builder()
+                    .tableName("users")
+                    .recordId(savedUser.getId())
+                    .action("CREAR_USUARIO")
+                    .oldData(null)
+                    .newData(Map.of(
+                            "id", savedUser.getId(),
+                            "email", savedUser.getEmail(),
+                            "name", savedUser.getName(),
+                            "role", request.getRoleCode(),
+                            "active", savedUser.getActive()))
+                    .actorId(admin.getId())
+                    .actorRole(securityContextHelper.getActorRole())
+                    .build());
+
         } catch (Exception e) {
             // Compensación: el usuario quedó en Keycloak pero no en nuestra BD.
             // Lo eliminamos de Keycloak para mantener consistencia entre ambos sistemas.
             keycloakAdminService.deleteUser(keycloakId);
             throw new RuntimeException("Error al registrar el usuario en el sistema: " + e.getMessage(), e);
         }
-
-        Users admin = securityContextHelper.getAuthenticatedAdmin();
-
-        auditService.log(AuditContext.builder()
-                .tableName("users")
-                .recordId(savedUser.getId())
-                .action("CREAR_USUARIO")
-                .oldData(null)
-                .newData(Map.of(
-                        "id", savedUser.getId(),
-                        "email", savedUser.getEmail(),
-                        "name", savedUser.getName(),
-                        "role", request.getRoleCode(),
-                        "active", savedUser.getActive()))
-                .actorId(admin.getId())
-                .actorRole(securityContextHelper.getActorRole())
-                .build());
 
         return new UserResponse(
                 savedUser.getId(),
