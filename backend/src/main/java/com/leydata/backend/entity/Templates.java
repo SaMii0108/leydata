@@ -65,7 +65,7 @@ public class Templates {
     @Column(name = "activation_date")
     private OffsetDateTime activationDate;
 
-    @Column(name = "hash_sha256", nullable = false, unique = true)
+    @Column(name = "hash_sha256", unique = true)
     private String hashSha256;
 
     @Column(name = "previous_hash_sha256")

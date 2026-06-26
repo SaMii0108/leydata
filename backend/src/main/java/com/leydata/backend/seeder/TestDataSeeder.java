@@ -1,6 +1,33 @@
 package com.leydata.backend.seeder;
 
-import com.leydata.backend.entity.*;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+import com.leydata.backend.entity.AgreementMetadata;
+import com.leydata.backend.entity.Agreements;
+import com.leydata.backend.entity.AgreementsPurposes;
+import com.leydata.backend.entity.DataCategories;
+import com.leydata.backend.entity.DataRetentionPolicies;
+import com.leydata.backend.entity.DataSubjects;
+import com.leydata.backend.entity.DocumentPurposes;
+import com.leydata.backend.entity.Domains;
+import com.leydata.backend.entity.LegalBasisCatalog;
+import com.leydata.backend.entity.PrivacyDocuments;
+import com.leydata.backend.entity.PurposeDataCategories;
+import com.leydata.backend.entity.PurposeRequests;
+import com.leydata.backend.entity.Purposes;
+import com.leydata.backend.entity.Role;
+import com.leydata.backend.entity.TemplatePurposes;
+import com.leydata.backend.entity.Templates;
+import com.leydata.backend.entity.UserDomains;
+import com.leydata.backend.entity.Users;
+import com.leydata.backend.entity.UsersRole;
 import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
 import com.leydata.backend.orgdomain.infrastructure.persistence.UserDomainsRepository;
 import com.leydata.backend.privacydoc.domain.enums.DocumentCategory;
@@ -22,16 +49,9 @@ import com.leydata.backend.template.infrastructure.persistence.TemplatesReposito
 import com.leydata.backend.user.infrastructure.persistence.RoleRepository;
 import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
 import com.leydata.backend.user.infrastructure.persistence.UsersRoleRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.Profile;
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
-
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.List;
 
 /**
  * Pobla la BD con datos realistas de prueba para "MedVida SpA" (empresa de
@@ -641,7 +661,7 @@ public class TestDataSeeder implements CommandLineRunner {
         a.setStatus(status);
         a.setCreatedAt(createdAt);
         a.setHashSha256(hash);
-        a.setPreviousHash(prevHash);
+        a.setPreviousHashSha256(prevHash);
         a.setExpiration(createdAt.plusYears(1));
         return a;
     }
@@ -660,6 +680,7 @@ public class TestDataSeeder implements CommandLineRunner {
         ap.setPurposeRevocable(purpose.getRevocable());
         ap.setPurposeHash(purpose.getHashSha256());
         ap.setLegalBasisCode(legalBasisCode);
+        ap.setStatus("ACTIVE");
         ap.setCreatedAt(agreement.getCreatedAt());
         agreementsPurposesRepo.save(ap);
     }
