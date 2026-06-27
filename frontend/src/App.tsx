@@ -11,6 +11,7 @@ import DashboardPage from './pages/DashboardPage';
 import ConsentimientosPage from './pages/ConsentimientosPage';
 import NuevoConsentimientoPage from './pages/NuevoConsentimientoPage';
 import UsuariosPage from './pages/UsuariosPage';
+import DomainsPage from './pages/DomainsPage';
 import AuditTrailPage from './pages/AuditTrailPage';
 import TemplatesPage from './pages/TemplatesPage';
 import CompliancePage from './pages/CompliancePage';
@@ -61,6 +62,11 @@ const App = () => (
             <Route path="usuarios" element={
               <ProtectedRoute roles={['ADMIN']}>
                 <UsuariosPage />
+              </ProtectedRoute>
+            } />
+            <Route path="dominios" element={
+              <ProtectedRoute roles={['ADMIN']}>
+                <DomainsPage />
               </ProtectedRoute>
             } />
             <Route path="auditoria" element={
