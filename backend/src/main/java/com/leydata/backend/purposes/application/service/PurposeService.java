@@ -4,7 +4,6 @@ import com.leydata.backend.audit.application.dto.AuditContext;
 import com.leydata.backend.audit.application.service.AuditService;
 import com.leydata.backend.entity.Domains;
 import com.leydata.backend.entity.Purposes;
-import com.leydata.backend.entity.Users;
 import com.leydata.backend.legalbasis.infrastructure.persistence.LegalBasisRepository;
 import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
 import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
@@ -17,6 +16,7 @@ import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
+import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -41,6 +41,7 @@ public class PurposeService {
     private final PurposeDataCategoryRepository pdcRepo;
     private final AuditService auditService;
     private final SecurityContextHelper securityContextHelper;
+    private final UserDomainRepository userDomainRepository;
 
     // ── CREAR ─────────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,8 @@ public class PurposeService {
                     "El dominio está desactivado: " + domain.getName());
         }
 
-        Users dpo = securityContextHelper.getAuthenticatedDpo();
+        String actorId = securityContextHelper.getKeycloakId();
+        String actorName = securityContextHelper.getName();
 
         Purposes purpose = new Purposes();
         purpose.setCode(code);
@@ -78,8 +80,10 @@ public class PurposeService {
         purpose.setDomainId(req.getDomainId());
         purpose.setConsentStatement(req.getConsentStatement());
         purpose.setIsActive(true);
-        purpose.setCreatedBy(dpo.getId());
-        purpose.setApprovedBy(dpo.getId());
+        purpose.setCreatedBy(actorId);
+        purpose.setCreatedByName(actorName);
+        purpose.setApprovedBy(actorId);
+        purpose.setApprovedByName(actorName);
         purpose.setPurposeRequestId(req.getPurposeRequestId());
         purpose.setCreatedAt(LocalDateTime.now());
 
@@ -95,7 +99,7 @@ public class PurposeService {
                         "name", saved.getName(),
                         "required", saved.getRequired(),
                         "legalBasisId", saved.getLegalBasisId().toString()))
-                .actorId(dpo.getId())
+                .actorId(actorId)
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -108,8 +112,8 @@ public class PurposeService {
     public List<PurposeResponse> listAll() {
         String role = securityContextHelper.getActorRole();
         if ("JEFE_DOMINIO".equals(role)) {
-            Users user = securityContextHelper.getAuthenticatedUser();
-            Set<UUID> domainIds = user.getUserDomains().stream()
+            Set<UUID> domainIds = userDomainRepository.findByKeycloakId(securityContextHelper.getKeycloakId())
+                    .stream()
                     .map(ud -> ud.getDomain().getId())
                     .collect(Collectors.toSet());
             return domainIds.stream()
@@ -127,9 +131,8 @@ public class PurposeService {
         Purposes purpose = findOrThrow(id);
         String role = securityContextHelper.getActorRole();
         if ("JEFE_DOMINIO".equals(role)) {
-            Users user = securityContextHelper.getAuthenticatedUser();
-            boolean ownsDomain = user.getUserDomains().stream()
-                    .anyMatch(ud -> ud.getDomain().getId().equals(purpose.getDomainId()));
+            boolean ownsDomain = userDomainRepository.existsByKeycloakIdAndDomainId(
+                    securityContextHelper.getKeycloakId(), purpose.getDomainId());
             if (!ownsDomain) {
                 throw new AccessDeniedException("No tienes acceso a esta finalidad");
             }
@@ -141,9 +144,8 @@ public class PurposeService {
     public List<PurposeResponse> listByDomain(UUID domainId) {
         String role = securityContextHelper.getActorRole();
         if ("JEFE_DOMINIO".equals(role)) {
-            Users user = securityContextHelper.getAuthenticatedUser();
-            boolean ownsDomain = user.getUserDomains().stream()
-                    .anyMatch(ud -> ud.getDomain().getId().equals(domainId));
+            boolean ownsDomain = userDomainRepository.existsByKeycloakIdAndDomainId(
+                    securityContextHelper.getKeycloakId(), domainId);
             if (!ownsDomain) {
                 throw new AccessDeniedException("No tienes acceso a las finalidades de este dominio");
             }
@@ -179,7 +181,6 @@ public class PurposeService {
         purpose.setUpdatedAt(LocalDateTime.now());
 
         Purposes saved = purposesRepo.save(purpose);
-        Users dpo = securityContextHelper.getAuthenticatedDpo();
 
         auditService.log(AuditContext.builder()
                 .tableName("purposes")
@@ -187,7 +188,7 @@ public class PurposeService {
                 .action("PURPOSE_UPDATED")
                 .oldData(oldData)
                 .newData(Map.of("name", saved.getName(), "required", saved.getRequired()))
-                .actorId(dpo.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -209,7 +210,6 @@ public class PurposeService {
         purpose.setIsActive(false);
         purpose.setUpdatedAt(LocalDateTime.now());
         Purposes saved = purposesRepo.save(purpose);
-        Users dpo = securityContextHelper.getAuthenticatedDpo();
 
         auditService.log(AuditContext.builder()
                 .tableName("purposes")
@@ -217,7 +217,7 @@ public class PurposeService {
                 .action("PURPOSE_DEACTIVATED")
                 .oldData(Map.of("isActive", true))
                 .newData(Map.of("isActive", false))
-                .actorId(dpo.getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 

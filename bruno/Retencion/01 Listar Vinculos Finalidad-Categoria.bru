@@ -1,0 +1,21 @@
+meta {
+  name: Listar Vínculos Finalidad-Categoría
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/purposes/<uuid-finalidad>/data-categories
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Devuelve las categorías vinculadas a una finalidad con su política de retención.
+  retentionLocked=true: la configuración está bloqueada por un documento PUBLISHED.
+  Requiere rol DPO, ADMIN o JEFE_DOMINIO.
+}

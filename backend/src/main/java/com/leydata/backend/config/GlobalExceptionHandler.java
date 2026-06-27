@@ -8,6 +8,7 @@ import com.leydata.backend.privacydoc.domain.exception.BusinessValidationExcepti
 import com.leydata.backend.privacydoc.domain.exception.DocumentNotFoundException;
 import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionException;
 import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
+import com.leydata.backend.template.domain.exception.TemplateNotFoundException;
 import com.leydata.backend.user.domain.exception.UserAlreadyExistsException;
 import com.leydata.backend.user.domain.exception.UserNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -30,22 +31,10 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
-/**
- * Manejador global de excepciones para la aplicación.
- * 
- * Intercepta todas las excepciones en los controladores y devuelve respuestas
- * JSON
- * estandarizadas sin revelar detalles internos del servidor (stacktraces, etc.)
- * 
- * Cada tipo de excepción se mapea a un código HTTP y mensaje usuario-friendly.
- */
 @Slf4j
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    /**
-     * Estructura estándar de respuesta de error
-     */
     private Map<String, Object> buildErrorResponse(String status, String message,
             HttpStatus httpStatus) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -139,6 +128,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
+    // ── MÓDULO TEMPLATES ─────────────────────────────────────────────────────────
+
+    @ExceptionHandler(TemplateNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleTemplateNotFound(TemplateNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
     // ── MÓDULO PURPOSE DATA CATEGORIES ──────────────────────────────────────────
 
     @ExceptionHandler(PurposeDataCategoryNotFoundException.class)
@@ -173,201 +170,81 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
     }
 
-    // EXCEPCIONES DE AUTENTICACIÓN
+    // ── AUTENTICACIÓN Y AUTORIZACIÓN ─────────────────────────────────────────────
 
-    //Error de autenticación genérico: token expirado, inválido, sin token, etc.
-    //Keycloak devuelve 401 directamente, pero por si algún error pasa al handler
     @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<Map<String, Object>> handleAuthenticationException(
-            AuthenticationException ex,
-            WebRequest request) {
-
+    public ResponseEntity<Map<String, Object>> handleAuthenticationException(AuthenticationException ex) {
         log.warn("Error de autenticación: {}", ex.getClass().getSimpleName());
-
-        Map<String, Object> body = buildErrorResponse(
-                "UNAUTHORIZED",
-                "Acceso no autorizado. Por favor, inicia sesión nuevamente",
-                HttpStatus.UNAUTHORIZED);
-
-        return ResponseEntity
-                .status(HttpStatus.UNAUTHORIZED)
-                .body(body);
+        Map<String, Object> body = buildErrorResponse("UNAUTHORIZED",
+                "Acceso no autorizado. Por favor, inicia sesión nuevamente", HttpStatus.UNAUTHORIZED);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
     }
 
-    // EXCEPCIONES DE AUTORIZACIÓN
-
-    /**
-     * Usuario autenticado intenta acceder a recurso sin permisos suficientes
-     */
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, Object>> handleAccessDeniedException(
-            AccessDeniedException ex,
-            WebRequest request) {
-
+    public ResponseEntity<Map<String, Object>> handleAccessDeniedException(AccessDeniedException ex) {
         log.warn("Acceso denegado: {}", ex.getMessage());
-
-        Map<String, Object> body = buildErrorResponse(
-                "FORBIDDEN",
-                "No tienes permiso para acceder a este recurso",
-                HttpStatus.FORBIDDEN);
-
-        return ResponseEntity
-                .status(HttpStatus.FORBIDDEN)
-                .body(body);
+        Map<String, Object> body = buildErrorResponse("FORBIDDEN",
+                "No tienes permiso para acceder a este recurso", HttpStatus.FORBIDDEN);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
-    /**
-     * Seguridad genérica (ej: SecurityException lanzada en validaciones)
-     */
     @ExceptionHandler(SecurityException.class)
-    public ResponseEntity<Map<String, Object>> handleSecurityException(
-            SecurityException ex,
-            WebRequest request) {
-
+    public ResponseEntity<Map<String, Object>> handleSecurityException(SecurityException ex) {
         log.warn("Excepción de seguridad: {}", ex.getMessage());
-
-        Map<String, Object> body = buildErrorResponse(
-                "FORBIDDEN",
-                ex.getMessage(),
-                HttpStatus.FORBIDDEN);
-
-        return ResponseEntity
-                .status(HttpStatus.FORBIDDEN)
-                .body(body);
+        Map<String, Object> body = buildErrorResponse("FORBIDDEN", ex.getMessage(), HttpStatus.FORBIDDEN);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
-    // EXCEPCIONES DE LÓGICA DE NEGOCIO
+    // ── LÓGICA DE NEGOCIO ────────────────────────────────────────────────────────
 
-    /**
-     * Operación no permitida por regla de negocio (ej: usuario ya bloqueado)
-     */
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalStateException(
-            IllegalStateException ex,
-            WebRequest request) {
-
+    public ResponseEntity<Map<String, Object>> handleIllegalStateException(IllegalStateException ex) {
         log.warn("Estado inválido: {}", ex.getMessage());
-
-        Map<String, Object> body = buildErrorResponse(
-                "CONFLICT",
-                ex.getMessage(),
-                HttpStatus.CONFLICT);
-
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(body);
+        Map<String, Object> body = buildErrorResponse("CONFLICT", ex.getMessage(), HttpStatus.CONFLICT);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
-    /**
-     * Argumentos inválidos (datos incorrectos, usuario no encontrado, etc.)
-     */
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(
-            IllegalArgumentException ex,
-            WebRequest request) {
-
+    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Argumento inválido: {}", ex.getMessage());
-
-        Map<String, Object> body = buildErrorResponse(
-                "BAD_REQUEST",
-                ex.getMessage(),
-                HttpStatus.BAD_REQUEST);
-
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(body);
+        Map<String, Object> body = buildErrorResponse("BAD_REQUEST", ex.getMessage(), HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
-    /**
-     * Validación fallida (datos de entrada incompletos o inválidos)
-     */
     @ExceptionHandler(IllegalAccessException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalAccessException(
-            IllegalAccessException ex,
-            WebRequest request) {
-
+    public ResponseEntity<Map<String, Object>> handleIllegalAccessException(IllegalAccessException ex) {
         log.warn("Acceso ilegal: {}", ex.getMessage());
-
-        Map<String, Object> body = buildErrorResponse(
-                "FORBIDDEN",
-                "Acceso no permitido a este recurso",
-                HttpStatus.FORBIDDEN);
-
-        return ResponseEntity
-                .status(HttpStatus.FORBIDDEN)
-                .body(body);
+        Map<String, Object> body = buildErrorResponse("FORBIDDEN",
+                "Acceso no permitido a este recurso", HttpStatus.FORBIDDEN);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
-    // EXCEPCIONES GENÉRICAS
+    // ── GENÉRICAS ────────────────────────────────────────────────────────────────
 
-    /**
-     * NullPointerException o cualquier otra excepción no controlada
-     */
     @ExceptionHandler(NullPointerException.class)
-    public ResponseEntity<Map<String, Object>> handleNullPointerException(
-            NullPointerException ex,
-            WebRequest request) {
-
+    public ResponseEntity<Map<String, Object>> handleNullPointerException(NullPointerException ex) {
         log.error("NullPointerException no esperada:", ex);
-
-        Map<String, Object> body = buildErrorResponse(
-                "INTERNAL_SERVER_ERROR",
+        Map<String, Object> body = buildErrorResponse("INTERNAL_SERVER_ERROR",
                 "Se produjo un error interno. Por favor, intenta de nuevo más tarde",
                 HttpStatus.INTERNAL_SERVER_ERROR);
-
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(body);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 
-    /**
-     * Excepción genérica (fallback para excepciones no contempladas)
-     */
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGenericException(
-            Exception ex,
-            WebRequest request) {
-
-        log.error("Excepción no manejada: ", ex);
-
-        Map<String, Object> body = buildErrorResponse(
-                "INTERNAL_SERVER_ERROR",
-                "Error interno del servidor. Por favor, intenta de nuevo más tarde",
-                HttpStatus.INTERNAL_SERVER_ERROR);
-
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(body);
-    }
-
-    /**
-     * RuntimeException (cualquier excepción de tiempo de ejecución no capturada)
-     * NOTA: MethodArgumentTypeMismatchException extiende RuntimeException; se maneja
-     * en handleTypeMismatch() arriba. Este handler es el último recurso.
-     */
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<Map<String, Object>> handleRuntimeException(
-            RuntimeException ex,
-            WebRequest request) {
-
-        // Re-delegate type mismatch to the proper handler (e.g. invalid UUID path variable)
-        if (ex.getClass().getName().contains("TypeMismatch") || ex.getClass().getName().contains("MethodArgumentType")) {
-            String paramName = "parámetro";
-            try { paramName = ((org.springframework.beans.TypeMismatchException) ex).getPropertyName(); } catch (Exception ignored) {}
-            String message2 = "Valor inválido para '" + paramName + "': formato incorrecto";
-            Map<String, Object> body2 = buildErrorResponse("BAD_REQUEST", message2, HttpStatus.BAD_REQUEST);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body2);
-        }
-
-        log.error("RuntimeException: ", ex);
-
-        Map<String, Object> body = buildErrorResponse(
-                "INTERNAL_SERVER_ERROR",
+    public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException ex) {
+        log.error("RuntimeException no controlada: ", ex);
+        Map<String, Object> body = buildErrorResponse("INTERNAL_SERVER_ERROR",
                 "Error al procesar la solicitud",
                 HttpStatus.INTERNAL_SERVER_ERROR);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
 
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(body);
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
+        log.error("Excepción no manejada: ", ex);
+        Map<String, Object> body = buildErrorResponse("INTERNAL_SERVER_ERROR",
+                "Error interno del servidor. Por favor, intenta de nuevo más tarde",
+                HttpStatus.INTERNAL_SERVER_ERROR);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 }

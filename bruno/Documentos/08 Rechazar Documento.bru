@@ -1,0 +1,26 @@
+meta {
+  name: Rechazar Documento (IN_REVIEW → REJECTED)
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/privacy-documents/<uuid-aqui>/reject
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "rejectionReason": "El documento no cumple con los requisitos del artículo 14 de la Ley 21.719."
+  }
+}
+
+docs {
+  Rechaza el documento con motivo. Solo aplica a documentos en IN_REVIEW.
+  Requiere rol DPO.
+}

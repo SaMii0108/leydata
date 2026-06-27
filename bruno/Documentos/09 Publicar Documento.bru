@@ -1,0 +1,21 @@
+meta {
+  name: Publicar Documento (APPROVED → PUBLISHED)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/privacy-documents/<uuid-aqui>/publish
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Publica el documento. Solo aplica a documentos en APPROVED.
+  Calcula el hash SHA-256 del contenido y lo almacena en AgreementIntegrityLog.
+  Requiere rol DPO.
+}

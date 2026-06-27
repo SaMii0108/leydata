@@ -53,6 +53,11 @@ public class AuditService {
     public void log(AuditContext context) {
         String ipAddress = extractClientIp();
         String userAgent = extractUserAgent();
+        String requestId = extractRequestId();
+
+        // Serializa escrituras concurrentes al ledger: solo un thread a la vez puede
+        // leer el último hash y escribir el siguiente. El lock se libera al hacer commit.
+        auditLogRepository.acquireAuditChainLock();
 
         // El primer registro de la historia usa "GENESIS" como hash previo
         String previousHash = auditLogRepository.findTopByOrderByCreatedAtDesc()
@@ -83,6 +88,7 @@ public class AuditService {
         auditLog.setActorRole(context.getActorRole());
         auditLog.setIpAddress(ipAddress);
         auditLog.setUserAgent(userAgent);
+        auditLog.setRequestId(requestId);
         auditLog.setCreatedAt(now);
         auditLog.setLogHash(logHash);
         auditLog.setPreviousLogHash(previousHash);
@@ -214,6 +220,16 @@ public class AuditService {
             return ua != null ? ua : "UNKNOWN";
         } catch (Exception e) {
             return "UNKNOWN";
+        }
+    }
+
+    private String extractRequestId() {
+        try {
+            HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes())
+                    .getRequest();
+            return request.getHeader("X-Request-ID");
+        } catch (Exception e) {
+            return null;
         }
     }
 }

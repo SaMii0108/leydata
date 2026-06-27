@@ -1,0 +1,22 @@
+meta {
+  name: Verificar Cadena de Auditoría
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/audit/logs/verify
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Verifica la integridad de la cadena de logs de auditoría.
+  Detecta si algún registro fue alterado fuera del sistema.
+  Responde con { "valid": true/false, "firstInvalidId": <id o null> }
+  Requiere rol ADMIN.
+}

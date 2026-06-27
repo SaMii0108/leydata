@@ -1,0 +1,22 @@
+meta {
+  name: Versión Activa (por templateKey)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/templates/active/<templateKey>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Devuelve la versión ACTIVE del templateKey indicado.
+  Reemplazar <templateKey> por el key real, ej: bienvenida-clientes
+  Retorna 404 si no hay ninguna versión activa.
+  Requiere rol DPO o ADMIN.
+}

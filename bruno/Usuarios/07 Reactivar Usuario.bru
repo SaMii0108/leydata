@@ -1,0 +1,23 @@
+meta {
+  name: Reactivar Usuario
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/users/<uuid-aqui>/reactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Revierte una desactivación temporal.
+  1. keycloak.enableUser() — restaura la capacidad de login en Keycloak
+  2. users.active=true en BD local
+  No aplica a usuarios bloqueados permanentemente.
+  Requiere rol ADMIN.
+}

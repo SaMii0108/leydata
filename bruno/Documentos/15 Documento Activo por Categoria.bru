@@ -1,0 +1,23 @@
+meta {
+  name: Documento Activo por Categoría
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/api/privacy-documents/active-by-category?category=POLITICA_PRIVACIDAD
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Retorna el documento activo (PUBLISHED, versión canónica) para una categoría dada.
+  Categorías disponibles: POLITICA_PRIVACIDAD, AVISO_PRIVACIDAD, CONTRATO_TRATAMIENTO,
+    EVALUACION_IMPACTO, ACUERDO_TRANSFERENCIA, OTRO.
+  Retorna 404 si no hay documento publicado para esa categoría.
+  Requiere autenticación.
+}

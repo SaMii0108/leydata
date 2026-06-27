@@ -1,25 +1,40 @@
 package com.leydata.backend.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 @Entity
 @Table(name = "templates")
-@Getter
-@Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Getter
+@Setter
 public class Templates {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "code")
-    private String code;
+    @Column(name = "template_key", nullable = false)
+    private String templateKey;
+
+    @Column(name = "version", nullable = false)
+    private Integer version;
 
     @Column(name = "name", nullable = false)
     private String name;
@@ -27,36 +42,38 @@ public class Templates {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "version", nullable = false)
-    private Integer version;
-
-    @Column(name = "primary_color")
-    private String primaryColor;
-
-    @Column(name = "accent_color")
-    private String accentColor;
-
-    @Column(name = "background_color")
-    private String backgroundColor;
-
     @Column(name = "title")
     private String title;
-
-    @Column(name = "button_accept_text")
-    private String buttonAcceptText;
-
-    @Column(name = "button_reject_text")
-    private String buttonRejectText;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive;
 
+    @Column(name = "change_reason", columnDefinition = "TEXT")
+    private String changeReason;
+
+    // Keycloak ID (sub del JWT) del usuario que creó el template
+    @Column(name = "created_by")
+    private String createdBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
+
+    // Keycloak ID del DPO que aprobó el template
+    @Column(name = "approved_by")
+    private String approvedBy;
+
+    @Column(name = "approved_at")
+    private OffsetDateTime approvedAt;
+
+    @Column(name = "activation_date")
+    private OffsetDateTime activationDate;
+
+    @Column(name = "hash_sha256", unique = true)
+    private String hashSha256;
+
+    @Column(name = "previous_hash_sha256")
+    private String previousHashSha256;
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<TemplatePurposes> templatePurposes;
-
-    @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Agreements> agreements;
 }

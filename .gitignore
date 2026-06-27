@@ -35,3 +35,4 @@ postgres_data/
 # Claude AI
 CLAUDE.md
 .claude/
+graphify-out/

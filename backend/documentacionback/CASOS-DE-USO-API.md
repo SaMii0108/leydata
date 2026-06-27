@@ -19,8 +19,9 @@ El flujo de trabajo completo de la organización es el siguiente:
 3. El **DPO** revisa y aprueba la solicitud.
 4. El **DPO** crea formalmente la **Finalidad** (Purpose) — la unidad atómica de permiso que el sistema evaluará como `true/false` antes de dejar que cualquier proceso interno toque un dato. La finalidad declara: qué hace, su base legal, si es obligatoria, si es revocable.
 5. El **DPO** configura qué categorías de datos procesa esa finalidad y por cuánto tiempo se retienen (política de retención por combinación finalidad+categoría).
-6. El **DPO** crea un Documento de Privacidad que agrupa una o más finalidades, lo somete a revisión, lo aprueba y lo publica. Al publicarlo se genera un PDF firmado con SHA-256 y la finalidad queda inmutable.
-7. El JEFE_DOMINIO que originó la solicitud recibe una notificación de que su finalidad fue publicada.
+6. El **DPO** crea un **Template de consentimiento** que agrupa las finalidades aprobadas, define el orden y visibilidad de cada una, lo aprueba y activa. Al activarlo se sella el template con un hash SHA-256 y cualquier versión anterior del mismo `TEMPLATE_KEY` queda desactivada.
+7. El **DPO** crea un Documento de Privacidad que agrupa una o más finalidades, lo somete a revisión, lo aprueba y lo publica. Al publicarlo se genera un PDF firmado con SHA-256 y la finalidad queda inmutable.
+8. El JEFE_DOMINIO que originó la solicitud recibe una notificación de que su finalidad fue publicada.
 8. El titular recibe o puede consultar ese documento publicado para conocer el tratamiento que se hace de sus datos.
 9. Toda acción del sistema queda registrada en un log de auditoría con cadena de hashes inmutable.
 
@@ -39,7 +40,8 @@ El flujo de trabajo completo de la organización es el siguiente:
 9. [Documentos de Privacidad](#9-documentos-de-privacidad)
 10. [Auditoría](#10-auditoría)
 11. [Notificaciones](#11-notificaciones)
-12. [Referencia de errores](#12-referencia-rápida-de-códigos-de-error)
+12. [Templates de consentimiento](#12-templates-de-consentimiento)
+13. [Referencia de errores](#13-referencia-rápida-de-códigos-de-error)
 
 ---
 
@@ -51,7 +53,7 @@ La autenticación está delegada completamente a **Keycloak**, un servidor de id
 
 Sin embargo, tener un token válido de Keycloak no es suficiente para operar. El sistema tiene una segunda capa de control: el `UserStatusFilter`. Este filtro, que se ejecuta en cada request, busca al usuario en la base de datos local y verifica que no esté suspendido ni bloqueado. Un usuario puede tener un token perfectamente válido en Keycloak y aun así recibir un 403 si fue bloqueado en LeyData.
 
-Esto permite al ADMIN actuar con efecto inmediato ante un incidente de seguridad (bloquear a un operador) sin tener que revocar tokens en Keycloak.
+Cuando el ADMIN bloquea a un operador, el sistema realiza dos acciones en secuencia: primero deshabilita al usuario en Keycloak (impide nuevos logins y renovación de tokens), y luego registra el bloqueo en la BD local (`user_status`). El `UserStatusFilter` corta el acceso de los tokens ya emitidos durante la ventana hasta que expiren (~5 minutos por configuración del realm).
 
 ---
 
@@ -98,18 +100,64 @@ JWT válido de Keycloak → UserStatusFilter → blocked=true → 403 FORBIDDEN
 
 ### ¿Qué hace este módulo?
 
-Gestiona el ciclo de vida de los operadores del sistema (no de los titulares de datos). Un operador puede ser un ADMIN, un DPO o un JEFE_DOMINIO. Cada usuario existe en dos sistemas al mismo tiempo: **Keycloak** (gestiona la autenticación, contraseñas y tokens) y **la BD local de LeyData** (gestiona el estado del usuario, sus roles internos y sus dominios asignados).
+Gestiona el ciclo de vida de los operadores del sistema (no de los titulares de datos). Un operador puede ser un ADMIN, un DPO o un JEFE_DOMINIO.
 
-Esta doble persistencia crea una regla importante: cuando el ADMIN crea un usuario, primero lo registra en Keycloak y luego en la BD local. Si la BD local falla por cualquier motivo, el sistema automáticamente borra al usuario recién creado en Keycloak para evitar que quede un usuario "fantasma" que puede autenticarse pero no operar. Esta compensación se hace sin transacciones distribuidas formales — es código manual de rollback.
+**Modelo Keycloak-first:** Keycloak es la única fuente de verdad para identidad, contraseñas, tokens y roles. La BD local almacena exclusivamente datos de negocio: el `keycloak_id` (para hacer JOIN con dominios y auditoría), el flag `active`, y `createdAt`. No existe tabla de roles en la BD local.
+
+- `GET /api/users` consulta Keycloak para obtener la lista de usuarios y sus roles, y enriquece cada resultado con los datos locales (dominios asignados, estado `blocked`). Acepta parámetros opcionales de filtro: `?search=` (busca por nombre/email en Keycloak), `?status=active|inactive|blocked`, `?role=DPO|ADMIN|JEFE_DOMINIO|USER|TITULAR`.
+- Al crear un usuario, el sistema primero lo registra en Keycloak y luego en la BD local. Si la BD local falla, el sistema borra automáticamente al usuario de Keycloak para evitar que quede un "fantasma" que puede autenticarse pero no operar.
+- Al bloquear o desactivar, el sistema primero deshabilita en Keycloak (impide login y refresh), y luego actualiza el estado local.
 
 **Reglas de negocio del módulo:**
 - Un usuario nunca se elimina físicamente. Solo puede desactivarse (suspensión temporal, reversible) o bloquearse (permanente e irreversible desde la API).
-- El ADMIN no puede aplicar ninguna acción destructiva sobre sí mismo.
+- **Un ADMIN no puede bloquearse ni desactivarse a sí mismo.** El sistema rechaza la operación con `400`.
+- **Un ADMIN no puede bloquear ni desactivar a otro ADMIN.** El sistema rechaza la operación con `400`.
 - Al quitar el rol `JEFE_DOMINIO` a un usuario, el sistema limpia automáticamente todos los dominios que tenía asignados, porque sin ese rol no tiene sentido tener dominios.
 - Solo usuarios activos con rol `JEFE_DOMINIO` pueden tener dominios asignados.
 - Solo se pueden asignar dominios que estén activos.
 
 > **Todos los endpoints de este módulo requieren rol `ADMIN`.**
+
+---
+
+### `GET /api/users`
+
+Lista todos los usuarios del sistema. Los datos vienen de Keycloak (roles) enriquecidos con datos locales (dominios, estado `blocked`).
+
+Acepta parámetros opcionales — usar uno a la vez:
+
+| Parámetro | Valores | Descripción |
+|---|---|---|
+| `search` | texto libre | Busca por nombre, email o username. Delegado a Keycloak. |
+| `status` | `active` \| `inactive` \| `blocked` | Filtra por estado del usuario |
+| `role` | `ADMIN` \| `DPO` \| `JEFE_DOMINIO` \| `USER` \| `TITULAR` | Filtra por rol exacto |
+
+```
+GET /api/users                    → todos
+GET /api/users?search=juan        → usuarios cuyo nombre o email contiene "juan"
+GET /api/users?status=active      → activos y no bloqueados
+GET /api/users?status=inactive    → desactivados (active=false y no bloqueados)
+GET /api/users?status=blocked     → bloqueados permanentemente
+GET /api/users?role=DPO           → solo usuarios con rol DPO
+```
+
+```json
+// Response 200
+{
+  "status": "success",
+  "users": [
+    {
+      "id": "uuid-local",
+      "email": "pedro@empresa.cl",
+      "name": "Pedro López",
+      "active": true,
+      "blocked": false,
+      "roles": ["JEFE_DOMINIO"],
+      "domains": ["Marketing", "Legal"]
+    }
+  ]
+}
+```
 
 ---
 
@@ -153,16 +201,32 @@ El ADMIN crea un nuevo operador del sistema. La operación es atómica: si algo 
 
 ### `PUT /api/users/{userId}`
 
-El ADMIN puede editar el nombre, los roles y los dominios asignados de un usuario.
+El ADMIN puede editar el nombre, email, contraseña, roles y dominios asignados de un usuario. Todos los campos son opcionales — solo se actualiza lo que se envía.
 
-Al editar roles, el sistema evalúa si el nuevo conjunto de roles incluye `JEFE_DOMINIO`. Si no lo incluye y el usuario tenía dominios asignados, esos dominios se limpian automáticamente. Esto es importante: el sistema no pregunta, simplemente lo hace como parte de la consistencia del modelo.
+Al cambiar la contraseña, Keycloak la establece como **temporal** (`required_action: UPDATE_PASSWORD`). En el próximo login, Keycloak exige al usuario que defina una nueva contraseña antes de continuar — el backend no necesita hacer nada adicional, Keycloak lo maneja nativamente.
+
+Al editar roles, el sistema evalúa si el nuevo conjunto incluye `JEFE_DOMINIO`. Si no lo incluye y el usuario tenía dominios asignados, esos dominios se limpian automáticamente.
+
+**Caso positivo — cambiar email y contraseña**
+```json
+// Request
+{
+  "email": "nuevoemail@empresa.cl",
+  "password": "NuevaPass123!"
+}
+
+// Response 200
+{ "status": "success", "message": "Usuario actualizado correctamente", "user": { ... } }
+```
+
+En el próximo login del usuario, Keycloak le pedirá que defina una nueva contraseña antes de emitir el token.
 
 **Caso positivo — promover a JEFE_DOMINIO con dominios**
 ```json
 // Request
 {
   "name": "Pedro López",
-  "roles": ["JEFE_DOMINIO"],
+  "roleCodes": ["JEFE_DOMINIO"],
   "domainIds": ["uuid-marketing", "uuid-legal"]
 }
 
@@ -197,7 +261,14 @@ PUT { "roles": ["USER"], "domainIds": [] }
 
 ### `POST /api/users/{userId}/block`
 
-El bloqueo es permanente e irreversible desde la API. Representa un incidente de seguridad o una salida definitiva del operador. Una vez bloqueado, el único camino para desbloquear es intervenir directamente en Keycloak a nivel de administración.
+El bloqueo es permanente e irreversible desde la API. Representa un incidente de seguridad o una salida definitiva del operador.
+
+**Qué hace el sistema al bloquear:**
+1. `keycloak.disableUser()` — deshabilita al usuario en Keycloak: no puede hacer login nuevo ni renovar su token.
+2. Crea un registro en `user_status` con `blocked=true` — el `UserStatusFilter` usa esto para rechazar tokens ya emitidos durante los ~5 minutos hasta que expiren.
+3. Marca `users.active=false` en la BD local.
+
+Una vez bloqueado, el único camino para desbloquear es intervenir directamente en Keycloak a nivel de administración (habilitar el usuario en el Admin Console y limpiar `user_status`).
 
 **Caso positivo**
 ```json
@@ -205,13 +276,11 @@ El bloqueo es permanente e irreversible desde la API. Representa un incidente de
 { "status": "success", "message": "Usuario bloqueado permanentemente", "user": { "blocked": true } }
 ```
 
-**Caso negativo — ADMIN intenta bloquearse a sí mismo**
-
-El sistema identifica al actor del request y compara con el objetivo. No permite autoacciones destructivas.
-
+**Caso negativo — intento de bloquearse a sí mismo o bloquear a otro ADMIN**
 ```json
-// Response 409
-{ "status": "CONFLICT", "code": 409, "message": "No puedes aplicar esta acción sobre tu propio usuario" }
+// Response 400
+{ "status": "BAD_REQUEST", "code": 400, "message": "Un administrador no puede bloquearse a sí mismo" }
+{ "status": "BAD_REQUEST", "code": 400, "message": "No se puede bloquear a otro administrador" }
 ```
 
 **Caso negativo — usuario ya estaba bloqueado**
@@ -224,7 +293,18 @@ El sistema identifica al actor del request y compara con el objetivo. No permite
 
 ### `POST /api/users/{userId}/deactivate` y `/reactivate`
 
-La desactivación es una suspensión temporal. El token de Keycloak sigue siendo válido técnicamente, pero el `UserStatusFilter` rechaza al usuario en cada request hasta que sea reactivado.
+La desactivación es una suspensión temporal reversible.
+
+**Al desactivar:** el sistema llama a `keycloak.disableUser()` (impide nuevos logins y refresh) y marca `users.active=false`. Los tokens ya emitidos son cortados por el `UserStatusFilter` en cada request siguiente, hasta que expiren.
+
+**Al reactivar:** el sistema llama a `keycloak.enableUser()` (restaura la capacidad de login en Keycloak) y marca `users.active=true`. El usuario puede volver a autenticarse normalmente.
+
+**Caso negativo — intento de desactivarse a sí mismo o desactivar a otro ADMIN**
+```json
+// Response 400
+{ "status": "BAD_REQUEST", "code": 400, "message": "Un administrador no puede desactivarse a sí mismo" }
+{ "status": "BAD_REQUEST", "code": 400, "message": "No se puede desactivar a otro administrador" }
+```
 
 **Caso negativo — intentar desactivar o reactivar un usuario bloqueado**
 
@@ -505,7 +585,7 @@ Authorization: Bearer <token-DPO>
 }
 ```
 
-**Regla de negocio:** `code` se normaliza a MAYÚSCULAS y es único en todo el sistema. `approvedBy` se registra automáticamente con el ID del DPO que crea — trazabilidad exacta en organizaciones con múltiples DPOs.
+**Regla de negocio:** `code` se normaliza a MAYÚSCULAS y es único en todo el sistema. `approvedBy` se registra automáticamente con el `keycloak_id` (claim `sub` del JWT) del DPO que crea — trazabilidad exacta en organizaciones con múltiples DPOs.
 
 ---
 
@@ -1267,7 +1347,239 @@ Response 200 — sin cuerpo
 
 ---
 
-## 12. Referencia rápida de códigos de error
+## 12. Templates de consentimiento
+
+### ¿Qué hace este módulo?
+
+Un **Template** es una plantilla de consentimiento que agrupa y ordena Finalidades para ser presentadas al titular. Funciona como la capa de presentación del consentimiento: define qué finalidades se muestran, en qué orden y si son visibles u opcionales.
+
+El módulo implementa versionado: cada `TEMPLATE_KEY` puede tener múltiples versiones, pero solo una puede estar activa en cada momento. Al activar una nueva versión, el sistema desactiva automáticamente la versión anterior del mismo `templateKey`. El contenido de cada template activo queda sellado con un hash SHA-256 para garantizar integridad.
+
+**Estados:** `DRAFT → APPROVED → ACTIVE`
+
+Solo los roles `DPO` y `ADMIN` pueden operar este módulo.
+
+---
+
+### Crear un template
+
+**`POST /api/templates`**  
+**Acceso:** DPO, ADMIN
+
+```json
+// Request
+{
+  "templateKey": "bienvenida-clientes",
+  "name": "Template de bienvenida para clientes",
+  "title": "Gestión de tus datos",
+  "description": "Detalle de cómo tratamos tus datos personales al registrarte",
+  "version": 1,
+  "changeReason": "Versión inicial"
+}
+
+// Response 201
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "templateKey": "bienvenida-clientes",
+  "name": "Template de bienvenida para clientes",
+  "title": "Gestión de tus datos",
+  "description": "Detalle de cómo tratamos tus datos personales al registrarte",
+  "version": 1,
+  "changeReason": "Versión inicial",
+  "status": "DRAFT",
+  "isActive": false,
+  "createdBy": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "approvedBy": null,
+  "approvedAt": null,
+  "activationDate": null,
+  "hashSha256": null,
+  "previousHashSha256": null,
+  "createdAt": "2026-06-27T10:00:00Z"
+}
+```
+
+---
+
+### Vincular una finalidad al template
+
+**`POST /api/templates/{id}/purposes`**  
+**Acceso:** DPO, ADMIN  
+Solo se puede vincular en estado DRAFT.
+
+```json
+// Request
+{
+  "purposeId": "a1b2c3d4-...",
+  "orderPosition": 1,
+  "isVisible": true
+}
+
+// Response 204 (sin cuerpo)
+```
+
+**Caso negativo — template no está en DRAFT**
+```json
+// Response 409
+{ "status": "CONFLICT", "code": 409, "message": "Solo se pueden vincular purposes a un template en estado DRAFT" }
+```
+
+**Caso negativo — la finalidad no está aprobada**
+```json
+// Response 422
+{ "status": "UNPROCESSABLE_ENTITY", "code": 422, "message": "La finalidad debe estar aprobada y activa para vincularse a un template" }
+```
+
+---
+
+### Listar purposes del template
+
+**`GET /api/templates/{id}/purposes`**  
+**Acceso:** DPO, ADMIN
+
+```json
+// Response 200
+[
+  {
+    "purposeId": "a1b2c3d4-...",
+    "purposeName": "Envío de newsletters",
+    "orderPosition": 1,
+    "isVisible": true
+  }
+]
+```
+
+---
+
+### Actualizar orden o visibilidad de una purpose
+
+**`PATCH /api/templates/{id}/purposes/{purposeId}`**  
+**Acceso:** DPO, ADMIN  
+Solo se puede modificar en estado DRAFT.
+
+```json
+// Request (campos opcionales)
+{ "orderPosition": 2, "isVisible": false }
+
+// Response 200 — TemplatePurposeResponse actualizado
+```
+
+---
+
+### Aprobar un template
+
+**`POST /api/templates/{id}/approve`**  
+**Acceso:** DPO, ADMIN  
+Requiere que el template tenga al menos una purpose con `isVisible=true`.
+
+```json
+// Response 200 — TemplateResponse con status: "APPROVED"
+```
+
+**Caso negativo — sin purposes visibles**
+```json
+// Response 422
+{ "status": "UNPROCESSABLE_ENTITY", "code": 422, "message": "El template debe tener al menos una finalidad visible para ser aprobado" }
+```
+
+---
+
+### Activar un template
+
+**`POST /api/templates/{id}/activate`**  
+**Acceso:** DPO, ADMIN  
+El template debe estar en estado APPROVED. Al activar: se calcula y sella el SHA-256 sobre `templateKey+version+name+description+title+purposes(id:order:visible)` y se desactiva cualquier versión anterior del mismo `templateKey`.
+
+```json
+// Response 200 — TemplateResponse con status: "ACTIVE", hashSha256: "abc123..."
+```
+
+**Caso negativo — no está aprobado**
+```json
+// Response 409
+{ "status": "CONFLICT", "code": 409, "message": "Solo se puede activar un template en estado APPROVED" }
+```
+
+---
+
+### Verificar integridad SHA-256
+
+**`GET /api/templates/{id}/verify`**  
+**Acceso:** DPO, ADMIN  
+Recalcula el hash del template activo y lo compara con el almacenado. Permite auditar si el contenido fue alterado fuera del sistema.
+
+```json
+// Response 200
+{
+  "templateId": "3fa85f64-...",
+  "storedHash": "abc123def456...",
+  "computedHash": "abc123def456...",
+  "valid": true
+}
+```
+
+---
+
+### Crear nueva versión
+
+**`POST /api/templates/{id}/new-version`**  
+**Acceso:** DPO, ADMIN  
+Crea un nuevo template en DRAFT copiando el `templateKey` y nombre, con `version` incrementado. La versión anterior no se modifica.
+
+```json
+// Response 201 — TemplateResponse con version: 2, status: "DRAFT"
+```
+
+---
+
+### Listar templates con filtros
+
+**`GET /api/templates`**  
+**Acceso:** DPO, ADMIN  
+Parámetros opcionales: `templateKey`, `isActive`, `createdBy` (keycloak_id), `approvedBy` (keycloak_id), `createdAfter`, `createdBefore` (ISO 8601).
+
+```json
+// Response 200
+[
+  {
+    "id": "3fa85f64-...",
+    "templateKey": "bienvenida-clientes",
+    "version": 1,
+    "status": "ACTIVE",
+    ...
+  }
+]
+```
+
+---
+
+### Historial de versiones
+
+**`GET /api/templates/family/{templateKey}`**  
+**Acceso:** DPO, ADMIN  
+Devuelve todas las versiones del mismo `templateKey` en orden ascendente de versión.
+
+---
+
+### Versión activa de un templateKey
+
+**`GET /api/templates/active/{templateKey}`**  
+**Acceso:** DPO, ADMIN  
+Devuelve la versión actualmente activa. Si no hay ninguna activa devuelve 404.
+
+---
+
+### Reglas de negocio clave
+
+- Un `templateKey` puede tener múltiples versiones pero solo **una puede estar ACTIVE** al mismo tiempo.
+- La vinculación y desvinculación de purposes solo es posible en estado **DRAFT**.
+- Para aprobar un template necesita al menos **una purpose con `isVisible=true`**.
+- El hash SHA-256 se calcula en el momento de **activación** y queda inmutable.
+- `createdBy` y `approvedBy` son el `sub` del JWT (Keycloak ID) — no el UUID local del usuario.
+- Desvincular una purpose de un template no elimina la purpose del sistema.
+
+---
+
+## 13. Referencia rápida de códigos de error
 
 | Código HTTP | Status JSON | Cuándo ocurre |
 |-------------|-------------|---------------|
@@ -1285,9 +1597,14 @@ Response 200 — sin cuerpo
 
 ## Notas transversales de seguridad y comportamiento
 
-**UserStatusFilter — doble capa de autenticación**
+**Doble capa de revocación de acceso**
 
-Después de que Keycloak valida el JWT, el `UserStatusFilter` verifica en la BD local que el usuario tenga `active=true` y `blocked=false`. Esto permite revocar el acceso de un operador con efecto inmediato sin necesidad de invalidar tokens en Keycloak. Si el usuario está suspendido o bloqueado, recibe un 403 en cualquier request, aunque su token sea perfectamente válido.
+Cuando se bloquea o desactiva un usuario, el sistema actúa en dos niveles simultáneamente:
+
+1. **Keycloak (nivel de identidad):** `disableUser()` impide que el usuario haga login nuevo o renueve su token (`/token` con `refresh_token`). Efecto permanente hasta que se habilite de nuevo.
+2. **`UserStatusFilter` (nivel de token existente):** después de que Keycloak valida el JWT, el filtro consulta `user_status` y `users.active`. Si el usuario está bloqueado o inactivo, el request se rechaza con 403 aunque el token sea técnicamente válido. Esto corta el acceso durante la ventana (~5 min) en que los tokens ya emitidos todavía no han expirado.
+
+La combinación de ambas capas garantiza que el ADMIN pueda revocar el acceso de un operador con efecto inmediato ante un incidente de seguridad, sin esperar a que expire el token.
 
 **IP en auditoría — sin X-Forwarded-For**
 

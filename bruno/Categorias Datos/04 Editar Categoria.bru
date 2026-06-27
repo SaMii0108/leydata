@@ -1,0 +1,29 @@
+meta {
+  name: Editar Categoría
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/data-categories/<uuid-aqui>
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "code": "MASCOTA",
+    "name": "Datos de mascotas y animales del cliente",
+    "isSensitive": false
+  }
+}
+
+docs {
+  Solo aplica a categorías no sistema (isSystem=false).
+  Las categorías del sistema son inmutables — retorna 422 si se intenta modificar.
+  Requiere rol DPO o ADMIN.
+}

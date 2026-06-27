@@ -73,7 +73,7 @@ public class DataCategoryService {
                 .oldData(null)
                 .newData(Map.of("code", saved.getCode(), "name", saved.getName(),
                         "isSensitive", saved.getIsSensitive()))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -110,7 +110,7 @@ public class DataCategoryService {
                 .action("DATA_CATEGORY_UPDATED")
                 .oldData(Map.of("code", oldCode, "name", oldName))
                 .newData(Map.of("code", saved.getCode(), "name", saved.getName()))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -139,7 +139,7 @@ public class DataCategoryService {
                 .action("DATA_CATEGORY_DEACTIVATED")
                 .oldData(Map.of("isActive", true))
                 .newData(Map.of("isActive", false))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 

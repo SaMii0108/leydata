@@ -13,14 +13,6 @@ public interface UsersRepository extends JpaRepository<Users, UUID> {
     Optional<Users> findByEmail(String email);
     Optional<Users> findByKeycloakId(String keycloakId);
 
-    @Query("""
-            SELECT DISTINCT u FROM Users u
-            JOIN u.userDomains ud
-            JOIN u.userRoles ur
-            JOIN ur.role r
-            WHERE ud.domain.id = :domainId
-              AND r.code = 'JEFE_DOMINIO'
-              AND u.active = true
-            """)
-    List<Users> findActiveJefesByDomainId(@Param("domainId") UUID domainId);
+    @Query("SELECT u FROM Users u WHERE u.keycloakId IN :keycloakIds AND u.active = true")
+    List<Users> findActiveByKeycloakIdIn(@Param("keycloakIds") List<String> keycloakIds);
 }

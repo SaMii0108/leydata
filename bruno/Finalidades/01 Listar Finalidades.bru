@@ -1,0 +1,22 @@
+meta {
+  name: Listar Finalidades
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/purposes
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Devuelve las finalidades activas visibles para el rol del token:
+  - DPO / ADMIN: todas las del sistema
+  - JEFE_DOMINIO: solo las de sus dominios asignados
+  Requiere rol DPO, ADMIN o JEFE_DOMINIO.
+}

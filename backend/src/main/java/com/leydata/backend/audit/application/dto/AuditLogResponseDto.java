@@ -21,7 +21,7 @@ public class AuditLogResponseDto {
     private String action;
     private String oldData;
     private String newData;
-    private UUID actorId;
+    private String actorId;
     private String actorRole;
     private String ipAddress;
     private String userAgent;

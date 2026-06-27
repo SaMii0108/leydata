@@ -1,0 +1,1670 @@
+{
+  "info": {
+    "name": "Ley Data API",
+    "description": "Colección completa de endpoints del backend Ley Data (Keycloak-first). Requiere el entorno 'Ley Data — Local' importado y las variables email/password/token configuradas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Keycloak",
+      "item": [
+        {
+          "name": "Obtener Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.environment.set('token', json.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "client_id",
+                  "value": "leydata-backend"
+                },
+                {
+                  "key": "username",
+                  "value": "{{email}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}"
+                }
+              ]
+            },
+            "url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+            "description": "Autentica con Keycloak y guarda el access_token en {{token}}."
+          }
+        },
+        {
+          "name": "Renovar Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.environment.set('token', json.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "refresh_token"
+                },
+                {
+                  "key": "client_id",
+                  "value": "leydata-backend"
+                },
+                {
+                  "key": "refresh_token",
+                  "value": "{{refreshToken}}"
+                }
+              ]
+            },
+            "url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+            "description": "Renueva el access_token usando el refresh_token."
+          }
+        },
+        {
+          "name": "Token Admin (Service Account)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.environment.set('adminToken', json.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "leydata-backend"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{clientSecret}}"
+                }
+              ]
+            },
+            "url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+            "description": "Obtiene token de servicio para llamar la Admin API de Keycloak."
+          }
+        },
+        {
+          "name": "Listar Usuarios del Realm",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{keycloakUrl}}/admin/realms/{{realm}}/users",
+            "description": "Lista todos los usuarios del realm. Requiere token admin (service account)."
+          }
+        },
+        {
+          "name": "Ver Roles de un Usuario",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{keycloakUrl}}/admin/realms/{{realm}}/users/<keycloak-user-id>/role-mappings/realm",
+            "description": "Lista los roles del realm asignados a un usuario específico."
+          }
+        },
+        {
+          "name": "Habilitar o Deshabilitar Usuario",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}"
+            },
+            "url": "{{keycloakUrl}}/admin/realms/{{realm}}/users/<keycloak-user-id>",
+            "description": "Habilita (true) o deshabilita (false) un usuario en Keycloak."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Usuarios",
+      "item": [
+        {
+          "name": "Listar Usuarios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "juan",
+                  "description": "Busca por nombre/email en Keycloak",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "active | inactive | blocked",
+                  "disabled": true
+                },
+                {
+                  "key": "role",
+                  "value": "DPO",
+                  "description": "ADMIN | DPO | JEFE_DOMINIO | USER | TITULAR",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista todos los usuarios (consulta Keycloak). Parámetros opcionales desactivados — habilitar el que se necesite:\n- `search`: busca por nombre/email\n- `status`: active | inactive | blocked\n- `role`: filtra por rol exacto\nRequiere ADMIN."
+          }
+        },
+        {
+          "name": "Obtener Usuario por ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/<uuid-aqui>",
+            "description": "Retorna un usuario por su ID. Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Crear Usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Nombre\",\n  \"lastName\": \"Apellido\",\n  \"email\": \"usuario@ejemplo.cl\",\n  \"password\": \"Contraseña1!\",\n  \"role\": \"DPO\",\n  \"domainId\": null\n}"
+            },
+            "url": "{{baseUrl}}/api/users",
+            "description": "Crea usuario en Keycloak y caché local. Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Editar Usuario",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nombre Apellido\",\n  \"email\": \"nuevo@empresa.cl\",\n  \"password\": \"NuevaPass123!\",\n  \"roleCodes\": [\n    \"JEFE_DOMINIO\"\n  ],\n  \"domainIds\": [\n    \"<uuid-dominio>\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/users/<uuid-aqui>",
+            "description": "Edita nombre, email, contraseña, roles y dominios del usuario. Todos los campos son opcionales.\n\n- name: nuevo nombre completo (actualiza firstName/lastName en Keycloak)\n- email: nuevo email único (actualiza email y username en Keycloak)\n- password: nueva contraseña temporal — Keycloak fuerza cambio en el próximo login\n- roleCodes: reemplaza los roles actuales. Si se quita JEFE_DOMINIO, sus dominios se limpian\n- domainIds: reemplaza los dominios asignados. Solo válido con rol JEFE_DOMINIO\n\nRequiere rol ADMIN. No aplica a usuarios bloqueados."
+          }
+        },
+        {
+          "name": "Bloquear Usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/<uuid-aqui>/block",
+            "description": "Bloquea el usuario: deshabilita en Keycloak + marca blocked=true + active=false. Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Desactivar Usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/<uuid-aqui>/deactivate",
+            "description": "Desactiva el usuario (soft-delete). Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Reactivar Usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/<uuid-aqui>/reactivate",
+            "description": "Reactiva un usuario desactivado. Requiere ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dominios",
+      "item": [
+        {
+          "name": "Listar Dominios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/domains",
+            "description": "Lista todos los dominios activos. Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Crear Dominio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"TI\",\n  \"name\": \"Tecnología de la Información\",\n  \"description\": \"Área de TI\",\n  \"jefeId\": \"<uuid-usuario>\"\n}"
+            },
+            "url": "{{baseUrl}}/api/domains",
+            "description": "Crea un nuevo dominio organizacional. Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Desactivar Dominio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/domains/<uuid-aqui>/deactivate",
+            "description": "Soft-delete del dominio (active=false). Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Reactivar Dominio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/domains/<uuid-aqui>/reactivate",
+            "description": "Reactiva un dominio desactivado. Requiere ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Solicitudes de Finalidad",
+      "item": [
+        {
+          "name": "Crear Solicitud",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Análisis de satisfacción de clientes\",\n  \"description\": \"Recopilación de datos para medir satisfacción\",\n  \"legalBasisId\": 1,\n  \"domainId\": \"<uuid-dominio>\",\n  \"dataCategories\": [1, 3]\n}"
+            },
+            "url": "{{baseUrl}}/api/purpose-requests",
+            "description": "Crea solicitud de finalidad. Requiere JEFE_DOMINIO."
+          }
+        },
+        {
+          "name": "Mis Solicitudes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purpose-requests/my",
+            "description": "Lista las solicitudes del usuario autenticado. Requiere JEFE_DOMINIO."
+          }
+        },
+        {
+          "name": "Solicitudes Pendientes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purpose-requests/pending",
+            "description": "Lista solicitudes en estado PENDING. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Todas las Solicitudes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purpose-requests",
+            "description": "Lista todas las solicitudes. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Revisar Solicitud",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\",\n  \"reviewNotes\": \"Aprobado según artículo 12 Ley 21.719\"\n}"
+            },
+            "url": "{{baseUrl}}/api/purpose-requests/<uuid-aqui>/review",
+            "description": "Aprueba o rechaza una solicitud. status: APPROVED | REJECTED. Requiere DPO o ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Finalidades",
+      "item": [
+        {
+          "name": "Listar Finalidades",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purposes",
+            "description": "Lista todas las finalidades aprobadas. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Obtener Finalidad por ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purposes/<uuid-aqui>",
+            "description": "Retorna una finalidad específica. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Finalidades por Dominio",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purposes/domain/<uuid-dominio>",
+            "description": "Lista finalidades de un dominio. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Crear Finalidad",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Marketing digital\",\n  \"description\": \"Envío de comunicaciones comerciales\",\n  \"legalBasisId\": 1,\n  \"domainId\": \"<uuid-dominio>\",\n  \"retentionDays\": 365,\n  \"active\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/purposes",
+            "description": "Crea una nueva finalidad. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Editar Finalidad",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nombre actualizado\",\n  \"description\": \"Descripción actualizada\"\n}"
+            },
+            "url": "{{baseUrl}}/api/purposes/<uuid-aqui>",
+            "description": "Edita una finalidad existente. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Desactivar Finalidad",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purposes/<uuid-aqui>/deactivate",
+            "description": "Soft-delete de la finalidad. Requiere DPO o ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bases de Licitud",
+      "item": [
+        {
+          "name": "Listar Bases",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/legal-basis",
+            "description": "Lista todas las bases de licitud (catálogo Ley 21.719). Requiere autenticación."
+          }
+        },
+        {
+          "name": "Base por Consentimiento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/legal-basis/consent",
+            "description": "Retorna la base de licitud correspondiente a consentimiento (Art. 12). Requiere autenticación."
+          }
+        },
+        {
+          "name": "Base por ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/legal-basis/<id-aqui>",
+            "description": "Retorna una base de licitud por ID. Requiere autenticación."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categorías de Datos",
+      "item": [
+        {
+          "name": "Listar Categorías",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/data-categories",
+            "description": "Lista todas las categorías de datos (catálogo + custom). Requiere autenticación."
+          }
+        },
+        {
+          "name": "Categorías Sensibles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/data-categories/sensitive",
+            "description": "Lista solo las categorías marcadas como datos sensibles. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Crear Categoría Custom",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Datos biométricos\",\n  \"description\": \"Huellas dactilares y reconocimiento facial\",\n  \"sensitive\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/data-categories",
+            "description": "Crea una categoría de datos personalizada. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Editar Categoría",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nombre actualizado\",\n  \"description\": \"Descripción actualizada\"\n}"
+            },
+            "url": "{{baseUrl}}/api/data-categories/<id-aqui>",
+            "description": "Edita una categoría custom. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Desactivar Categoría",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/data-categories/<id-aqui>/deactivate",
+            "description": "Soft-delete de la categoría. Requiere DPO o ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Retención",
+      "item": [
+        {
+          "name": "Listar Vínculos Finalidad-Categoría",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purpose-data-categories",
+            "description": "Lista todos los vínculos entre finalidades y categorías de datos. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Vincular + Política de Retención",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purposeId\": \"<uuid-finalidad>\",\n  \"dataCategoryId\": 1,\n  \"retentionDays\": 365,\n  \"retentionJustification\": \"Conforme Art. 14 Ley 21.719\"\n}"
+            },
+            "url": "{{baseUrl}}/api/purpose-data-categories",
+            "description": "Vincula una categoría a una finalidad con política de retención. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Actualizar Retención",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"retentionDays\": 180,\n  \"retentionJustification\": \"Reducido por nueva política interna\"\n}"
+            },
+            "url": "{{baseUrl}}/api/purpose-data-categories/<id-aqui>",
+            "description": "Actualiza la política de retención de un vínculo. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Desvincular",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/purpose-data-categories/<id-aqui>",
+            "description": "Elimina el vínculo finalidad-categoría. Requiere DPO o ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documentos de Privacidad",
+      "item": [
+        {
+          "name": "Listar Documentos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents",
+            "description": "Lista todos los documentos. DPO/ADMIN ven todos; otros roles solo PUBLISHED. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Crear Documento (DRAFT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Política de Privacidad v1\",\n  \"category\": \"POLITICA_PRIVACIDAD\",\n  \"content\": \"Contenido completo de la política...\"\n}"
+            },
+            "url": "{{baseUrl}}/api/privacy-documents",
+            "description": "Crea un nuevo documento en estado DRAFT. Requiere DPO."
+          }
+        },
+        {
+          "name": "Obtener Documento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>",
+            "description": "Obtiene un documento. DPO/ADMIN: respuesta completa. Otros: solo PUBLISHED sin content. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Editar Documento (DRAFT)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nombre actualizado\",\n  \"content\": \"Contenido actualizado...\"\n}"
+            },
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>",
+            "description": "Edita un documento. Solo aplica en estado DRAFT. Requiere DPO."
+          }
+        },
+        {
+          "name": "Vincular Finalidad",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-documento>/purposes/<uuid-finalidad>",
+            "description": "Vincula una finalidad al documento DRAFT. Retorna 204. Requiere DPO."
+          }
+        },
+        {
+          "name": "Desvincular Finalidad",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-documento>/purposes/<uuid-finalidad>",
+            "description": "Elimina vínculo de finalidad. Solo en estado DRAFT. Retorna 204. Requiere DPO."
+          }
+        },
+        {
+          "name": "Enviar a Revisión (DRAFT → IN_REVIEW)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>/submit",
+            "description": "Envía documento a revisión. Requiere content y al menos una finalidad vinculada. Requiere DPO."
+          }
+        },
+        {
+          "name": "Aprobar (IN_REVIEW → APPROVED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>/approve",
+            "description": "Aprueba el documento. Solo desde IN_REVIEW. Requiere DPO."
+          }
+        },
+        {
+          "name": "Rechazar (IN_REVIEW → REJECTED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rejectionReason\": \"El documento no cumple con los requisitos del artículo 14.\"\n}"
+            },
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>/reject",
+            "description": "Rechaza el documento con motivo. Solo desde IN_REVIEW. Requiere DPO."
+          }
+        },
+        {
+          "name": "Publicar (APPROVED → PUBLISHED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>/publish",
+            "description": "Publica el documento y calcula hash SHA-256. Solo desde APPROVED. Requiere DPO."
+          }
+        },
+        {
+          "name": "Archivar (→ ARCHIVED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>/archive",
+            "description": "Archiva un documento PUBLISHED. Requiere DPO."
+          }
+        },
+        {
+          "name": "Nueva Versión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>/new-version",
+            "description": "Crea nuevo DRAFT en la misma familia. Solo desde PUBLISHED o ARCHIVED. Requiere DPO."
+          }
+        },
+        {
+          "name": "Listar Familia de Versiones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/family/<family-uuid-aqui>",
+            "description": "Lista todas las versiones activas de una familia de documentos. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Descargar PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>/pdf",
+            "description": "Descarga el PDF del documento PUBLISHED. Responde application/pdf. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Verificar Integridad SHA-256",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/privacy-documents/<uuid-aqui>/verify",
+            "description": "Verifica integridad SHA-256 del documento. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Documento Activo por Categoría",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/privacy-documents/active-by-category?category=POLITICA_PRIVACIDAD",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "privacy-documents",
+                "active-by-category"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "POLITICA_PRIVACIDAD"
+                }
+              ]
+            },
+            "description": "Retorna el documento PUBLISHED activo para una categoría. Requiere autenticación."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auditoría",
+      "item": [
+        {
+          "name": "Consultar Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit/logs?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                },
+                {
+                  "key": "action",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "table",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "actorEmail",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Consulta el log de auditoría inmutable. Filtros opcionales: action, table, actorEmail. Requiere ADMIN o DPO."
+          }
+        },
+        {
+          "name": "Verificar Cadena",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/audit/logs/verify",
+            "description": "Verifica la integridad de la cadena de logs. Requiere ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notificaciones",
+      "item": [
+        {
+          "name": "Listar Notificaciones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/notifications",
+            "description": "Lista las notificaciones del usuario autenticado. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Contador No Leídas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/notifications/unread-count",
+            "description": "Retorna el número de notificaciones no leídas. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Marcar como Leída",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/notifications/<id-aqui>/read",
+            "description": "Marca una notificación como leída. Retorna 204. Requiere autenticación."
+          }
+        },
+        {
+          "name": "Marcar Todas como Leídas",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/notifications/read-all",
+            "description": "Marca todas las notificaciones del usuario como leídas. Retorna 204. Requiere autenticación."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "item": [
+        {
+          "name": "Listar Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates"
+              ],
+              "query": [
+                {
+                  "key": "templateKey",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "createdBy",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "approvedBy",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "createdAfter",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "createdBefore",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista templates con filtros opcionales. Params: templateKey, isActive, createdBy, approvedBy, createdAfter, createdBefore. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear Template (DRAFT)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates"
+              ]
+            },
+            "description": "Crea template en DRAFT. templateKey identifica la familia de versiones. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateKey\": \"bienvenida-clientes\",\n  \"name\": \"Template de bienvenida para clientes\",\n  \"title\": \"Gestión de tus datos personales\",\n  \"description\": \"Detalle de cómo tratamos tus datos al registrarte\",\n  \"version\": 1,\n  \"changeReason\": \"Versión inicial\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Obtener Template por ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>"
+              ]
+            },
+            "description": "Obtiene template por UUID. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Nueva Versión de Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/new-version",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "new-version"
+              ]
+            },
+            "description": "Crea nueva versión DRAFT del mismo templateKey con version incrementado. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Historial de Versiones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/family/<templateKey>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "family",
+                "<templateKey>"
+              ]
+            },
+            "description": "Devuelve todas las versiones de un templateKey en orden ascendente. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Versión Activa",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/active/<templateKey>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "active",
+                "<templateKey>"
+              ]
+            },
+            "description": "Devuelve la versión ACTIVE del templateKey. 404 si no hay ninguna activa. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Aprobar Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "approve"
+              ]
+            },
+            "description": "Aprueba template en DRAFT. Requiere al menos una purpose con isVisible=true. Transición: DRAFT → APPROVED. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Activar Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "activate"
+              ]
+            },
+            "description": "Activa template APPROVED. Sella SHA-256 y desactiva versión anterior del mismo templateKey. Transición: APPROVED → ACTIVE. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verificar Integridad SHA-256",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "verify"
+              ]
+            },
+            "description": "Recalcula SHA-256 y compara con el hash sellado. Responde con { valid, storedHash, computedHash }. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Vincular Purpose al Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/purposes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "purposes"
+              ]
+            },
+            "description": "Vincula finalidad aprobada al template DRAFT. 204 No Content. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purposeId\": \"<uuid-finalidad>\",\n  \"orderPosition\": 1,\n  \"isVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Listar Purposes del Template",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/purposes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "purposes"
+              ]
+            },
+            "description": "Devuelve purposes vinculadas ordenadas por orderPosition. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Actualizar Purpose en Template",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/purposes/<uuid-finalidad>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "purposes",
+                "<uuid-finalidad>"
+              ]
+            },
+            "description": "Actualiza orderPosition o isVisible de la purpose en el template DRAFT. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderPosition\": 2,\n  \"isVisible\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Desvincular Purpose del Template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/purposes/<uuid-finalidad>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "purposes",
+                "<uuid-finalidad>"
+              ]
+            },
+            "description": "Elimina el vínculo purpose-template. Solo en DRAFT. 204 No Content. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

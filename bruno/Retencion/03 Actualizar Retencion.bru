@@ -1,0 +1,30 @@
+meta {
+  name: Actualizar Política de Retención
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/purposes/<uuid-finalidad>/data-categories/<uuid-vinculo>/retention
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "retentionPeriod": 3,
+    "retentionUnit": "YEARS",
+    "legalJustification": "Actualización normativa 2026",
+    "anonymizeAfter": false
+  }
+}
+
+docs {
+  Actualiza el plazo de retención de una categoría ya vinculada.
+  Bloqueado si la finalidad está en un documento PUBLISHED.
+  Requiere rol DPO o ADMIN.
+}

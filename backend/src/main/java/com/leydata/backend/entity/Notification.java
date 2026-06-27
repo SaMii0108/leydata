@@ -20,7 +20,7 @@ public class Notification {
     private UUID id;
 
     @Column(name = "recipient_id", nullable = false)
-    private UUID recipientId;
+    private String recipientId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false)
