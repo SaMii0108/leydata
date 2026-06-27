@@ -1,0 +1,23 @@
+meta {
+  name: Desactivar Usuario
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/users/<uuid-aqui>/deactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Suspensión temporal reversible.
+  1. keycloak.disableUser() — impide nuevos logins y refresh de tokens
+  2. users.active=false en BD local — UserStatusFilter rechaza con 403 los tokens existentes
+  Para revertir: usar endpoint 07 Reactivar.
+  Requiere rol ADMIN.
+}

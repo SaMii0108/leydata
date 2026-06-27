@@ -27,8 +27,8 @@ public class PrivacyDocumentResponse {
     private boolean hasPdf;
     private String hashSha256;
     private LocalDateTime publishAt;
-    private UUID createdBy;
-    private UUID approvedBy;
+    private String createdBy;
+    private String approvedBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<UUID> purposeIds;

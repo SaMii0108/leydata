@@ -2,7 +2,6 @@ package com.leydata.backend.seeder;
 
 import com.leydata.backend.entity.*;
 import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
-import com.leydata.backend.orgdomain.infrastructure.persistence.UserDomainsRepository;
 import com.leydata.backend.privacydoc.domain.enums.DocumentCategory;
 import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
@@ -17,11 +16,11 @@ import com.leydata.backend.repository.DataRetentionPoliciesRepository;
 import com.leydata.backend.repository.DataSubjectsRepository;
 import com.leydata.backend.repository.LegalBasisCatalogRepository;
 import com.leydata.backend.repository.PurposeDataCategoriesRepository;
-import com.leydata.backend.repository.TemplatePurposesRepository;
-import com.leydata.backend.repository.TemplatesRepository;
-import com.leydata.backend.user.infrastructure.persistence.RoleRepository;
+import com.leydata.backend.template.infrastructure.persistence.TemplatePurposesRepository;
+import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
 import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
-import com.leydata.backend.user.infrastructure.persistence.UsersRoleRepository;
+import com.leydata.backend.userdomain.domain.UserDomain;
+import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -46,11 +45,14 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TestDataSeeder implements CommandLineRunner {
 
+    private static final String KC_DPO      = "aaaaaaaa-0001-0001-0001-000000000001";
+    private static final String KC_JEFE_MKT = "aaaaaaaa-0002-0002-0002-000000000002";
+    private static final String KC_JEFE_TI  = "aaaaaaaa-0003-0003-0003-000000000003";
+    private static final String KC_USER     = "aaaaaaaa-0004-0004-0004-000000000004";
+
     private final UsersRepository usersRepo;
-    private final RoleRepository roleRepo;
-    private final UsersRoleRepository usersRoleRepo;
     private final DomainsRepository domainsRepo;
-    private final UserDomainsRepository userDomainsRepo;
+    private final UserDomainRepository userDomainRepo;
     private final PurposeRequestsRepository purposeRequestsRepo;
     private final PurposesRepository purposesRepo;
     private final LegalBasisCatalogRepository legalBasisRepo;
@@ -78,10 +80,8 @@ public class TestDataSeeder implements CommandLineRunner {
 
         List<LegalBasisCatalog> bases = seedLegalBasis();
         List<DataCategories> categories = seedDataCategories();
-        seedExtraRoles();
         List<Domains> domains = seedDomains();
         List<Users> users = seedUsers();
-        seedUserRoles(users);
         seedUserDomains(users, domains);
         List<PurposeRequests> requests = seedPurposeRequests(users, domains);
         List<Purposes> purposes = seedPurposes(bases, domains, users, requests);
@@ -157,20 +157,7 @@ public class TestDataSeeder implements CommandLineRunner {
         return c;
     }
 
-    // ── 3. ROLES EXTRA (USER, TITULAR) ───────────────────────────────────────────
-
-    private void seedExtraRoles() {
-        for (String code : List.of("USER", "TITULAR")) {
-            roleRepo.findByCode(code).orElseGet(() -> {
-                Role r = new Role();
-                r.setCode(code);
-                r.setName(code);
-                return roleRepo.save(r);
-            });
-        }
-    }
-
-    // ── 4. DOMINIOS ──────────────────────────────────────────────────────────────
+    // ── 3. DOMINIOS ──────────────────────────────────────────────────────────────
 
     private List<Domains> seedDomains() {
         return domainsRepo.saveAll(List.of(
@@ -189,71 +176,42 @@ public class TestDataSeeder implements CommandLineRunner {
         return d;
     }
 
-    // ── 5. USUARIOS ──────────────────────────────────────────────────────────────
+    // ── 4. USUARIOS ──────────────────────────────────────────────────────────────
+    // Índice: 0=dpo, 1=jefe-mkt, 2=jefe-ti, 3=user
 
     private List<Users> seedUsers() {
         return usersRepo.saveAll(List.of(
-                user("dpo@medvida.cl", "Carmen Soto Vera", false),
-                user("m.gutierrez@medvida.cl", "Mauricio Gutiérrez", false),
-                user("f.torres@medvida.cl", "Felipe Torres Muñoz", false),
-                user("a.reyes@medvida.cl", "Andrea Reyes Díaz", false)));
+                user(KC_DPO,      "dpo@medvida.cl",         "Carmen Soto Vera"),
+                user(KC_JEFE_MKT, "m.gutierrez@medvida.cl", "Mauricio Gutiérrez"),
+                user(KC_JEFE_TI,  "f.torres@medvida.cl",    "Felipe Torres Muñoz"),
+                user(KC_USER,     "a.reyes@medvida.cl",      "Andrea Reyes Díaz")));
     }
 
-    private Users user(String email, String name, boolean mustChange) {
+    private Users user(String keycloakId, String email, String name) {
         Users u = new Users();
+        u.setKeycloakId(keycloakId);
         u.setEmail(email);
-        u.setPassword(null); // Keycloak gestiona credenciales
         u.setName(name);
         u.setActive(true);
-        u.setBlocked(false);
-        u.setMustChangePassword(mustChange);
         u.setCreatedAt(NOW);
         return u;
     }
 
-    // ── 6. ASIGNACIÓN DE ROLES ───────────────────────────────────────────────────
-    // Índice de users: 0=dpo, 1=jefe-mkt, 2=jefe-ti, 3=user
-
-    private void seedUserRoles(List<Users> users) {
-        assign(users.get(0), "DPO");
-        assign(users.get(1), "JEFE_DOMINIO");
-        assign(users.get(2), "JEFE_DOMINIO");
-        assign(users.get(3), "USER");
-    }
-
-    private void assign(Users user, String roleCode) {
-        Role role = roleRepo.findByCode(roleCode)
-                .orElseThrow(() -> new IllegalStateException("Rol no encontrado: " + roleCode));
-        UsersRole.UsersRoleId id = new UsersRole.UsersRoleId();
-        id.setUserId(user.getId());
-        id.setRoleId(role.getId());
-        UsersRole ur = new UsersRole();
-        ur.setId(id);
-        ur.setUser(user);
-        ur.setRole(role);
-        usersRoleRepo.save(ur);
-    }
-
-    // ── 7. ASIGNACIÓN USUARIO-DOMINIO ────────────────────────────────────────────
+    // ── 5. ASIGNACIÓN USUARIO-DOMINIO ────────────────────────────────────────────
     // Índice de domains: 0=MKT, 1=LEGAL, 2=TI
 
     private void seedUserDomains(List<Users> users, List<Domains> domains) {
-        linkUserDomain(users.get(1), domains.get(0)); // m.gutierrez → MKT
-        linkUserDomain(users.get(2), domains.get(2)); // f.torres → TI
+        userDomainRepo.save(UserDomain.builder()
+                .keycloakId(users.get(1).getKeycloakId())
+                .domain(domains.get(0))
+                .build()); // m.gutierrez → MKT
+        userDomainRepo.save(UserDomain.builder()
+                .keycloakId(users.get(2).getKeycloakId())
+                .domain(domains.get(2))
+                .build()); // f.torres → TI
     }
 
-    private void linkUserDomain(Users user, Domains domain) {
-        UserDomains.UserDomainsId id = new UserDomains.UserDomainsId();
-        id.setUserId(user.getId());
-        id.setDomainId(domain.getId());
-        UserDomains ud = new UserDomains();
-        ud.setId(id);
-        ud.setUser(user);
-        ud.setDomain(domain);
-        userDomainsRepo.save(ud);
-    }
-
-    // ── 8. SOLICITUDES DE PROPÓSITO ──────────────────────────────────────────────
+    // ── 6. SOLICITUDES DE PROPÓSITO ──────────────────────────────────────────────
 
     private List<PurposeRequests> seedPurposeRequests(List<Users> users, List<Domains> domains) {
         Users dpo = users.get(0);
@@ -264,20 +222,20 @@ public class TestDataSeeder implements CommandLineRunner {
 
         PurposeRequests approved = new PurposeRequests();
         approved.setDomainId(mkt.getId());
-        approved.setRequesterId(jefeMkt.getId());
+        approved.setRequesterId(jefeMkt.getKeycloakId());
         approved.setTitle("Campaña de salud preventiva 2025");
         approved.setJustification(
                 "Se requiere enviar campañas de vacunación y control preventivo a afiliados activos con consentimiento.");
         approved.setRequestedData("{\"datos\": [\"EMAIL\", \"NOMBRE_COMPLETO\", \"RUT\"]}");
         approved.setStatus("APPROVED");
-        approved.setReviewerId(dpo.getId());
+        approved.setReviewerId(dpo.getKeycloakId());
         approved.setReviewNotes("Solicitud aprobada. Base legal ART_12_CONSENTIMIENTO verificada.");
         approved.setCreatedAt(NOW.minusDays(30));
         approved.setUpdatedAt(NOW.minusDays(25));
 
         PurposeRequests pending = new PurposeRequests();
         pending.setDomainId(ti.getId());
-        pending.setRequesterId(jefeTi.getId());
+        pending.setRequesterId(jefeTi.getKeycloakId());
         pending.setTitle("Análisis de riesgo actuarial anonimizado");
         pending.setJustification(
                 "Análisis estadístico interno para ajuste de prima basado en datos anonimizados de siniestros.");
@@ -287,12 +245,12 @@ public class TestDataSeeder implements CommandLineRunner {
 
         PurposeRequests rejected = new PurposeRequests();
         rejected.setDomainId(mkt.getId());
-        rejected.setRequesterId(jefeMkt.getId());
+        rejected.setRequesterId(jefeMkt.getKeycloakId());
         rejected.setTitle("Boletín informativo de salud mensual");
         rejected.setJustification("Envío de boletín con consejos de salud y promociones de coberturas adicionales.");
         rejected.setRequestedData("{\"datos\": [\"EMAIL\", \"DATOS_SALUD\"]}");
         rejected.setStatus("REJECTED");
-        rejected.setReviewerId(dpo.getId());
+        rejected.setReviewerId(dpo.getKeycloakId());
         rejected.setReviewNotes(
                 "Rechazada: incluye DATOS_SALUD sin base legal ART_13 explícita. Reenviar con justificación del Art. 13.");
         rejected.setCreatedAt(NOW.minusDays(15));
@@ -301,13 +259,13 @@ public class TestDataSeeder implements CommandLineRunner {
         return purposeRequestsRepo.saveAll(List.of(approved, pending, rejected));
     }
 
-    // ── 9. PROPÓSITOS ────────────────────────────────────────────────────────────
+    // ── 7. PROPÓSITOS ────────────────────────────────────────────────────────────
 
     private List<Purposes> seedPurposes(List<LegalBasisCatalog> bases, List<Domains> domains,
             List<Users> users, List<PurposeRequests> requests) {
         LegalBasisCatalog art12c = bases.get(0); // ART_12_CONSENTIMIENTO
         LegalBasisCatalog art12k = bases.get(1); // ART_12_CONTRATO
-        LegalBasisCatalog art13 = bases.get(2); // ART_13_DATOS_SENSIBLES
+        LegalBasisCatalog art13 = bases.get(2);  // ART_13_DATOS_SENSIBLES
 
         Domains mkt = domains.get(0);
         Domains legal = domains.get(1);
@@ -366,14 +324,14 @@ public class TestDataSeeder implements CommandLineRunner {
         p.setLegalBasisId(basis.getId());
         p.setDomainId(domain.getId());
         p.setIsActive(true);
-        p.setCreatedBy(creator.getId());
-        p.setApprovedBy(creator.getId());
+        p.setCreatedBy(creator.getKeycloakId());
+        p.setApprovedBy(creator.getKeycloakId());
         p.setCreatedAt(NOW.minusDays(20));
         p.setUpdatedAt(NOW.minusDays(20));
         return p;
     }
 
-    // ── 10. CATEGORÍAS DE DATOS POR PROPÓSITO ────────────────────────────────────
+    // ── 8. CATEGORÍAS DE DATOS POR PROPÓSITO ────────────────────────────────────
 
     private List<PurposeDataCategories> seedPurposeDataCategories(List<Purposes> purposes,
             List<DataCategories> cats) {
@@ -386,13 +344,13 @@ public class TestDataSeeder implements CommandLineRunner {
 
         return purposeDataCategoriesRepo.saveAll(List.of(
                 pdc(campanas, cats.get(0), false), // MKTG_CAMPANAS → EMAIL (opcional)
-                pdc(campanas, cats.get(1), true), // MKTG_CAMPANAS → NOMBRE_COMPLETO
-                pdc(campanas, cats.get(2), true), // MKTG_CAMPANAS → RUT
-                pdc(facturacion, cats.get(2), true), // LEGAL_FACTURACION → RUT
-                pdc(facturacion, cats.get(5), true), // LEGAL_FACTURACION → DATOS_FINANCIEROS
-                pdc(mejora, cats.get(0), false), // TI_MEJORA → EMAIL (opcional)
+                pdc(campanas, cats.get(1), true),  // MKTG_CAMPANAS → NOMBRE_COMPLETO
+                pdc(campanas, cats.get(2), true),  // MKTG_CAMPANAS → RUT
+                pdc(facturacion, cats.get(2), true),   // LEGAL_FACTURACION → RUT
+                pdc(facturacion, cats.get(5), true),   // LEGAL_FACTURACION → DATOS_FINANCIEROS
+                pdc(mejora, cats.get(0), false),        // TI_MEJORA → EMAIL (opcional)
                 pdc(datosClinicos, cats.get(2), true), // SALUD_CLINICOS → RUT
-                pdc(datosClinicos, cats.get(4), true) // SALUD_CLINICOS → DATOS_SALUD
+                pdc(datosClinicos, cats.get(4), true)  // SALUD_CLINICOS → DATOS_SALUD
         ));
     }
 
@@ -404,10 +362,9 @@ public class TestDataSeeder implements CommandLineRunner {
         return p;
     }
 
-    // ── 11. POLÍTICAS DE RETENCIÓN ───────────────────────────────────────────────
+    // ── 9. POLÍTICAS DE RETENCIÓN ───────────────────────────────────────────────
 
     private void seedRetentionPolicies(List<PurposeDataCategories> pdcs) {
-        // retención en MONTHS con justificación legal por tipo de dato
         int[] periods = { 12, 24, 60, 60, 36, 84, 60, 120 };
         String[] justifications = {
                 "Email para contacto preventivo: 1 año desde último envío (Art. 12 Ley 21.719).",
@@ -433,55 +390,43 @@ public class TestDataSeeder implements CommandLineRunner {
         }
     }
 
-    // ── 12. PLANTILLAS ───────────────────────────────────────────────────────────
+    // ── 10. PLANTILLAS ───────────────────────────────────────────────────────────
 
     private List<Templates> seedTemplates() {
         Templates web = new Templates();
-        web.setCode("TPL_WEB_2025");
+        web.setTemplateKey("TPL_WEB_2025");
         web.setName("Consentimiento Web 2025");
         web.setDescription(
                 "Plantilla principal para el centro de preferencias web de MedVida. Incluye todos los propósitos activos.");
         web.setVersion(1);
-        web.setPrimaryColor("#1A5276");
-        web.setAccentColor("#2E86C1");
-        web.setBackgroundColor("#FFFFFF");
         web.setTitle("Sus preferencias de privacidad");
-        web.setButtonAcceptText("Aceptar seleccionados");
-        web.setButtonRejectText("Rechazar todos");
         web.setIsActive(true);
-        web.setCreatedAt(NOW.minusDays(45));
+        web.setCreatedAt(NOW.minusDays(45).atOffset(java.time.ZoneOffset.UTC));
 
         Templates app = new Templates();
-        app.setCode("TPL_APP_MOVIL");
+        app.setTemplateKey("TPL_APP_MOVIL");
         app.setName("Consentimiento App Móvil v1");
         app.setDescription(
                 "Plantilla compacta para la app móvil MedVida. Solo propósitos esenciales y de mejora de servicio.");
         app.setVersion(1);
-        app.setPrimaryColor("#1A5276");
-        app.setAccentColor("#28B463");
-        app.setBackgroundColor("#F8F9FA");
         app.setTitle("Privacidad en MedVida App");
-        app.setButtonAcceptText("Confirmar");
-        app.setButtonRejectText("Solo esenciales");
         app.setIsActive(true);
-        app.setCreatedAt(NOW.minusDays(45));
+        app.setCreatedAt(NOW.minusDays(45).atOffset(java.time.ZoneOffset.UTC));
 
         return templatesRepo.saveAll(List.of(web, app));
     }
 
-    // ── 13. PROPÓSITOS POR PLANTILLA ─────────────────────────────────────────────
+    // ── 11. PROPÓSITOS POR PLANTILLA ─────────────────────────────────────────────
 
     private void seedTemplatePurposes(List<Templates> templates, List<Purposes> purposes) {
         Templates web = templates.get(0);
         Templates app = templates.get(1);
 
-        // Web: los 4 propósitos
         linkTemplatePurpose(web, purposes.get(0), 1); // MKTG_CAMPANAS
         linkTemplatePurpose(web, purposes.get(1), 2); // LEGAL_FACTURACION
         linkTemplatePurpose(web, purposes.get(2), 3); // TI_MEJORA
         linkTemplatePurpose(web, purposes.get(3), 4); // SALUD_DATOS_CLINICOS
 
-        // App: solo facturación y mejora
         linkTemplatePurpose(app, purposes.get(1), 1); // LEGAL_FACTURACION
         linkTemplatePurpose(app, purposes.get(2), 2); // TI_MEJORA
     }
@@ -499,7 +444,7 @@ public class TestDataSeeder implements CommandLineRunner {
         templatePurposesRepo.save(tp);
     }
 
-    // ── 14. TITULARES ────────────────────────────────────────────────────────────
+    // ── 12. TITULARES ────────────────────────────────────────────────────────────
 
     private List<DataSubjects> seedDataSubjects() {
         return dataSubjectsRepo.saveAll(List.of(
@@ -516,7 +461,7 @@ public class TestDataSeeder implements CommandLineRunner {
         return s;
     }
 
-    // ── 15. DOCUMENTOS DE PRIVACIDAD ─────────────────────────────────────────────
+    // ── 13. DOCUMENTOS DE PRIVACIDAD ─────────────────────────────────────────────
 
     private List<PrivacyDocuments> seedPrivacyDocuments(List<Templates> templates, List<Users> users) {
         Users dpo = users.get(0);
@@ -531,8 +476,8 @@ public class TestDataSeeder implements CommandLineRunner {
                 .content(POLITICA_CONTENT)
                 .isActive(true)
                 .publishAt(NOW.minusDays(10))
-                .createdBy(dpo.getId())
-                .approvedBy(dpo.getId())
+                .createdBy(dpo.getKeycloakId())
+                .approvedBy(dpo.getKeycloakId())
                 .hashSha256("e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6")
                 .build();
 
@@ -543,7 +488,7 @@ public class TestDataSeeder implements CommandLineRunner {
                 .name("Aviso de Cookies Sitio Web")
                 .content(COOKIES_CONTENT)
                 .isActive(true)
-                .createdBy(dpo.getId())
+                .createdBy(dpo.getKeycloakId())
                 .build();
 
         PrivacyDocuments sensibles = PrivacyDocuments.builder()
@@ -553,12 +498,11 @@ public class TestDataSeeder implements CommandLineRunner {
                 .name("Tratamiento de Datos Sensibles de Salud")
                 .content(SENSIBLES_CONTENT)
                 .isActive(true)
-                .createdBy(dpo.getId())
+                .createdBy(dpo.getKeycloakId())
                 .build();
 
         List<PrivacyDocuments> saved = privacyDocsRepo.saveAll(List.of(politica, cookies, sensibles));
 
-        // self-reference family_id (igual que en PrivacyDocumentService.create)
         saved.forEach(d -> {
             d.setDocumentFamilyId(d.getId());
             privacyDocsRepo.save(d);
@@ -567,18 +511,16 @@ public class TestDataSeeder implements CommandLineRunner {
         return saved;
     }
 
-    // ── 16. PROPÓSITOS POR DOCUMENTO ─────────────────────────────────────────────
+    // ── 14. PROPÓSITOS POR DOCUMENTO ─────────────────────────────────────────────
 
     private void seedDocumentPurposes(List<PrivacyDocuments> docs, List<Purposes> purposes) {
         PrivacyDocuments politica = docs.get(0);
         PrivacyDocuments sensibles = docs.get(2);
 
-        // Política incluye campanas, facturación y mejora
         linkDocPurpose(politica, purposes.get(0));
         linkDocPurpose(politica, purposes.get(1));
         linkDocPurpose(politica, purposes.get(2));
 
-        // Datos sensibles → datos clínicos
         linkDocPurpose(sensibles, purposes.get(3));
     }
 
@@ -594,7 +536,7 @@ public class TestDataSeeder implements CommandLineRunner {
         docPurposesRepo.save(dp);
     }
 
-    // ── 17. ACUERDOS DE CONSENTIMIENTO ───────────────────────────────────────────
+    // ── 15. ACUERDOS DE CONSENTIMIENTO ───────────────────────────────────────────
 
     private void seedAgreements(List<DataSubjects> subjects, List<Templates> templates,
             List<PrivacyDocuments> docs, List<Purposes> purposes) {
@@ -602,7 +544,6 @@ public class TestDataSeeder implements CommandLineRunner {
         Templates app = templates.get(1);
         PrivacyDocuments politica = docs.get(0);
 
-        // Acuerdo 1 — RUT:12345678-9, web, ACTIVO, acepta todo
         Agreements a1 = agreement(subjects.get(0), web, politica, "ACTIVE", NOW.minusDays(8),
                 "f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1", null);
         a1 = agreementsRepo.save(a1);
@@ -612,7 +553,6 @@ public class TestDataSeeder implements CommandLineRunner {
         addAgreementPurpose(a1, purposes.get(3), true, "ART_13_DATOS_SENSIBLES");
         addMetadata(a1, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "WEB");
 
-        // Acuerdo 2 — RUT:98765432-1, app, ACTIVO, rechaza mejora
         Agreements a2 = agreement(subjects.get(1), app, politica, "ACTIVE", NOW.minusDays(6),
                 "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", null);
         a2 = agreementsRepo.save(a2);
@@ -620,7 +560,6 @@ public class TestDataSeeder implements CommandLineRunner {
         addAgreementPurpose(a2, purposes.get(2), false, "ART_12_CONTRATO");
         addMetadata(a2, "MedVidaApp/2.1 (iPhone; iOS 17.4)", "MOVIL");
 
-        // Acuerdo 3 — RUT:11223344-5, web, REVOCADO
         Agreements a3 = agreement(subjects.get(2), web, politica, "REVOKED", NOW.minusDays(30),
                 "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3", null);
         a3 = agreementsRepo.save(a3);
@@ -628,7 +567,6 @@ public class TestDataSeeder implements CommandLineRunner {
         addAgreementPurpose(a3, purposes.get(1), true, "ART_12_CONTRATO");
         addMetadata(a3, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15", "WEB");
 
-        // Acuerdo 4 — RUT:55667788-3, web, ACTIVO, solo esenciales
         Agreements a4 = agreement(subjects.get(3), web, politica, "ACTIVE", NOW.minusDays(2),
                 "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", null);
         a4 = agreementsRepo.save(a4);
@@ -676,7 +614,7 @@ public class TestDataSeeder implements CommandLineRunner {
     private void addMetadata(Agreements agreement, String userAgent, String channel) {
         AgreementMetadata m = new AgreementMetadata();
         m.setAgreementId(agreement.getId());
-        m.setIpOrigin(null); // test data — no IP real
+        m.setIpOrigin(null);
         m.setUserAgent(userAgent);
         m.setCaptureChannel(channel);
         m.setSignatureToken("test-token-" + agreement.getId().toString().substring(0, 8));

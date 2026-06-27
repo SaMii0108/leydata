@@ -1,0 +1,22 @@
+meta {
+  name: Desvincular Categoría
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/purposes/<uuid-finalidad>/data-categories/<uuid-vinculo>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Elimina el vínculo entre la finalidad y la categoría, incluyendo la política de retención.
+  Bloqueado si la finalidad está en un documento PUBLISHED.
+  Retorna 204 No Content si fue exitoso.
+  Requiere rol DPO o ADMIN.
+}

@@ -8,6 +8,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+// Users FK removed — createdBy/approvedBy now store keycloak_id (String)
 
 @Entity
 @Table(name = "purposes")
@@ -59,22 +60,20 @@ public class Purposes {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", insertable = false, updatable = false)
-    private Users createdByUser;
-
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
+
+    @Column(name = "created_by_name")
+    private String createdByName;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "approved_by", insertable = false, updatable = false)
-    private Users approvedByUser;
-
     @Column(name = "approved_by")
-    private UUID approvedBy;
+    private String approvedBy;
+
+    @Column(name = "approved_by_name")
+    private String approvedByName;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;

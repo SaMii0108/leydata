@@ -5,7 +5,7 @@
 #
 # Qué hace:
 #   1. Crea el realm "leydata"
-#   2. Crea los roles: ADMIN, DPO, JEFE_DOMINIO
+#   2. Crea los roles: ADMIN, DPO, JEFE_DOMINIO, USER, TITULAR
 #   3. Crea el cliente "leydata-frontend" (public, para el frontend)
 #   4. Crea el cliente "leydata-backend" (confidential, service account)
 #   5. Asigna manage-users + view-realm al service account de leydata-backend
@@ -67,19 +67,32 @@ try {
 } catch {
     Write-Host "-> Creando realm '$REALM'..."
     $realmBody = @{
-        realm               = $REALM
-        enabled             = $true
-        displayName         = "Ley Data"
-        accessTokenLifespan = 300
+        realm                 = $REALM
+        enabled               = $true
+        displayName           = "Ley Data"
+        accessTokenLifespan   = 300
         ssoSessionMaxLifespan = 1800
+        loginWithEmailAllowed = $true
+        editUsernameAllowed   = $true
     } | ConvertTo-Json
     Invoke-RestMethod -Method Post -Uri "$KC_URL/admin/realms" -Headers $headers -Body $realmBody | Out-Null
     Write-Host "   Realm creado."
 }
 
+# Aplicar siempre (idempotente): permite al admin API actualizar username cuando cambia el email
+Write-Host "-> Actualizando configuracion del realm..."
+$realmPatch = @{ editUsernameAllowed = $true; loginWithEmailAllowed = $true } | ConvertTo-Json
+try {
+    Invoke-RestMethod -Method Put -Uri "$KC_URL/admin/realms/$REALM" `
+        -Headers $headers -Body $realmPatch -ErrorAction Stop | Out-Null
+    Write-Host "   Configuracion actualizada."
+} catch {
+    Write-Host "   HTTP $($_.Exception.Response.StatusCode.value__)"
+}
+
 # ── 2. Crear roles ────────────────────────────────────────────────────────────
 Write-Host "-> Creando roles..."
-foreach ($ROLE in @("ADMIN","DPO","JEFE_DOMINIO")) {
+foreach ($ROLE in @("ADMIN","DPO","JEFE_DOMINIO","USER","TITULAR")) {
     try {
         Invoke-RestMethod -Method Post -Uri "$KC_URL/admin/realms/$REALM/roles" `
             -Headers $headers -Body (@{ name = $ROLE } | ConvertTo-Json) -ErrorAction Stop | Out-Null

@@ -75,13 +75,23 @@ else
       \"enabled\": true,
       \"displayName\": \"Ley Data\",
       \"accessTokenLifespan\": 300,
-      \"ssoSessionMaxLifespan\": 1800
+      \"ssoSessionMaxLifespan\": 1800,
+      \"loginWithEmailAllowed\": true,
+      \"editUsernameAllowed\": true
     }"
 fi
 
+# Aplicar siempre (idempotente): permite al admin API actualizar username cuando cambia el email
+echo "→ Actualizando configuración del realm..."
+curl -s -o /dev/null -w "  Status: %{http_code}\n" \
+  -X PUT "$KC_URL/admin/realms/$REALM" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"editUsernameAllowed\": true, \"loginWithEmailAllowed\": true}"
+
 # ── 2. Crear roles ───────────────────────────────────────────────────────────
 echo "→ Creando roles..."
-for ROLE in ADMIN DPO JEFE_DOMINIO; do
+for ROLE in ADMIN DPO JEFE_DOMINIO USER TITULAR; do
   CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     -X POST "$KC_URL/admin/realms/$REALM/roles" \
     -H "Authorization: Bearer $TOKEN" \

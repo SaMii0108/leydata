@@ -1,0 +1,36 @@
+meta {
+  name: Crear Usuario
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/users
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "email": "nuevo@empresa.cl",
+    "name": "Nombre Apellido",
+    "roleCode": "DPO",
+    "password": "Temporal123!",
+    "domainIds": []
+  }
+}
+
+docs {
+  Crea el usuario en Keycloak Y en la BD local de forma atómica.
+  Si la BD local falla, el usuario se elimina de Keycloak (compensación manual).
+
+  roleCode válidos: ADMIN, DPO, JEFE_DOMINIO, USER, TITULAR
+  domainIds: solo aplica si roleCode = JEFE_DOMINIO (lista de UUIDs de dominios activos)
+  password: se envía a Keycloak, nunca se guarda en la BD local
+
+  Requiere rol ADMIN.
+}

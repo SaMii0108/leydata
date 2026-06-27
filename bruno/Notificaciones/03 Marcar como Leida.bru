@@ -1,0 +1,21 @@
+meta {
+  name: Marcar Notificación como Leída
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/notifications/<id-aqui>/read
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Marca una notificación específica como leída.
+  Retorna 204 No Content.
+  Requiere autenticación (solo el dueño puede marcarla).
+}

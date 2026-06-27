@@ -21,12 +21,12 @@ public class PurposeRequestSummaryDto {
     private UUID domainId;
     private String domainName;
 
-    private UUID requesterId;
+    private String requesterId;
     private String requesterName;
 
     private String status; // PENDING, APPROVED, REJECTED
 
-    private UUID reviewerId;
+    private String reviewerId;
     private String reviewerName;
     private String reviewNotes; // obligatorio si REJECTED (Ley 21.719)
 

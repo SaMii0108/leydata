@@ -17,8 +17,8 @@ public interface SystemAuditLogRepository extends JpaRepository<SystemAuditLog, 
     // Obtener todos los registros en orden ascendente para verificar la cadena completa
     List<SystemAuditLog> findAllByOrderByCreatedAtAsc();
 
-    // Filtrar por UUID del actor (operador que ejecutó la acción)
-    Page<SystemAuditLog> findByActorIdOrderByCreatedAtDesc(UUID actorId, Pageable pageable);
+    // Filtrar por keycloak_id del actor (operador que ejecutó la acción)
+    Page<SystemAuditLog> findByActorIdOrderByCreatedAtDesc(String actorId, Pageable pageable);
 
     // Filtrar por tipo de acción: "CREAR_USUARIO", "BLOQUEAR_USUARIO", etc.
     Page<SystemAuditLog> findByActionOrderByCreatedAtDesc(String action, Pageable pageable);

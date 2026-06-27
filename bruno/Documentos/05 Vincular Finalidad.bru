@@ -1,0 +1,22 @@
+meta {
+  name: Vincular Finalidad al Documento
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/privacy-documents/<uuid-documento>/purposes/<uuid-finalidad>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Vincula una finalidad aprobada al documento DRAFT.
+  Solo aplica a documentos en estado DRAFT.
+  Retorna 204 No Content.
+  Requiere rol DPO.
+}
