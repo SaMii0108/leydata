@@ -1,6 +1,6 @@
 # Guía de Instalación — Ley Data
 
-**Stack:** Java 21 · Spring Boot 3.x · PostgreSQL 15 · Keycloak 26 · Docker  
+**Stack:** Java 21 · Spring Boot 3.x · PostgreSQL 15 · Keycloak 26 · Redis 7 · Docker  
 **Repositorio:** https://github.com/SaMii0108/leydata  
 **Arquitectura:** Modular DDD — cada módulo tiene capas `web/`, `application/`, `infrastructure/`, `domain/` — ver [ESTRUCTURA-PROYECTO.md](ESTRUCTURA-PROYECTO.md)
 
@@ -99,6 +99,7 @@ NAMES                         STATUS    PORTS
 leydata-consent-db            Up        0.0.0.0:5433->5432/tcp
 leydata-consent-keycloak-db   Up        5432/tcp
 leydata-consent-keycloak      Up        0.0.0.0:8180->8080/tcp
+leydata-redis                 Up        0.0.0.0:6379->6379/tcp
 ```
 
 La primera vez que inicia `leydata-consent-keycloak` puede tardar entre 30 y 60 segundos. Esperar antes de continuar.
@@ -425,6 +426,18 @@ Después del reset, actualizar `KC_BACKEND_SECRET` en el `.env` con el nuevo val
 ```bash
 docker logs leydata-consent-keycloak --tail 50
 docker logs leydata-consent-db --tail 50
+docker logs leydata-redis --tail 50
+```
+
+### Verificar Redis
+
+```bash
+# Conectarse a Redis y probar
+docker exec -it leydata-redis redis-cli ping
+# Resultado esperado: PONG
+
+# Ver keys almacenadas (en desarrollo)
+docker exec -it leydata-redis redis-cli keys "*"
 ```
 
 ### Compilar sin levantar
@@ -572,6 +585,30 @@ bash scripts/setup-keycloak.sh   # o .\scripts\setup-keycloak.ps1 en Windows
 ```
 
 Después del reset, la BD local estará vacía (solo se siembran catálogos fijos al arrancar el backend, no roles ni usuarios). Los usuarios de prueba previos desaparecerán. Actualizar `KC_BACKEND_SECRET` en el `.env` con el nuevo valor del script.
+
+---
+
+### Redis no responde — `Connection refused` al iniciar el backend
+
+El backend intenta conectarse a Redis en `localhost:6379` al arrancar. Si Redis no está corriendo, el backend falla.
+
+Verificar que el contenedor esté activo:
+```bash
+docker ps | grep leydata-redis
+```
+
+Si no aparece, levantarlo:
+```bash
+docker-compose up -d redis
+```
+
+Si el puerto 6379 ya está en uso por otro proceso Redis local, detenerlo primero:
+```bash
+# Linux / WSL
+sudo systemctl stop redis
+# o
+sudo service redis stop
+```
 
 ---
 

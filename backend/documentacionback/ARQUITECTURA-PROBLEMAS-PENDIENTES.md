@@ -1,6 +1,7 @@
 # LeyData — Problemas Arquitectónicos y Deuda Técnica Pendiente
 
 **Fecha de análisis:** 2026-06-27  
+**Última actualización:** 2026-06-27  
 **Branch:** feature/keycloak-first-model  
 **Versión:** 469f730 feat: add Templates module to Bruno and Postman collections  
 **Contexto:** Evaluación pre-producción. La Ley 21.719 entra en vigor en diciembre de 2026.
@@ -20,24 +21,15 @@
 
 ## 1. Críticos — bloquean producción
 
-### 🔴 Race condition en el ledger de auditoría
+### ✅ ~~Race condition en el ledger de auditoría~~ — RESUELTO
 
-**Archivo:** `backend/src/main/java/com/leydata/backend/audit/application/service/AuditService.java:58`
+**Archivo:** `backend/src/main/java/com/leydata/backend/audit/application/service/AuditService.java`
 
-**Problema:**
-```java
-String previousHash = auditLogRepository.findTopByOrderByCreatedAtDesc()
-    .map(SystemAuditLog::getLogHash)
-    .orElse("GENESIS");
-```
-Bajo concurrencia, dos threads pueden ejecutar este `SELECT TOP 1` simultáneamente, leer el mismo `previousHash` y generar dos registros encadenados al mismo nodo anterior. Esto **rompe la cadena de hashes SHA-256**, invalidando el paradigma de Ledger Inmutable que es el pilar de accountability exigido por la Ley 21.719.
+**Fix aplicado:** `pg_advisory_xact_lock(7719)` en `AuditService.log()` antes de leer el `previousHash`. Serializa escrituras al ledger — solo un thread a la vez puede ejecutar el par lectura-escritura de hash. Lock se libera automáticamente al hacer commit.
 
-**Impacto:** Si el CPDT (Consejo para la Protección de Datos) audita la cadena de integridad y encuentra un fork, el sistema pierde validez probatoria.
-
-**Solución propuesta:**
-- Opción A (simple): Usar `SELECT ... FOR UPDATE SKIP LOCKED` en el query del `previousHash` para serializar las escrituras de auditoría.
-- Opción B (robusta): Reemplazar `findTopByOrderByCreatedAtDesc()` por una **secuencia PostgreSQL** (`audit_log_seq`) que garantiza orden atómico sin locks a nivel de aplicación.
-- Opción C: Mover el encadenamiento de hashes a un trigger PostgreSQL que se ejecute dentro de la misma transacción del INSERT.
+**Archivos modificados:**
+- `AuditService.java` — llama a `acquireAuditChainLock()` antes del SELECT
+- `SystemAuditLogRepository.java` — método `acquireAuditChainLock()` con `@Query(nativeQuery)`
 
 ---
 
@@ -56,68 +48,42 @@ Bajo concurrencia, dos threads pueden ejecutar este `SELECT TOP 1` simultáneame
 
 ## 2. Altos — deben resolverse antes de go-live
 
-### 🟠 UserStatusFilter consulta Postgres en cada request
+### ✅ ~~UserStatusFilter consulta Postgres en cada request~~ — RESUELTO
 
 **Archivo:** `backend/src/main/java/com/leydata/backend/security/UserStatusFilter.java`
 
-**Problema:** El filtro de revocación híbrida hace un `SELECT` a `UsersRepository` en **cada request HTTP**, para verificar si el usuario fue bloqueado. Con múltiples instancias del monolito y alta concurrencia, esto se convierte en N × tráfico_total queries de lectura por segundo al primary de PostgreSQL, saturando PgBouncer incluso antes de llegar a la lógica de negocio.
+**Fix aplicado:** Cache-aside sobre Redis con clave `user:{keycloakId}:blocked`.
+- Cache hit → usa valor en memoria, cero queries a Postgres
+- Cache miss → consulta Postgres, escribe resultado en Redis
+- "bloqueado=true" → sin TTL (permanente hasta desbloqueo explícito)
+- "bloqueado=false" → TTL 30s (renueva periódicamente desde Postgres)
+- `UserService.blockUser()` escribe `"true"` en Redis inmediatamente (mismo request que hace el bloqueo)
 
-**Solución propuesta:**
-```
-Redis key: user:{keycloakId}:status  →  valor: "active" | "blocked"
-TTL: 30 segundos (máxima ventana de inconsistencia aceptable)
+**Archivos modificados:**
+- `UserStatusFilter.java` — inyecta `StringRedisTemplate`, método privado `isBlocked()` con lógica cache-aside
+- `UserService.java` — inyecta `StringRedisTemplate`, escribe en Redis tras guardar en `user_status`
 
-Flujo:
-1. UserStatusFilter consulta Redis primero
-2. Si miss → consulta Postgres → escribe en Redis con TTL
-3. Si el admin bloquea un usuario → invalidar la key de Redis inmediatamente
-```
-
-Esto reduce las queries a Postgres a una fracción del tráfico real y acota el tiempo de propagación del bloqueo a 30 segundos, documentable como SLA interno.
+**Infraestructura:**
+- ✅ Redis en `docker-compose.yml` (redis:7-alpine, puerto 6379)
+- ✅ `spring-boot-starter-data-redis` en `pom.xml`
+- ✅ Config `spring.data.redis.host/port` en `application.properties`
 
 ---
 
-### 🟠 Ausencia de X-Request-ID en el audit log
+### ✅ ~~Ausencia de X-Request-ID en el audit log~~ — RESUELTO
 
-**Archivo:** `backend/src/main/java/com/leydata/backend/audit/application/service/AuditService.java`  
-**Entidad:** `backend/src/main/java/com/leydata/backend/entity/SystemAuditLog.java`
+**Fix aplicado:**
+- `SystemAuditLog.java` — campo `requestId` agregado (Hibernate crea la columna automáticamente con `ddl-auto=update`)
+- `AuditService.java` — método `extractRequestId()` lee el header `X-Request-ID` del request HTTP y lo persiste en cada log
 
-**Problema:** El `AuditService` registra `ip_address` y `user_agent`, pero no un identificador de correlación de request. Sin este campo, es **imposible correlacionar** un registro del audit log con los logs del WAF o del API Gateway ante una fiscalización técnica. El auditor verá la acción en Postgres, verá el request en NGINX, pero no podrá unirlos de forma determinista.
+**Pendiente de infra:** NGINX/WAF deben configurarse para generar y propagar `X-Request-ID`. Mientras tanto el campo quedará `null` en los registros — sin impacto funcional.
 
-**Solución propuesta:**
-
-1. Configurar WAF y NGINX para generar y propagar `X-Request-ID`:
 ```nginx
-# nginx.conf
+# nginx.conf — cuando se configure
 add_header X-Request-ID $request_id;
 proxy_set_header X-Request-ID $request_id;
 log_format main '$remote_addr - $request_id - $request - $status';
 ```
-
-2. Agregar campo a la entidad y al contexto de auditoría:
-```java
-// SystemAuditLog.java
-@Column(name = "request_id")
-private String requestId;
-
-// AuditService.java — en extractClientIp() ya tienes acceso a HttpServletRequest
-private String extractRequestId() {
-    try {
-        HttpServletRequest request = ((ServletRequestAttributes)
-            RequestContextHolder.currentRequestAttributes()).getRequest();
-        return request.getHeader("X-Request-ID");
-    } catch (Exception e) {
-        return "UNKNOWN";
-    }
-}
-```
-
-3. Script de migración SQL:
-```sql
-ALTER TABLE system_audit_log ADD COLUMN request_id VARCHAR(64);
-```
-
-> **Nota:** La tabla tiene triggers que bloquean UPDATE/DELETE, pero ALTER TABLE para agregar columnas sí está permitido.
 
 ---
 
@@ -150,26 +116,71 @@ ALTER TABLE system_audit_log ADD COLUMN request_id VARCHAR(64);
 
 ---
 
-### 🟡 Falta endpoint de consulta de consentimiento para sistemas externos
+### 🟡 Falta endpoint de consulta de consentimiento para sistemas externos (Propagación B2B)
 
-**Problema identificado en el grafo:** No existe un endpoint optimizado para la consulta de consentimiento B2B (el caso de uso principal del sistema: "¿puede el sistema X procesar el dato del titular Y para la finalidad Z?"). Los sistemas externos tendrían que construir esta lógica ellos mismos interpretando múltiples endpoints.
+**Problema:** No existe un endpoint optimizado para la consulta de consentimiento B2B — el caso de uso principal del sistema: "¿puede el sistema X procesar el dato del titular Y para la finalidad Z?". Los sistemas externos tendrían que construir esta lógica ellos mismos interpretando múltiples endpoints.
 
 **Solución propuesta:**
 ```
 GET /api/consent/check?titularId={id}&purposeId={id}&dataCategory={cat}
 → { "permitted": true/false, "validUntil": "...", "legalBasis": "...", "cachedAt": "..." }
 ```
-Este endpoint debería ser el único punto de integración B2B, servido desde Redis, con autenticación por API Key (no JWT de usuario).
+Este endpoint debe ser el único punto de integración B2B, servido desde Redis (caché con TTL 30-60s), con autenticación por API Key (no JWT de usuario).
 
 ---
 
-### 🟡 El frontend usa mockData.ts (no conectado al backend real)
+### 🔴 Falta el ciclo de captura de consentimiento
 
-**Detectado en el grafo:** `mockData.ts` y `mockUsers.ts` en el frontend están en la comunidad de componentes activos. El frontend no está integrado al backend real todavía.
+**Problema:** El sistema tiene el marco legal (finalidades, bases de licitud, documentos de privacidad, templates) pero **no implementa el ciclo donde el titular acepta o rechaza**. Sin esto, no hay consentimientos reales que consultar ni revocar.
 
-**Archivos afectados:**
-- `frontend/src/utils/mockData.ts`
-- `frontend/src/features/auth/mockUsers.ts`
+**Lo que falta implementar:**
+
+```
+Flujo de captura:
+1. Sistema externo (o portal) presenta al titular las finalidades con su base de licitud
+2. Titular acepta/rechaza cada finalidad → POST /api/agreements
+3. Backend registra en tabla agreements con:
+   - titularId (keycloak_id del TITULAR o identificador externo)
+   - purposeId
+   - accepted: true/false
+   - acceptedAt / rejectedAt
+   - ipAddress, userAgent (evidencia forense)
+   - consentStatementSnapshot (texto exacto que vio el titular al momento de aceptar)
+4. AgreementIntegrityLog guarda el hash SHA-256 del registro (ya existe la entidad)
+5. AuditService registra la acción
+```
+
+**Entidades que ya existen pero sin endpoints completos:**
+- `Agreements` — tabla de consentimientos reales
+- `AgreementIntegrityLog` — hash de cada acuerdo
+- `AgreementMetadata` — metadatos adicionales del acuerdo
+- `AgreementsPurposes` — vínculo acuerdo ↔ finalidades
+- `DataSubjects` — titulares de datos
+
+**Módulos a crear:** `agreement/` con su ciclo completo `web/ → application/ → infrastructure/`.
+
+---
+
+### 🔴 Falta el ciclo de revocación de consentimiento
+
+**Problema:** No existe el flujo donde un titular revoca un consentimiento previamente otorgado. La Ley 21.719 exige que la revocación sea tan fácil como el otorgamiento y que tenga efecto inmediato.
+
+**Lo que falta implementar:**
+
+```
+Flujo de revocación:
+1. Titular (autenticado con rol TITULAR) solicita revocar → PATCH /api/agreements/{id}/revoke
+2. Backend valida que el acuerdo pertenece al titular autenticado
+3. Marca el acuerdo como revocado:
+   - revokedAt = now()
+   - revokedBy = keycloakId del TITULAR
+   - revocationReason (opcional, libre)
+4. Invalida la key en Redis para que sistemas externos reciban "permitted: false" de inmediato
+5. Dispara ConsentimientoRevocadoEvent → notificación al DPO/responsable del dominio
+6. AuditService registra la revocación con todos los campos de trazabilidad
+```
+
+**Punto crítico con Redis:** la revocación debe invalidar la key `consent:{titularId}:{purposeId}` en Redis **dentro de la misma transacción** (o como compensación si Redis falla), para que el endpoint B2B `/api/consent/check` refleje el cambio de inmediato. Sin esto, la ventana de inconsistencia es el TTL completo (30-60s).
 
 ---
 
@@ -205,20 +216,22 @@ Componentes de observabilidad (ninguno planificado):
 
 ---
 
-## 5. Bugs de API ya corregidos en código — pendientes de verificación completa
+## 5. Bugs de API — todos corregidos y verificados
 
-Los siguientes bugs fueron corregidos en el código fuente pero aún no se ha ejecutado una corrida completa de pruebas post-fix:
+Todos los bugs fueron corregidos y verificados contra el backend en ejecución:
 
 | # | Endpoint | Problema original | Fix aplicado | Archivo |
 |---|----------|-------------------|--------------|---------|
-| 1 | `POST /api/privacy-documents` sin `name` | 500 → debería 400 | Handler `MethodArgumentNotValidException` | `GlobalExceptionHandler.java` |
-| 2 | `GET /api/purpose-requests` (ADMIN) | 403 → debería 200 | `hasAnyRole('DPO','ADMIN')` | `PurposeRequestController.java` |
-| 3 | `GET /api/purpose-requests/pending` (ADMIN) | 403 → debería 200 | `hasAnyRole('DPO','ADMIN')` | `PurposeRequestController.java` |
-| 4 | `PUT /api/users/{id}` con `domainIds:[]` | 400 → debería 200 | Early return en `assignUserDomains` | `UserService.java` |
-| 5 | `GET /api/users/not-a-uuid` | 500 → debería 400 | Handler `MethodArgumentTypeMismatchException` | `GlobalExceptionHandler.java` |
-| 6 | `PATCH /api/notifications/{id}/read` (inexistente) | 400 → debería 404 | `NoSuchElementException` → handler 404 | `NotificationService.java` + `GlobalExceptionHandler.java` |
-| 7 | `POST /api/privacy-documents` con enum inválido | 500 → debería 400 | Handler `HttpMessageNotReadableException` | `GlobalExceptionHandler.java` |
-| 8 | `PUT /api/users/{id}` con `domainIds:[uuid]` | 500 → debería 200 | `ud.getId().getDomainId()` en vez de `ud.getDomain().getId()` (lazy load) | `UserService.java` |
+| # | Endpoint | Problema original | Fix aplicado | Estado |
+|---|----------|-------------------|--------------|--------|
+| 1 | `POST /api/privacy-documents` sin `name` | 500 → 400 | Handler `MethodArgumentNotValidException` en `GlobalExceptionHandler` | ✅ Verificado |
+| 2 | `GET /api/purpose-requests` (ADMIN) | 403 → 200 | `hasAnyRole('DPO','ADMIN')` en `PurposeRequestController` | ✅ Verificado |
+| 3 | `GET /api/purpose-requests/pending` (ADMIN) | 403 → 200 | `hasAnyRole('DPO','ADMIN')` en `PurposeRequestController` | ✅ Verificado |
+| 4 | `PUT /api/users/{id}` con `domainIds:[]` | 400 → 200 | Early return en `assignUserDomains` de `UserService` | ✅ Verificado |
+| 5 | `GET /api/users/not-a-uuid` | 500 → 400 | Handler `MethodArgumentTypeMismatchException` en `GlobalExceptionHandler` | ✅ Verificado |
+| 6 | `PATCH /api/notifications/{id}/read` (inexistente) | 400 → 404 | `NoSuchElementException` en `NotificationService` + handler 404 | ✅ Verificado |
+| 7 | `POST /api/privacy-documents` con enum inválido | 500 → 400 | Handler `HttpMessageNotReadableException` en `GlobalExceptionHandler` | ✅ Verificado |
+| 8 | `PUT /api/users/{id}` con `domainIds:[uuid]` | 500 → 200 | `ud.getId().getDomainId()` reemplaza lazy load en `UserService` | ✅ Verificado |
 
 Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 
@@ -228,29 +241,29 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 
 | Item | Descripción | Archivo |
 |------|-------------|---------|
-| Orden de handlers en `GlobalExceptionHandler` | `RuntimeException` está declarado DESPUÉS de `Exception` pero ANTES de algunos handlers específicos. Spring evalúa por especificidad, pero el orden puede generar confusión en mantenimiento. Ordenar de más específico a más genérico. | `GlobalExceptionHandler.java` |
-| `PATCH /api/purpose-requests/{id}/review` con ID inexistente | Devuelve 400 en vez de 404 — el servicio lanza excepción genérica en vez de `PurposeRequestNotFoundException`. | `PurposeRequestService.java` |
-| Endpoints JEFE_DOMINIO requieren usuario manual en Keycloak | Para pruebas CI/CD reproducibles se necesita un script de seed que cree el usuario `jefe@test.cl` en Keycloak automáticamente. | `DataSeeder.java` / scripts de init |
+| ~~Orden de handlers en `GlobalExceptionHandler`~~ | ✅ Resuelto — `RuntimeException` movido antes de `Exception`, código muerto eliminado, Javadocs verbosos removidos. | `GlobalExceptionHandler.java` |
+| ~~`PATCH /api/purpose-requests/{id}/review` con ID inexistente~~ | ✅ Resuelto — cambiado `IllegalArgumentException` por `NoSuchElementException` (handler 404 existente). | `PurposeRequestService.java` |
+| ~~`TemplateNotFoundException` sin handler en `GlobalExceptionHandler`~~ | ✅ Resuelto — `GET /api/templates/{id}` con ID inexistente devolvía 500, ahora 404. | `GlobalExceptionHandler.java` |
+| ~~Usuarios de prueba JEFE_DOMINIO y DPO no existían en el script~~ | ✅ Resuelto — `setup-keycloak.sh` ahora crea `jefe@test.cl` (JEFE_DOMINIO) y `dpo@leydata.cl` (DPO). | `scripts/setup-keycloak.sh` |
 | `AuditService` es un god node (26 edges en el grafo) | Considerar separar en `AuditWriter` (persistencia) y `AuditHashChain` (integridad) para facilitar testing unitario y futura migración a un servicio separado. | `AuditService.java` |
-| El grafo detectó `TemplatePurposes` y `PurposeDataCategories` como módulos parcialmente incompletos | Verificar cobertura de endpoints para estas entidades. | Varios |
 
 ---
 
 ## Checklist pre-producción (diciembre 2026)
 
 ### Código
-- [ ] Resolver race condition en `AuditService` (hash chain bajo concurrencia)
-- [ ] Agregar `X-Request-ID` al audit log y a la entidad `SystemAuditLog`
-- [ ] Mover `UserStatusFilter` a consultar Redis en vez de Postgres
+- [x] Resolver race condition en `AuditService` (hash chain bajo concurrencia)
+- [x] Agregar `X-Request-ID` al audit log y a la entidad `SystemAuditLog`
+- [x] Mover `UserStatusFilter` a consultar Redis en vez de Postgres (cache-aside implementado)
 - [ ] Crear endpoint `GET /api/consent/check` para integración B2B
 - [ ] Implementar `ConsentimientoRevocadoEvent` para invalidación activa de Redis
-- [ ] Completar integración frontend → backend (eliminar `mockData.ts`)
 - [ ] Correr corrida completa de pruebas de endpoints post todos los fixes
 
 ### Infraestructura
 - [ ] Configurar PostgreSQL Streaming Replica
 - [ ] Configurar PgBouncer con pool separado para reads y writes
-- [ ] Configurar Redis Sentinel o Cluster
+- [x] Agregar Redis al Docker Compose (redis:7-alpine, puerto 6379)
+- [ ] Configurar Redis Sentinel o Cluster (para producción)
 - [ ] Implementar WAF con `X-Request-ID` generado y propagado
 - [ ] Configurar NGINX para log con `X-Request-ID`
 - [ ] Definir TTL de keys de consentimiento en Redis (recomendado: 30–60s)

@@ -18,6 +18,7 @@ import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepos
 import com.leydata.backend.userstatus.domain.UserStatus;
 import com.leydata.backend.userstatus.infrastructure.persistence.UserStatusRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,7 @@ public class UserService {
     private final DomainsRepository domainsRepository;
     private final UserDomainRepository userDomainRepository;
     private final UserStatusRepository userStatusRepository;
+    private final StringRedisTemplate redisTemplate;
     private final AuditService auditService;
     private final KeycloakAdminService keycloakAdminService;
     private final SecurityContextHelper securityContextHelper;
@@ -210,6 +212,8 @@ public class UserService {
         // Registrar en user_status para auditoría y para cortar JWTs válidos existentes vía UserStatusFilter
         userStatusRepository.save(UserStatus.builder()
                 .keycloakId(target.getKeycloakId()).blocked(true).blockedAt(LocalDateTime.now()).build());
+        // Propagar bloqueo a Redis de inmediato: el UserStatusFilter leerá "true" en el siguiente request
+        redisTemplate.opsForValue().set("user:" + target.getKeycloakId() + ":blocked", "true");
         target.setActive(false);
         Users saved = usersRepository.save(target);
         auditService.log(AuditContext.builder().tableName("users").recordId(saved.getId())

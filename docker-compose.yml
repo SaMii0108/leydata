@@ -67,9 +67,21 @@ services:
       - leydata-consent-network
 
 
+  redis:
+    image: redis:7-alpine
+    container_name: leydata-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - leydata-consent-network
+
 networks:
   leydata-consent-network:
     driver: bridge
 
 volumes:
   keycloak_data:
+  redis_data:

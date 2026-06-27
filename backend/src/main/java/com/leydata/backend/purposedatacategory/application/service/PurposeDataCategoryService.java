@@ -78,6 +78,8 @@ public class PurposeDataCategoryService {
         // La política de retención se crea junto con el vínculo — nunca puede quedar sin definir
         DataRetentionPolicies retention = buildRetention(saved.getId(), req.getRetention());
         retentionRepo.save(retention);
+        // Setear en memoria: @OneToOne(mappedBy=...) no actualiza saved en la caché L1 de Hibernate
+        saved.setDataRetentionPolicy(retention);
 
         auditService.log(AuditContext.builder()
                 .tableName("purpose_data_categories")
@@ -94,7 +96,6 @@ public class PurposeDataCategoryService {
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
-        // Reload para obtener las relaciones (dataCategory, dataRetentionPolicy)
         return PurposeDataCategoryResponse.from(findOrThrow(saved.getId()), false);
     }
 

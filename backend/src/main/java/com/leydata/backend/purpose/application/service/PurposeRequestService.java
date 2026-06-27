@@ -138,7 +138,7 @@ public class PurposeRequestService {
         }
 
         PurposeRequests purposeRequest = purposeRequestsRepository.findById(requestId)
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new java.util.NoSuchElementException(
                         "Solicitud no encontrada: " + requestId));
 
         if (!"PENDING".equals(purposeRequest.getStatus())) {

@@ -201,7 +201,56 @@ if [ -n "$USER_ID" ]; then
   [ "$CODE" = "204" ] && echo "  Rol ADMIN asignado." || echo "  HTTP $CODE al asignar rol"
 fi
 
-# ── 7. Mostrar el KC_BACKEND_SECRET ──────────────────────────────────────────
+# ── 7. Crear usuarios de prueba ──────────────────────────────────────────────
+echo "→ Creando usuarios de prueba..."
+
+create_user_with_role() {
+  local USERNAME="$1"
+  local EMAIL="$2"
+  local FIRST="$3"
+  local LAST="$4"
+  local ROLE="$5"
+  local PASSWORD="${6:-Test1234!}"
+
+  RESPONSE=$(curl -s -X POST "$KC_URL/admin/realms/$REALM/users" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"username\": \"$USERNAME\",
+      \"email\": \"$EMAIL\",
+      \"firstName\": \"$FIRST\",
+      \"lastName\": \"$LAST\",
+      \"enabled\": true,
+      \"emailVerified\": true,
+      \"credentials\": [{\"type\":\"password\",\"value\":\"$PASSWORD\",\"temporary\":false}]
+    }" -D - -o /dev/null)
+
+  UID=$(echo "$RESPONSE" | grep -i "^location:" | tr -d '\r' | awk -F'/' '{print $NF}')
+
+  if [ -z "$UID" ]; then
+    UID=$(curl -s "$KC_URL/admin/realms/$REALM/users?email=$EMAIL" \
+      -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id']) if d else print('')")
+    [ -n "$UID" ] && echo "  $EMAIL ya existía." || echo "  No se pudo obtener ID de $EMAIL."
+  else
+    echo "  $EMAIL creado."
+  fi
+
+  if [ -n "$UID" ]; then
+    ROLE_JSON=$(curl -s "$KC_URL/admin/realms/$REALM/roles/$ROLE" \
+      -H "Authorization: Bearer $TOKEN")
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+      -X POST "$KC_URL/admin/realms/$REALM/users/$UID/role-mappings/realm" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "[$ROLE_JSON]")
+    [ "$CODE" = "204" ] && echo "  Rol $ROLE asignado a $EMAIL." || echo "  HTTP $CODE al asignar $ROLE a $EMAIL"
+  fi
+}
+
+create_user_with_role "dpo" "dpo@leydata.cl" "DPO" "LeyData" "DPO"
+create_user_with_role "jefe" "jefe@test.cl" "Jefe" "Dominio" "JEFE_DOMINIO"
+
+# ── 8. Mostrar el KC_BACKEND_SECRET ──────────────────────────────────────────
 SECRET=$(curl -s "$KC_URL/admin/realms/$REALM/clients/$BACKEND_ID/client-secret" \
   -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
 
@@ -211,7 +260,9 @@ echo " Keycloak configurado correctamente."
 echo ""
 echo " Credenciales de acceso:"
 echo "   Admin UI:  http://localhost:8180  (admin / admin)"
-echo "   App admin: admin@leydata.cl / Admin1234!"
+echo "   App admin:  admin@leydata.cl     / Admin1234!  (rol ADMIN)"
+echo "   App DPO:    dpo@leydata.cl       / Test1234!   (rol DPO)"
+echo "   App prueba: jefe@test.cl         / Test1234!   (rol JEFE_DOMINIO)"
 echo ""
 echo " Variable de entorno para el backend:"
 echo "   KC_BACKEND_SECRET=$SECRET"

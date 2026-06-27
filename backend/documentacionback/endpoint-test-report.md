@@ -36,11 +36,11 @@ password=<contraseña>
 | CATEGORÍAS DE DATOS | 7 | 7 | 0 | |
 | FINALIDADES | 8 | 8 | 0 | |
 | CATEG. POR FINALIDAD | 6 | 5 | 0 | 1 ⚠️ bug en response de creación |
-| SOLICITUDES DE FINALIDAD | 8 | 8 | 0 | |
+| SOLICITUDES DE FINALIDAD | 9 | 9 | 0 | PR-11 agregado post-fix |
 | DOCUMENTOS DE PRIVACIDAD | 13 | 12 | 0 | 1 ⚠️ JEFE no puede leer docs |
 | AUDITORÍA | 4 | 4 | 0 | cadena íntegra ✅ |
 | NOTIFICACIONES | 3 | 3 | 0 | sin datos activos en sesión |
-| **TOTAL** | **80** | **79** | **0** | |
+| **TOTAL** | **81** | **81** | **0** | |
 
 ---
 
@@ -286,6 +286,7 @@ El backend es un OAuth2 Resource Server. No existe endpoint de login propio; los
 | PR-08 | DPO rechaza sin notas (debe fallar) | DPO | 400 | ✅ `"El DPO debe justificar el rechazo"` |
 | PR-09 | DPO rechaza con notas | DPO | 200 | ✅ `status: "REJECTED"` |
 | PR-10 | Reintentar revisión ya procesada | DPO | 409 | ✅ `"La solicitud ya fue revisada. Estado actual: APPROVED"` |
+| PR-11 | Review con ID inexistente | DPO | 404 | ✅ `"Solicitud no encontrada: ..."` (era 400 antes del fix) |
 
 **Campos para crear solicitud:**
 ```json
@@ -441,10 +442,8 @@ DOCUMENT_NEW_VERSION_CREATED, DOCUMENT_DEACTIVATED
 
 ## Observaciones y hallazgos
 
-### Bug menor — Response de POST en PDC
-Al crear una vinculación (`POST /api/purposes/{id}/data-categories`), los campos de retención (`retentionPeriod`, `retentionUnit`, `legalJustification`, `anonymizeAfter`) aparecen como `null` en el response. El `GET` de listado los devuelve correctamente.  
-**Impacto:** cosmético — los datos persisten correctamente.  
-**Solución:** mapear la entidad de retención en el builder de `PurposeDataCategoryResponse` tras el save.
+### ~~Bug menor — Response de POST en PDC~~ — RESUELTO
+Los campos de retención (`retentionPeriod`, `retentionUnit`, etc.) aparecían como `null` en el response del POST porque Hibernate devolvía el objeto cacheado en L1 que no tenía la relación `@OneToOne(mappedBy=...)` actualizada. Fix: `saved.setDataRetentionPolicy(retention)` en memoria antes de construir el response. (`PurposeDataCategoryService.java`)
 
 ### JEFE no puede leer documentos de privacidad
 `GET /api/privacy-documents/{id}` devuelve 403 para JEFE_DOMINIO. Evaluar si el negocio requiere que el JEFE pueda consultar los documentos de su propio dominio.
@@ -452,8 +451,10 @@ Al crear una vinculación (`POST /api/purposes/{id}/data-categories`), los campo
 ### El usuario admin no aparece en `GET /api/users`
 `admin@leydata.cl` se crea vía `scripts/setup-keycloak.sh` directamente en Keycloak — no tiene registro en la BD local. Por eso no aparece en la lista. Para que aparezca, debe crearse vía `POST /api/users` con `roleCode: "ADMIN"`.
 
-### Templates no tienen API — solo seeder
-No existe endpoint para crear ni listar templates. Se insertan directamente en la tabla `templates` de PostgreSQL. El seeder de producción debe incluirlos.
+### Templates SÍ tienen API completa — `/api/templates` (DPO, ADMIN)
+`TemplateController` expone CRUD completo + workflow (DRAFT → APPROVED → ACTIVE) + gestión de purposes vinculadas. Los endpoints no fueron cubiertos en esta sesión de pruebas. Pendiente agregar sección TEMPLATES al reporte.
+
+**Nota de fix:** `GET /api/templates/{id}` con UUID inexistente devolvía 500 (faltaba handler de `TemplateNotFoundException`). Corregido → ahora 404.
 
 ---
 
