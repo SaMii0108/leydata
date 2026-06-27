@@ -1,0 +1,33 @@
+meta {
+  name: Editar Finalidad
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/purposes/<uuid-aqui>
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Envío de newsletter mensual",
+    "description": "Descripción actualizada",
+    "consentStatement": "Texto actualizado del consentimiento.",
+    "required": false,
+    "revocable": true,
+    "presentationOrder": 1
+  }
+}
+
+docs {
+  Edita la finalidad. Bloqueado si está en un documento PUBLISHED (locked=true).
+  Para editarla: crear nueva versión del documento con POST /api/privacy-documents/{id}/new-version.
+  Campos no editables: code, domainId.
+  Requiere rol DPO o ADMIN.
+}

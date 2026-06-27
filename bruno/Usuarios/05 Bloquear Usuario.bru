@@ -1,0 +1,28 @@
+meta {
+  name: Bloquear Usuario (permanente)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/users/<uuid-aqui>/block
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Bloqueo permanente e irreversible desde la API.
+  Pasos que ejecuta el sistema:
+  1. keycloak.disableUser() — impide nuevos logins y renovación de tokens
+  2. Registra en user_status con blocked=true — el UserStatusFilter corta tokens existentes
+  3. Marca users.active=false en la BD local
+
+  Para desbloquear manualmente: usar el endpoint de Keycloak 06 (Habilitar/Deshabilitar)
+  + DELETE FROM user_status WHERE keycloak_id = '<id>' en PostgreSQL.
+
+  Requiere rol ADMIN.
+}
