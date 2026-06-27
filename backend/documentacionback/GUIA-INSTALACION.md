@@ -144,13 +144,15 @@ bash scripts/setup-keycloak.sh
 **1. Crea el realm `leydata`**  
 Unidad de configuración en Keycloak. Todos los usuarios, roles y clientes del proyecto viven dentro de este realm. Token de acceso configurado con expiración de 5 minutos.
 
-**2. Crea los tres roles del sistema**
+**2. Crea los cinco roles del sistema**
 
 | Rol | Uso |
 |---|---|
 | `ADMIN` | Gestión de usuarios, dominios y auditoría |
-| `DPO` | Revisión de solicitudes de propósito |
-| `JEFE_DOMINIO` | Creación de solicitudes de propósito |
+| `DPO` | Revisión de solicitudes de propósito y gestión de documentos |
+| `JEFE_DOMINIO` | Creación de solicitudes de propósito para sus dominios asignados |
+| `USER` | Operador interno con acceso de solo lectura |
+| `TITULAR` | Titular de datos personales (acceso al portal de consentimiento) |
 
 **3. Crea el cliente `leydata-frontend`**  
 Cliente público (sin secret). Es el que usa el frontend para autenticar usuarios. Permite el flujo `password` (necesario para pruebas con Postman o curl) y el flujo estándar de redirección.
@@ -178,9 +180,7 @@ Crea `admin@leydata.cl` con contraseña `Admin1234!` y le asigna el rol `ADMIN`.
    KC_BACKEND_SECRET=<valor generado>
 
  Arrancar el backend con:
-   DB_USER=admin DB_PASS=admin DB_NAME=leydata_db \
-   KC_BACKEND_SECRET=<valor> \
-   ./mvnw spring-boot:run
+   export $(cat .env | xargs) && cd backend && ./mvnw spring-boot:run
 ======================================================
 ```
 
@@ -208,10 +208,10 @@ chmod +x mvnw   # solo la primera vez
 export $(cat ../.env | xargs) && ./mvnw spring-boot:run
 ```
 
-O pasar las variables directamente si se prefiere:
+O pasar las variables directamente copiándolas desde el `.env`:
 
 ```bash
-DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<secret> ./mvnw spring-boot:run
+DB_USER=<DB_USER del .env> DB_PASS=<DB_PASS del .env> DB_NAME=<DB_NAME del .env> KC_BACKEND_SECRET=<KC_BACKEND_SECRET del .env> ./mvnw spring-boot:run
 ```
 
 ### Windows PowerShell
@@ -278,6 +278,16 @@ Started BackendApplication in X.XXX seconds
 
 > Para entender cómo está organizado el código fuente del backend, ver [ESTRUCTURA-PROYECTO.md](ESTRUCTURA-PROYECTO.md).
 
+### Qué hace el backend al iniciar
+
+Al arrancar, el backend ejecuta automáticamente `CatalogSeeder`, que siembra las bases de licitud de la Ley 21.719 y las categorías de datos predefinidas si las tablas están vacías. Es idempotente: si el catálogo ya existe, no hace nada.
+
+**No se siembran roles en la BD local.** En el modelo Keycloak-first, los roles viven en el realm de Keycloak y se crean con el script del paso 5 (`setup-keycloak.sh`). No existe ninguna tabla `roles` ni `users_roles` en PostgreSQL.
+
+**No se crea ningún usuario local.** Los usuarios de la BD local se crean exclusivamente vía `POST /api/users` (que los registra en Keycloak y en la BD simultáneamente). El único usuario que existe después de un reset limpio es `admin@leydata.cl` en Keycloak — creado por el script del paso 5.
+
+`TestDataSeeder` (datos de prueba) solo se activa con el perfil Spring `test-data` y no debe usarse en producción.
+
 ---
 
 ## 7. Verificar que todo funciona
@@ -312,7 +322,22 @@ Con el backend corriendo, abrir en el navegador:
 http://localhost:8080/swagger-ui.html
 ```
 
-Para autenticarse en Swagger UI: click en el botón Authorize, ingresar `Bearer <access_token>` y confirmar.
+Para autenticarse en Swagger UI: click en el botón **Authorize**, seleccionar **oauth2**, ingresar las credenciales del operador y click en **Authorize**. El cliente `leydata-frontend` ya viene preconfigurado.
+
+### Importar colección a Postman o Bruno
+
+| Formato | URL |
+|---|---|
+| JSON | `http://localhost:8080/v3/api-docs` |
+| YAML | `http://localhost:8080/v3/api-docs.yaml` |
+
+En Postman / Bruno: **Import → Link** y pegar la URL. La colección incluye el esquema OAuth2 preconfigurado apuntando a Keycloak. Al importar, configurar la autenticación OAuth 2.0:
+
+- Grant type: **Password Credentials**
+- Token URL: `http://localhost:8180/realms/leydata/protocol/openid-connect/token`
+- Client ID: `leydata-frontend`
+- Client Secret: *(dejar vacío)*
+- Username / Password: las del operador a probar
 
 ---
 
@@ -531,6 +556,22 @@ docker-compose up -d
 ```
 
 `docker-compose down` sin `-v` conserva los volúmenes, por lo que los datos de la base de datos y la configuración de Keycloak no se pierden.
+
+---
+
+### La BD local tiene usuarios de pruebas anteriores
+
+`docker-compose down` **sin `-v` no borra los datos**. Los volúmenes de PostgreSQL persisten aunque el contenedor se elimine. Los usuarios que ves en la tabla `users` son registros reales creados vía `POST /api/users` durante sesiones de prueba anteriores — no desaparecen con un simple reinicio.
+
+Esto es el comportamiento esperado. Si necesitas partir de una BD vacía (por ejemplo, para probar el flujo completo desde cero):
+
+```bash
+docker-compose down -v
+docker-compose up -d
+bash scripts/setup-keycloak.sh   # o .\scripts\setup-keycloak.ps1 en Windows
+```
+
+Después del reset, la BD local estará vacía (solo se siembran catálogos fijos al arrancar el backend, no roles ni usuarios). Los usuarios de prueba previos desaparecerán. Actualizar `KC_BACKEND_SECRET` en el `.env` con el nuevo valor del script.
 
 ---
 

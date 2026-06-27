@@ -5,6 +5,11 @@ import com.leydata.backend.audit.application.service.AuditService;
 import com.leydata.backend.audit.infrastructure.persistence.SystemAuditLogRepository;
 import com.leydata.backend.entity.SystemAuditLog;
 import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -14,28 +19,49 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
-// Endpoints de consulta del log de auditoría.
-// Solo accesible por el ADMIN: los logs contienen información sensible de operaciones.
 @RestController
 @RequestMapping("/api/audit")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
+@Tag(name = "Auditoría",
+        description = "Log de auditoría inmutable con cadena de hashes SHA-256. Requiere rol ADMIN. " +
+                "Cada registro incluye el hash del registro anterior — si alguno se altera, la cadena se rompe. " +
+                "Un trigger de PostgreSQL impide además cualquier UPDATE o DELETE sobre la tabla.")
 public class AuditController {
 
     private final SystemAuditLogRepository auditLogRepository;
     private final AuditService auditService;
     private final UsersRepository usersRepository;
 
-    // GET /api/audit/logs — consulta paginada con filtros opcionales
-    // Parámetros opcionales: action, table, actorEmail, page, size
     @GetMapping("/logs")
+    @Operation(
+            summary = "Consultar logs de auditoría con filtros [ADMIN]",
+            description = """
+                    Devuelve el historial de operaciones paginado. Los filtros son mutuamente excluyentes
+                    (se aplica el primero que no sea nulo): `action` → `table` → `actorEmail` → todos.
+
+                    Acciones auditadas: `CREAR_USUARIO`, `EDITAR_USUARIO`, `DESACTIVAR_USUARIO`,
+                    `BLOQUEAR_USUARIO`, `CREAR_DOMINIO`, `DESACTIVAR_DOMINIO`, `CREAR_FINALIDAD`,
+                    `EDITAR_FINALIDAD`, `APROBAR_SOLICITUD`, `RECHAZAR_SOLICITUD`, entre otras.
+
+                    Si se filtra por `actorEmail` y el email no existe, devuelve lista vacía sin error
+                    (para no revelar si el email existe en el sistema).
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista paginada de logs"),
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
+    })
     public Map<String, Object> getLogs(
+            @Parameter(description = "Filtrar por tipo de acción (ej: CREAR_USUARIO)")
             @RequestParam(required = false) String action,
+            @Parameter(description = "Filtrar por tabla afectada (ej: users, domains, purposes)")
             @RequestParam(required = false) String table,
+            @Parameter(description = "Filtrar por email del actor que realizó la acción")
             @RequestParam(required = false) String actorEmail,
+            @Parameter(description = "Número de página (0-based)")
             @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Registros por página")
             @RequestParam(defaultValue = "20") int size) {
 
         Pageable pageable = PageRequest.of(page, size);
@@ -43,15 +69,12 @@ public class AuditController {
 
         if (action != null && !action.isBlank()) {
             logs = auditLogRepository.findByActionOrderByCreatedAtDesc(action.toUpperCase(), pageable);
-
         } else if (table != null && !table.isBlank()) {
             logs = auditLogRepository.findByTableNameOrderByCreatedAtDesc(table.toLowerCase(), pageable);
-
         } else if (actorEmail != null && !actorEmail.isBlank()) {
-            UUID actorId = usersRepository.findByEmail(actorEmail)
-                    .map(u -> u.getId())
+            String actorId = usersRepository.findByEmail(actorEmail)
+                    .map(u -> u.getKeycloakId())
                     .orElse(null);
-
             if (actorId == null) {
                 return Map.of(
                         "status", "success",
@@ -61,7 +84,6 @@ public class AuditController {
                         "totalPages", 0);
             }
             logs = auditLogRepository.findByActorIdOrderByCreatedAtDesc(actorId, pageable);
-
         } else {
             logs = auditLogRepository.findAllByOrderByCreatedAtDesc(pageable);
         }
@@ -76,12 +98,23 @@ public class AuditController {
                 "totalPages", response.getTotalPages());
     }
 
-    // GET /api/audit/logs/verify — verifica que la cadena de hashes no ha sido alterada
-    // Útil para auditorías formales: demuestra integridad ante reguladores (Ley 21.719)
     @GetMapping("/logs/verify")
+    @Operation(
+            summary = "Verificar integridad de la cadena de auditoría [ADMIN]",
+            description = """
+                    Recorre todos los registros y verifica que la cadena de hashes SHA-256 no ha sido alterada.
+                    Cada registro almacena el hash del registro anterior — si alguno fue modificado directamente
+                    en la BD, el hash no coincide y la cadena se rompe.
+
+                    Devuelve `valid: true` si la cadena está íntegra, `valid: false` con mensaje de alerta si no.
+                    Este endpoint es el instrumento de verificación formal ante auditores o reguladores.
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Resultado de verificación (valid=true/false)"),
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
+    })
     public Map<String, Object> verifyIntegrity() {
         boolean valid = auditService.verifyChainIntegrity();
-
         if (valid) {
             return Map.of(
                     "status", "success",

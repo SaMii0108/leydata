@@ -12,12 +12,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-//KeycloakAdminService — gestiona la comunicación con la API de administración de Keycloak.
-//Permite crear, eliminar y configurar usuarios directamente desde el backend,
-//usando un service account (leydata-backend) con permisos de manage-users.
-//
-//Flujo de autenticación: client_credentials grant con el secret del cliente leydata-backend.
-//El token se cachea y se renueva automáticamente antes de que expire.
 @Service
 public class KeycloakAdminService {
 
@@ -36,7 +30,6 @@ public class KeycloakAdminService {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
-    //Token cacheado para no pedir uno nuevo en cada operación
     private String cachedToken;
     private long tokenExpiresAt = 0;
 
@@ -45,8 +38,6 @@ public class KeycloakAdminService {
         this.objectMapper = objectMapper;
     }
 
-    //Obtiene un token de admin usando client_credentials.
-    //Lo cachea hasta 30 segundos antes de que expire para evitar requests fallidos.
     private String getAdminToken() {
         if (cachedToken != null && System.currentTimeMillis() < tokenExpiresAt) {
             return cachedToken;
@@ -66,24 +57,17 @@ public class KeycloakAdminService {
         Map<?, ?> tokenResponse = objectMapper.readValue(response, Map.class);
         cachedToken = (String) tokenResponse.get("access_token");
         int expiresIn = (Integer) tokenResponse.get("expires_in");
-
-        //Guardar cuándo expira con 30s de margen
         tokenExpiresAt = System.currentTimeMillis() + ((long)(expiresIn - 30) * 1000);
 
         return cachedToken;
     }
 
-    //Crea un usuario en Keycloak, le asigna contraseña y realm role.
-    //Retorna el keycloak_id (UUID) asignado por Keycloak al nuevo usuario.
-    //
-    //Si algo falla, lanza RuntimeException para que UserService haga el rollback.
+    // Crea un usuario en Keycloak con password y realm role.
+    // Retorna el keycloak_id asignado por Keycloak.
     public String createUser(String email, String name, String roleCode, String password) {
         String token = getAdminToken();
 
-        //Paso 1: crear el usuario en Keycloak
-        //Dividir el nombre en firstName/lastName porque Keycloak los requiere no-vacíos (User Profile)
-        //Si el nombre tiene una sola palabra, se usa tanto en firstName como lastName
-        String[] nameParts = name.trim().split("\\s+", 2);
+        String[] nameParts = name.trim().split("\s+", 2);
         String firstName = nameParts[0];
         String lastName = nameParts.length > 1 ? nameParts[1] : nameParts[0];
 
@@ -112,15 +96,12 @@ public class KeycloakAdminService {
             throw new RuntimeException("Error al crear usuario en Keycloak: " + e.getMessage(), e);
         }
 
-        //Keycloak retorna la URL del nuevo usuario en el header Location
-        //Ejemplo: http://localhost:8180/admin/realms/leydata/users/uuid-aqui
         String location = createResponse.getHeaders().getFirst("Location");
         if (location == null || location.isBlank()) {
             throw new RuntimeException("Keycloak no retornó el ID del usuario creado (Location header ausente)");
         }
         String keycloakId = location.substring(location.lastIndexOf("/") + 1);
 
-        //Paso 2: asignar contraseña inicial (no temporal — el usuario puede entrar directo)
         Map<String, Object> passwordPayload = new HashMap<>();
         passwordPayload.put("type", "password");
         passwordPayload.put("value", password);
@@ -134,29 +115,108 @@ public class KeycloakAdminService {
                 .retrieve()
                 .toBodilessEntity();
 
-        //Paso 3: obtener el realm role por nombre y asignarlo al usuario
-        String roleJson = restClient.get()
-                .uri(serverUrl + "/admin/realms/" + realm + "/roles/" + roleCode)
-                .header("Authorization", "Bearer " + token)
-                .retrieve()
-                .body(String.class);
-
-        Map<?, ?> role = objectMapper.readValue(roleJson, Map.class);
-
-        restClient.post()
-                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/role-mappings/realm")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(List.of(role))
-                .retrieve()
-                .toBodilessEntity();
+        assignRealmRoles(token, keycloakId, List.of(roleCode));
 
         return keycloakId;
     }
 
-    //Elimina un usuario de Keycloak por su keycloak_id.
-    //Se usa como compensación si la creación en BD local falla después de haber creado en Keycloak.
-    //Los errores se suprimen intencionalmente: si esto falla, se loguea pero no se relanza.
+    // Actualiza email y nombre de un usuario en Keycloak.
+    public void updateUserProfile(String keycloakId, String email, String name) {
+        String token = getAdminToken();
+        Map<String, Object> payload = new HashMap<>();
+        if (email != null) {
+            payload.put("email", email);
+            payload.put("username", email);
+            payload.put("emailVerified", true);
+        }
+        if (name != null) {
+            String[] parts = name.trim().split("\\s+", 2);
+            payload.put("firstName", parts[0]);
+            payload.put("lastName", parts.length > 1 ? parts[1] : parts[0]);
+        }
+        if (!payload.isEmpty()) {
+            restClient.put()
+                    .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId)
+                    .header("Authorization", "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .toBodilessEntity();
+        }
+    }
+
+    // Resetea la contraseña de un usuario. temporary=true fuerza cambio en próximo login.
+    public void resetPassword(String keycloakId, String newPassword, boolean temporary) {
+        String token = getAdminToken();
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", "password");
+        payload.put("value", newPassword);
+        payload.put("temporary", temporary);
+        restClient.put()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/reset-password")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    // Reemplaza todos los realm roles de un usuario.
+    // Quita los roles actuales (excepto los del sistema) y asigna los nuevos.
+    public void updateUserRoles(String keycloakId, List<String> newRoleCodes) {
+        String token = getAdminToken();
+
+        // Obtener roles actuales del usuario
+        String currentRolesJson = restClient.get()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/role-mappings/realm")
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .body(String.class);
+
+        List<?> currentRoles = objectMapper.readValue(currentRolesJson, List.class);
+
+        // Quitar todos los roles actuales
+        if (!currentRoles.isEmpty()) {
+            restClient.method(org.springframework.http.HttpMethod.DELETE)
+                    .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/role-mappings/realm")
+                    .header("Authorization", "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(currentRoles)
+                    .retrieve()
+                    .toBodilessEntity();
+        }
+
+        // Asignar los nuevos roles
+        if (!newRoleCodes.isEmpty()) {
+            assignRealmRoles(token, keycloakId, newRoleCodes);
+        }
+    }
+
+    // Deshabilita un usuario en Keycloak: impide nuevos logins y refresh de tokens.
+    public void disableUser(String keycloakId) {
+        String token = getAdminToken();
+        restClient.put()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId)
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("enabled", false))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    // Habilita un usuario en Keycloak: restaura la capacidad de login.
+    public void enableUser(String keycloakId) {
+        String token = getAdminToken();
+        restClient.put()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId)
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("enabled", true))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    // Elimina un usuario de Keycloak. Se usa como compensación si falla la BD local.
     public void deleteUser(String keycloakId) {
         try {
             String token = getAdminToken();
@@ -166,9 +226,78 @@ public class KeycloakAdminService {
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
-            //Log del error pero no se relanza: esto es una compensación, no la operación principal
             System.err.println("[KeycloakAdminService] Fallo al eliminar usuario " + keycloakId
                     + " de Keycloak durante compensación: " + e.getMessage());
         }
+    }
+
+    // Retorna todos los usuarios del realm con su nombre completo y roles asignados.
+    // search: filtra por username/email/nombre en Keycloak (null = todos).
+    public List<Map<String, Object>> listUsers(String search) {
+        String token = getAdminToken();
+
+        String uri = serverUrl + "/admin/realms/" + realm + "/users?max=200"
+                + (search != null && !search.isBlank() ? "&search=" + search.trim() : "");
+
+        String usersJson = restClient.get()
+                .uri(uri)
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .body(String.class);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rawUsers = objectMapper.readValue(usersJson, List.class);
+
+        return rawUsers.stream().map(u -> {
+            String kcId = (String) u.get("id");
+            String firstName = (String) u.getOrDefault("firstName", "");
+            String lastName = (String) u.getOrDefault("lastName", "");
+            String fullName = (firstName + " " + lastName).trim();
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("keycloakId", kcId);
+            result.put("email", u.get("email"));
+            result.put("name", fullName.isBlank() ? u.get("username") : fullName);
+            result.put("enabled", u.getOrDefault("enabled", true));
+            result.put("roleCodes", getUserRoles(kcId));
+            return result;
+        }).toList();
+    }
+
+    // Retorna los realm roles asignados a un usuario en Keycloak.
+    public List<String> getUserRoles(String keycloakId) {
+        String token = getAdminToken();
+
+        String rolesJson = restClient.get()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/role-mappings/realm")
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .body(String.class);
+
+        List<?> roles = objectMapper.readValue(rolesJson, List.class);
+        return roles.stream()
+                .map(r -> (String) ((Map<?, ?>) r).get("name"))
+                .filter(name -> !name.startsWith("default-roles") && !name.equals("offline_access") && !name.equals("uma_authorization"))
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assignRealmRoles(String token, String keycloakId, List<String> roleCodes) {
+        List<Map<String, Object>> roleRepresentations = roleCodes.stream().map(code -> {
+            String roleJson = restClient.get()
+                    .uri(serverUrl + "/admin/realms/" + realm + "/roles/" + code)
+                    .header("Authorization", "Bearer " + token)
+                    .retrieve()
+                    .body(String.class);
+            return (Map<String, Object>) objectMapper.readValue(roleJson, Map.class);
+        }).toList();
+
+        restClient.post()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/role-mappings/realm")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(roleRepresentations)
+                .retrieve()
+                .toBodilessEntity();
     }
 }
