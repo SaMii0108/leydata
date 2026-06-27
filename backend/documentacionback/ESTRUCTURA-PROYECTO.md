@@ -52,9 +52,7 @@ backend/src/main/java/com/leydata/backend/
 │   ├── DataCategoriesRepository.java    ← legacy; el módulo activo es datacategory/
 │   ├── DataRetentionPoliciesRepository.java
 │   ├── LegalBasisCatalogRepository.java ← legacy; el módulo activo es legalbasis/
-│   ├── PurposeDataCategoriesRepository.java ← legacy; el módulo activo es purposedatacategory/
-│   ├── TemplatePurposesRepository.java
-│   └── TemplatesRepository.java
+│   └── PurposeDataCategoriesRepository.java ← legacy; el módulo activo es purposedatacategory/
 │
 ├── security/                            ← infraestructura de autenticación
 │   ├── KeycloakJwtAuthConverter.java
@@ -232,6 +230,30 @@ backend/src/main/java/com/leydata/backend/
 │   └── web/
 │       └── NotificationController.java
 │
+├── template/                            ← módulo: plantillas de consentimiento (DRAFT → APPROVED → ACTIVE)
+│   ├── domain/
+│   │   ├── enums/
+│   │   │   └── TemplateStatus.java      ← DRAFT, APPROVED, ACTIVE
+│   │   └── exception/
+│   │       └── TemplateNotFoundException.java
+│   ├── application/
+│   │   ├── dto/
+│   │   │   ├── CreateTemplateRequest.java
+│   │   │   ├── TemplateResponse.java
+│   │   │   ├── TemplateVerifyResponse.java
+│   │   │   ├── AddTemplatePurposeRequest.java
+│   │   │   ├── UpdateTemplatePurposeRequest.java
+│   │   │   └── TemplatePurposeResponse.java
+│   │   └── service/
+│   │       └── TemplateService.java
+│   ├── infrastructure/
+│   │   └── persistence/
+│   │       ├── TemplatesRepository.java
+│   │       ├── TemplatePurposesRepository.java
+│   │       └── TemplateSpecifications.java
+│   └── web/
+│       └── TemplateController.java
+│
 ├── userdomain/                          ← módulo: vínculo usuario ↔ dominio (Keycloak-first)
 │   ├── domain/
 │   │   └── UserDomain.java              ← keycloak_id + FK a Domains
@@ -334,7 +356,7 @@ Entidades JPA que mapean el modelo relacional de PostgreSQL. Son compartidas por
 
 ### `repository/`
 
-Repositorios compartidos sin módulo dueño definido: `Agreements`, `DataSubjects`, `Templates`, etc. **No agregar repositorios nuevos aquí.** Los módulos nuevos siempre deben colocar sus repositorios en `<modulo>/infrastructure/persistence/`.
+Repositorios compartidos sin módulo dueño definido: `Agreements`, `DataSubjects`, etc. **No agregar repositorios nuevos aquí.** Los módulos nuevos siempre deben colocar sus repositorios en `<modulo>/infrastructure/persistence/`.
 
 ### `security/`
 
@@ -380,6 +402,7 @@ No hay `DataSeeder`. En el modelo Keycloak-first no se siembran roles en la BD l
 | Auditoría | `audit/` | `/api/audit/logs/**` | ADMIN |
 | Documentos de privacidad | `privacydoc/` | `/api/privacy-documents/**` | DPO (escritura) · cualquier autenticado (lectura) |
 | Notificaciones in-app | `notification/` | `/api/notifications/**` | Cualquier autenticado |
+| Templates de consentimiento | `template/` | `/api/templates/**` | DPO · ADMIN |
 | Vínculo usuario-dominio | `userdomain/` | — (uso interno) | Keycloak-first: vincula `keycloak_id` con dominios |
 | Estado de bloqueo | `userstatus/` | — (uso interno) | Keycloak-first: almacena flag `blocked` por `keycloak_id` |
 
@@ -393,6 +416,8 @@ Los siguientes repositorios en `repository/` tienen duplicado activo en un módu
 - `DataCategoriesRepository` → usar `datacategory/infrastructure/persistence/DataCategoryRepository`
 - `LegalBasisCatalogRepository` → usar `legalbasis/infrastructure/persistence/LegalBasisRepository`
 - `PurposeDataCategoriesRepository` → usar `purposedatacategory/infrastructure/persistence/PurposeDataCategoryRepository`
+
+`TemplatesRepository` y `TemplatePurposesRepository` **ya no existen en `repository/`** — fueron migrados a `template/infrastructure/persistence/` como parte de la integración del módulo de templates.
 
 ---
 

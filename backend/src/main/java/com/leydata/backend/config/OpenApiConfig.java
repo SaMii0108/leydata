@@ -167,11 +167,36 @@ public class OpenApiConfig {
                                 ## Flujo completo de gestión de consentimiento
 
                                 1. `ADMIN` crea usuarios y dominios
-                                2. `JEFE_DOMINIO` crea una solicitud de propósito
+                                2. `JEFE_DOMINIO` crea una solicitud de propósito (`/api/purpose-requests`)
                                 3. `DPO` aprueba la solicitud → se crea la Finalidad automáticamente
                                 4. `DPO` vincula categorías de datos a la Finalidad con plazos de retención
-                                5. `DPO` crea un Documento de Privacidad, vincula la Finalidad, lo publica → PDF con SHA-256
-                                6. `JEFE_DOMINIO` recibe notificación de publicación
+                                5. `DPO` crea un **Template** de consentimiento (`/api/templates`), lo vincula a sus Finalidades, lo aprueba y activa → SHA-256 sellado
+                                6. `DPO` crea un Documento de Privacidad, vincula la Finalidad, lo publica → PDF con SHA-256
+                                7. `JEFE_DOMINIO` recibe notificación de publicación
+
+                                ---
+
+                                ## Templates de consentimiento
+
+                                | Método | URL | Descripción |
+                                |---|---|---|
+                                | `POST` | `/api/templates` | Crear template en DRAFT |
+                                | `POST` | `/api/templates/{id}/new-version` | Nueva versión (mismo TEMPLATE_KEY) |
+                                | `GET` | `/api/templates` | Listar con filtros opcionales |
+                                | `GET` | `/api/templates/{id}` | Obtener por ID |
+                                | `GET` | `/api/templates/family/{templateKey}` | Historial de versiones |
+                                | `GET` | `/api/templates/active/{templateKey}` | Versión activa del TEMPLATE_KEY |
+                                | `GET` | `/api/templates/{id}/verify` | Verificar integridad SHA-256 |
+                                | `POST` | `/api/templates/{id}/approve` | Aprobar template (requiere ≥1 purpose visible) |
+                                | `POST` | `/api/templates/{id}/activate` | Activar → desactiva versión anterior |
+                                | `POST` | `/api/templates/{id}/purposes` | Vincular purpose al template (solo DRAFT) |
+                                | `DELETE` | `/api/templates/{id}/purposes/{purposeId}` | Desvincular purpose (solo DRAFT) |
+                                | `GET` | `/api/templates/{id}/purposes` | Listar purposes del template |
+                                | `PATCH` | `/api/templates/{id}/purposes/{purposeId}` | Actualizar orden/visibilidad |
+
+                                **Estados del template:** `DRAFT → APPROVED → ACTIVE`
+
+                                Solo puede haber **una versión activa** por `TEMPLATE_KEY`. Activar una versión nueva desactiva automáticamente la anterior. El hash SHA-256 se calcula sobre el contenido del template y sus purposes en el momento de la activación.
                                 """)
                         .contact(new Contact()
                                 .name("Equipo Ley Data")

@@ -19,8 +19,9 @@ El flujo de trabajo completo de la organización es el siguiente:
 3. El **DPO** revisa y aprueba la solicitud.
 4. El **DPO** crea formalmente la **Finalidad** (Purpose) — la unidad atómica de permiso que el sistema evaluará como `true/false` antes de dejar que cualquier proceso interno toque un dato. La finalidad declara: qué hace, su base legal, si es obligatoria, si es revocable.
 5. El **DPO** configura qué categorías de datos procesa esa finalidad y por cuánto tiempo se retienen (política de retención por combinación finalidad+categoría).
-6. El **DPO** crea un Documento de Privacidad que agrupa una o más finalidades, lo somete a revisión, lo aprueba y lo publica. Al publicarlo se genera un PDF firmado con SHA-256 y la finalidad queda inmutable.
-7. El JEFE_DOMINIO que originó la solicitud recibe una notificación de que su finalidad fue publicada.
+6. El **DPO** crea un **Template de consentimiento** que agrupa las finalidades aprobadas, define el orden y visibilidad de cada una, lo aprueba y activa. Al activarlo se sella el template con un hash SHA-256 y cualquier versión anterior del mismo `TEMPLATE_KEY` queda desactivada.
+7. El **DPO** crea un Documento de Privacidad que agrupa una o más finalidades, lo somete a revisión, lo aprueba y lo publica. Al publicarlo se genera un PDF firmado con SHA-256 y la finalidad queda inmutable.
+8. El JEFE_DOMINIO que originó la solicitud recibe una notificación de que su finalidad fue publicada.
 8. El titular recibe o puede consultar ese documento publicado para conocer el tratamiento que se hace de sus datos.
 9. Toda acción del sistema queda registrada en un log de auditoría con cadena de hashes inmutable.
 
@@ -39,7 +40,8 @@ El flujo de trabajo completo de la organización es el siguiente:
 9. [Documentos de Privacidad](#9-documentos-de-privacidad)
 10. [Auditoría](#10-auditoría)
 11. [Notificaciones](#11-notificaciones)
-12. [Referencia de errores](#12-referencia-rápida-de-códigos-de-error)
+12. [Templates de consentimiento](#12-templates-de-consentimiento)
+13. [Referencia de errores](#13-referencia-rápida-de-códigos-de-error)
 
 ---
 
@@ -1345,7 +1347,239 @@ Response 200 — sin cuerpo
 
 ---
 
-## 12. Referencia rápida de códigos de error
+## 12. Templates de consentimiento
+
+### ¿Qué hace este módulo?
+
+Un **Template** es una plantilla de consentimiento que agrupa y ordena Finalidades para ser presentadas al titular. Funciona como la capa de presentación del consentimiento: define qué finalidades se muestran, en qué orden y si son visibles u opcionales.
+
+El módulo implementa versionado: cada `TEMPLATE_KEY` puede tener múltiples versiones, pero solo una puede estar activa en cada momento. Al activar una nueva versión, el sistema desactiva automáticamente la versión anterior del mismo `templateKey`. El contenido de cada template activo queda sellado con un hash SHA-256 para garantizar integridad.
+
+**Estados:** `DRAFT → APPROVED → ACTIVE`
+
+Solo los roles `DPO` y `ADMIN` pueden operar este módulo.
+
+---
+
+### Crear un template
+
+**`POST /api/templates`**  
+**Acceso:** DPO, ADMIN
+
+```json
+// Request
+{
+  "templateKey": "bienvenida-clientes",
+  "name": "Template de bienvenida para clientes",
+  "title": "Gestión de tus datos",
+  "description": "Detalle de cómo tratamos tus datos personales al registrarte",
+  "version": 1,
+  "changeReason": "Versión inicial"
+}
+
+// Response 201
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "templateKey": "bienvenida-clientes",
+  "name": "Template de bienvenida para clientes",
+  "title": "Gestión de tus datos",
+  "description": "Detalle de cómo tratamos tus datos personales al registrarte",
+  "version": 1,
+  "changeReason": "Versión inicial",
+  "status": "DRAFT",
+  "isActive": false,
+  "createdBy": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "approvedBy": null,
+  "approvedAt": null,
+  "activationDate": null,
+  "hashSha256": null,
+  "previousHashSha256": null,
+  "createdAt": "2026-06-27T10:00:00Z"
+}
+```
+
+---
+
+### Vincular una finalidad al template
+
+**`POST /api/templates/{id}/purposes`**  
+**Acceso:** DPO, ADMIN  
+Solo se puede vincular en estado DRAFT.
+
+```json
+// Request
+{
+  "purposeId": "a1b2c3d4-...",
+  "orderPosition": 1,
+  "isVisible": true
+}
+
+// Response 204 (sin cuerpo)
+```
+
+**Caso negativo — template no está en DRAFT**
+```json
+// Response 409
+{ "status": "CONFLICT", "code": 409, "message": "Solo se pueden vincular purposes a un template en estado DRAFT" }
+```
+
+**Caso negativo — la finalidad no está aprobada**
+```json
+// Response 422
+{ "status": "UNPROCESSABLE_ENTITY", "code": 422, "message": "La finalidad debe estar aprobada y activa para vincularse a un template" }
+```
+
+---
+
+### Listar purposes del template
+
+**`GET /api/templates/{id}/purposes`**  
+**Acceso:** DPO, ADMIN
+
+```json
+// Response 200
+[
+  {
+    "purposeId": "a1b2c3d4-...",
+    "purposeName": "Envío de newsletters",
+    "orderPosition": 1,
+    "isVisible": true
+  }
+]
+```
+
+---
+
+### Actualizar orden o visibilidad de una purpose
+
+**`PATCH /api/templates/{id}/purposes/{purposeId}`**  
+**Acceso:** DPO, ADMIN  
+Solo se puede modificar en estado DRAFT.
+
+```json
+// Request (campos opcionales)
+{ "orderPosition": 2, "isVisible": false }
+
+// Response 200 — TemplatePurposeResponse actualizado
+```
+
+---
+
+### Aprobar un template
+
+**`POST /api/templates/{id}/approve`**  
+**Acceso:** DPO, ADMIN  
+Requiere que el template tenga al menos una purpose con `isVisible=true`.
+
+```json
+// Response 200 — TemplateResponse con status: "APPROVED"
+```
+
+**Caso negativo — sin purposes visibles**
+```json
+// Response 422
+{ "status": "UNPROCESSABLE_ENTITY", "code": 422, "message": "El template debe tener al menos una finalidad visible para ser aprobado" }
+```
+
+---
+
+### Activar un template
+
+**`POST /api/templates/{id}/activate`**  
+**Acceso:** DPO, ADMIN  
+El template debe estar en estado APPROVED. Al activar: se calcula y sella el SHA-256 sobre `templateKey+version+name+description+title+purposes(id:order:visible)` y se desactiva cualquier versión anterior del mismo `templateKey`.
+
+```json
+// Response 200 — TemplateResponse con status: "ACTIVE", hashSha256: "abc123..."
+```
+
+**Caso negativo — no está aprobado**
+```json
+// Response 409
+{ "status": "CONFLICT", "code": 409, "message": "Solo se puede activar un template en estado APPROVED" }
+```
+
+---
+
+### Verificar integridad SHA-256
+
+**`GET /api/templates/{id}/verify`**  
+**Acceso:** DPO, ADMIN  
+Recalcula el hash del template activo y lo compara con el almacenado. Permite auditar si el contenido fue alterado fuera del sistema.
+
+```json
+// Response 200
+{
+  "templateId": "3fa85f64-...",
+  "storedHash": "abc123def456...",
+  "computedHash": "abc123def456...",
+  "valid": true
+}
+```
+
+---
+
+### Crear nueva versión
+
+**`POST /api/templates/{id}/new-version`**  
+**Acceso:** DPO, ADMIN  
+Crea un nuevo template en DRAFT copiando el `templateKey` y nombre, con `version` incrementado. La versión anterior no se modifica.
+
+```json
+// Response 201 — TemplateResponse con version: 2, status: "DRAFT"
+```
+
+---
+
+### Listar templates con filtros
+
+**`GET /api/templates`**  
+**Acceso:** DPO, ADMIN  
+Parámetros opcionales: `templateKey`, `isActive`, `createdBy` (keycloak_id), `approvedBy` (keycloak_id), `createdAfter`, `createdBefore` (ISO 8601).
+
+```json
+// Response 200
+[
+  {
+    "id": "3fa85f64-...",
+    "templateKey": "bienvenida-clientes",
+    "version": 1,
+    "status": "ACTIVE",
+    ...
+  }
+]
+```
+
+---
+
+### Historial de versiones
+
+**`GET /api/templates/family/{templateKey}`**  
+**Acceso:** DPO, ADMIN  
+Devuelve todas las versiones del mismo `templateKey` en orden ascendente de versión.
+
+---
+
+### Versión activa de un templateKey
+
+**`GET /api/templates/active/{templateKey}`**  
+**Acceso:** DPO, ADMIN  
+Devuelve la versión actualmente activa. Si no hay ninguna activa devuelve 404.
+
+---
+
+### Reglas de negocio clave
+
+- Un `templateKey` puede tener múltiples versiones pero solo **una puede estar ACTIVE** al mismo tiempo.
+- La vinculación y desvinculación de purposes solo es posible en estado **DRAFT**.
+- Para aprobar un template necesita al menos **una purpose con `isVisible=true`**.
+- El hash SHA-256 se calcula en el momento de **activación** y queda inmutable.
+- `createdBy` y `approvedBy` son el `sub` del JWT (Keycloak ID) — no el UUID local del usuario.
+- Desvincular una purpose de un template no elimina la purpose del sistema.
+
+---
+
+## 13. Referencia rápida de códigos de error
 
 | Código HTTP | Status JSON | Cuándo ocurre |
 |-------------|-------------|---------------|
