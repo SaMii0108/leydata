@@ -1,0 +1,23 @@
+meta {
+  name: Activar Template
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/templates/<uuid-template>/activate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Activa un template en estado APPROVED.
+  Calcula y sella el hash SHA-256 sobre el contenido y sus purposes.
+  Desactiva automáticamente la versión anterior del mismo templateKey (si existía).
+  Transición: APPROVED → ACTIVE
+  Requiere rol DPO o ADMIN.
+}

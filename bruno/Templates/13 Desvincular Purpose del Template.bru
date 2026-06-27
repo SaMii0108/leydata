@@ -1,0 +1,23 @@
+meta {
+  name: Desvincular Purpose del Template
+  type: http
+  seq: 13
+}
+
+delete {
+  url: {{baseUrl}}/api/templates/<uuid-template>/purposes/<uuid-finalidad>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Elimina el vínculo entre una purpose y el template.
+  Solo aplica a templates en estado DRAFT.
+  No elimina la finalidad del sistema, solo la desvincula.
+  Retorna 204 No Content.
+  Requiere rol DPO o ADMIN.
+}

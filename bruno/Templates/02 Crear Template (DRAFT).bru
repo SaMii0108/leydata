@@ -1,0 +1,34 @@
+meta {
+  name: Crear Template (DRAFT)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/templates
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "templateKey": "bienvenida-clientes",
+    "name": "Template de bienvenida para clientes",
+    "title": "Gestión de tus datos personales",
+    "description": "Detalle de cómo tratamos tus datos al registrarte como cliente",
+    "version": 1,
+    "changeReason": "Versión inicial"
+  }
+}
+
+docs {
+  Crea un nuevo template en estado DRAFT.
+  templateKey identifica la familia de versiones (ej. "bienvenida-clientes").
+  Varios templates pueden compartir el mismo templateKey con distintos version.
+  Solo uno puede estar ACTIVE por templateKey.
+  Requiere rol DPO o ADMIN.
+}

@@ -1214,6 +1214,457 @@
           }
         }
       ]
+    },
+    {
+      "name": "Templates",
+      "item": [
+        {
+          "name": "Listar Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates"
+              ],
+              "query": [
+                {
+                  "key": "templateKey",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "createdBy",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "approvedBy",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "createdAfter",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "createdBefore",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista templates con filtros opcionales. Params: templateKey, isActive, createdBy, approvedBy, createdAfter, createdBefore. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear Template (DRAFT)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates"
+              ]
+            },
+            "description": "Crea template en DRAFT. templateKey identifica la familia de versiones. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateKey\": \"bienvenida-clientes\",\n  \"name\": \"Template de bienvenida para clientes\",\n  \"title\": \"Gestión de tus datos personales\",\n  \"description\": \"Detalle de cómo tratamos tus datos al registrarte\",\n  \"version\": 1,\n  \"changeReason\": \"Versión inicial\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Obtener Template por ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>"
+              ]
+            },
+            "description": "Obtiene template por UUID. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Nueva Versión de Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/new-version",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "new-version"
+              ]
+            },
+            "description": "Crea nueva versión DRAFT del mismo templateKey con version incrementado. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Historial de Versiones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/family/<templateKey>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "family",
+                "<templateKey>"
+              ]
+            },
+            "description": "Devuelve todas las versiones de un templateKey en orden ascendente. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Versión Activa",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/active/<templateKey>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "active",
+                "<templateKey>"
+              ]
+            },
+            "description": "Devuelve la versión ACTIVE del templateKey. 404 si no hay ninguna activa. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Aprobar Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "approve"
+              ]
+            },
+            "description": "Aprueba template en DRAFT. Requiere al menos una purpose con isVisible=true. Transición: DRAFT → APPROVED. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Activar Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "activate"
+              ]
+            },
+            "description": "Activa template APPROVED. Sella SHA-256 y desactiva versión anterior del mismo templateKey. Transición: APPROVED → ACTIVE. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verificar Integridad SHA-256",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "verify"
+              ]
+            },
+            "description": "Recalcula SHA-256 y compara con el hash sellado. Responde con { valid, storedHash, computedHash }. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Vincular Purpose al Template",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/purposes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "purposes"
+              ]
+            },
+            "description": "Vincula finalidad aprobada al template DRAFT. 204 No Content. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purposeId\": \"<uuid-finalidad>\",\n  \"orderPosition\": 1,\n  \"isVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Listar Purposes del Template",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/purposes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "purposes"
+              ]
+            },
+            "description": "Devuelve purposes vinculadas ordenadas por orderPosition. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Actualizar Purpose en Template",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/purposes/<uuid-finalidad>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "purposes",
+                "<uuid-finalidad>"
+              ]
+            },
+            "description": "Actualiza orderPosition o isVisible de la purpose en el template DRAFT. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderPosition\": 2,\n  \"isVisible\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Desvincular Purpose del Template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/<uuid-template>/purposes/<uuid-finalidad>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "<uuid-template>",
+                "purposes",
+                "<uuid-finalidad>"
+              ]
+            },
+            "description": "Elimina el vínculo purpose-template. Solo en DRAFT. 204 No Content. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,34 @@
+meta {
+  name: Listar Templates
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/templates
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  templateKey:
+  isActive:
+  createdBy:
+  approvedBy:
+  createdAfter:
+  createdBefore:
+}
+
+docs {
+  Lista templates con filtros opcionales.
+  templateKey: string exacto del key del template
+  isActive: true | false
+  createdBy: keycloak_id (sub del JWT) del creador
+  approvedBy: keycloak_id del DPO que aprobó
+  createdAfter / createdBefore: ISO 8601 (ej. 2026-01-01T00:00:00Z)
+  Requiere rol DPO o ADMIN.
+}
