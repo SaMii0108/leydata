@@ -16,8 +16,8 @@ import com.leydata.backend.repository.DataRetentionPoliciesRepository;
 import com.leydata.backend.repository.DataSubjectsRepository;
 import com.leydata.backend.repository.LegalBasisCatalogRepository;
 import com.leydata.backend.repository.PurposeDataCategoriesRepository;
-import com.leydata.backend.repository.TemplatePurposesRepository;
-import com.leydata.backend.repository.TemplatesRepository;
+import com.leydata.backend.template.infrastructure.persistence.TemplatePurposesRepository;
+import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
 import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
 import com.leydata.backend.userdomain.domain.UserDomain;
 import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepository;
@@ -394,34 +394,24 @@ public class TestDataSeeder implements CommandLineRunner {
 
     private List<Templates> seedTemplates() {
         Templates web = new Templates();
-        web.setCode("TPL_WEB_2025");
+        web.setTemplateKey("TPL_WEB_2025");
         web.setName("Consentimiento Web 2025");
         web.setDescription(
                 "Plantilla principal para el centro de preferencias web de MedVida. Incluye todos los propósitos activos.");
         web.setVersion(1);
-        web.setPrimaryColor("#1A5276");
-        web.setAccentColor("#2E86C1");
-        web.setBackgroundColor("#FFFFFF");
         web.setTitle("Sus preferencias de privacidad");
-        web.setButtonAcceptText("Aceptar seleccionados");
-        web.setButtonRejectText("Rechazar todos");
         web.setIsActive(true);
-        web.setCreatedAt(NOW.minusDays(45));
+        web.setCreatedAt(NOW.minusDays(45).atOffset(java.time.ZoneOffset.UTC));
 
         Templates app = new Templates();
-        app.setCode("TPL_APP_MOVIL");
+        app.setTemplateKey("TPL_APP_MOVIL");
         app.setName("Consentimiento App Móvil v1");
         app.setDescription(
                 "Plantilla compacta para la app móvil MedVida. Solo propósitos esenciales y de mejora de servicio.");
         app.setVersion(1);
-        app.setPrimaryColor("#1A5276");
-        app.setAccentColor("#28B463");
-        app.setBackgroundColor("#F8F9FA");
         app.setTitle("Privacidad en MedVida App");
-        app.setButtonAcceptText("Confirmar");
-        app.setButtonRejectText("Solo esenciales");
         app.setIsActive(true);
-        app.setCreatedAt(NOW.minusDays(45));
+        app.setCreatedAt(NOW.minusDays(45).atOffset(java.time.ZoneOffset.UTC));
 
         return templatesRepo.saveAll(List.of(web, app));
     }

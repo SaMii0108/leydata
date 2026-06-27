@@ -19,7 +19,7 @@ import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurpose
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
 import com.leydata.backend.purpose.infrastructure.persistence.PurposeRequestsRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
-import com.leydata.backend.repository.TemplatesRepository;
+import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
 import com.leydata.backend.shared.EmailService;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepository;
