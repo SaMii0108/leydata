@@ -1665,6 +1665,149 @@
           }
         }
       ]
+    },
+    {
+      "name": "Agreements",
+      "item": [
+        {
+          "name": "Crear Agreement",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataSubjectId\": \"<uuid-titular>\",\n  \"templateId\": \"<uuid-template-activo>\",\n  \"documentId\": \"<uuid-documento-activo>\",\n  \"purposes\": [\n    {\n      \"purposeId\": \"<uuid-finalidad>\",\n      \"accepted\": true\n    }\n  ],\n  \"metadata\": {\n    \"captureChannel\": \"WEB\",\n    \"signatureToken\": null,\n    \"authProvider\": \"keycloak\",\n    \"extraVariables\": null\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements"]
+            },
+            "description": "Registra un nuevo acuerdo de consentimiento. Si ya existe ACTIVE para (dataSubjectId, templateId), lo revoca y crea uno nuevo (reconsent). Genera hash SHA-256 encadenado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener Agreement por ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/<uuid-agreement>",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "<uuid-agreement>"]
+            },
+            "description": "Retorna el agreement con el detalle completo de purposes aceptadas/rechazadas.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Listar Agreements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements"],
+              "query": [
+                { "key": "dataSubjectId", "value": "", "disabled": true },
+                { "key": "templateId", "value": "", "disabled": true },
+                { "key": "status", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Lista agreements con filtros opcionales. status: ACTIVE | REVOKED | EXPIRED.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Consultar Agreement Activo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/active?dataSubjectId=<uuid-titular>&templateId=<uuid-template>",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "active"],
+              "query": [
+                { "key": "dataSubjectId", "value": "<uuid-titular>" },
+                { "key": "templateId", "value": "<uuid-template>" }
+              ]
+            },
+            "description": "200 si existe ACTIVE para ese titular+template, 404 si no. Útil para que el orquestador decida si pedir consentimiento.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Verificar Integridad",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"checkType\": \"MANUAL\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/<uuid-agreement>/verify-integrity",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "<uuid-agreement>", "verify-integrity"]
+            },
+            "description": "Recalcula SHA-256 y compara con el hash almacenado. checkType: MANUAL | SCHEDULED | TRIGGERED. Registra el resultado en el ledger.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Historial de Integridad",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/<uuid-agreement>/integrity-log",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "<uuid-agreement>", "integrity-log"]
+            },
+            "description": "Historial de verificaciones de integridad del agreement. Cada entrada muestra hash almacenado, recalculado e isValid.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Verificaciones Fallidas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/integrity-log/failed",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "integrity-log", "failed"]
+            },
+            "description": "Lista todas las verificaciones de integridad fallidas (isValid = false) de todos los agreements. Para auditoría.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        }
+      ]
     }
   ]
 }

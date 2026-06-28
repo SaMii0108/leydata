@@ -1,0 +1,29 @@
+meta {
+  name: Listar Agreements
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/agreements
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  dataSubjectId:
+  templateId:
+  status:
+}
+
+docs {
+  Lista agreements con filtros opcionales.
+  dataSubjectId: UUID del titular de datos
+  templateId: UUID del template
+  status: ACTIVE | REVOKED | EXPIRED
+  Autenticado. Cualquier rol.
+}

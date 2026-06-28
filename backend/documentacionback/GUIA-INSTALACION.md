@@ -1,6 +1,6 @@
 # Guía de Instalación — Ley Data
 
-**Stack:** Java 21 · Spring Boot 3.x · PostgreSQL 15 · Keycloak 26 · Redis 7 · Docker  
+**Stack:** Java 21 · Spring Boot 3.x · PostgreSQL 15 (primary + replica) · PgBouncer · Keycloak 26 · Redis 7 · Docker  
 **Repositorio:** https://github.com/SaMii0108/leydata  
 **Arquitectura:** Modular DDD — cada módulo tiene capas `web/`, `application/`, `infrastructure/`, `domain/` — ver [ESTRUCTURA-PROYECTO.md](ESTRUCTURA-PROYECTO.md)
 
@@ -86,7 +86,7 @@ docker-compose up -d
 
 Docker Compose lee el `.env` automáticamente para las credenciales de la base de datos. No es necesario pasar variables adicionales a este comando.
 
-Verificar que los tres contenedores estén corriendo:
+Verificar que los contenedores estén corriendo:
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -95,14 +95,24 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 Resultado esperado:
 
 ```
-NAMES                         STATUS    PORTS
-leydata-consent-db            Up        0.0.0.0:5433->5432/tcp
-leydata-consent-keycloak-db   Up        5432/tcp
-leydata-consent-keycloak      Up        0.0.0.0:8180->8080/tcp
-leydata-redis                 Up        0.0.0.0:6379->6379/tcp
+NAMES                          STATUS    PORTS
+leydata-consent-db             Up        0.0.0.0:5433->5432/tcp
+leydata-consent-db-replica     Up        0.0.0.0:5434->5432/tcp
+leydata-pgbouncer              Up        0.0.0.0:5435->5432/tcp
+leydata-consent-keycloak-db    Up        5432/tcp
+leydata-consent-keycloak       Up        0.0.0.0:8180->8080/tcp
+leydata-redis                  Up        0.0.0.0:6379->6379/tcp
 ```
 
+| Contenedor | Puerto | Rol |
+|---|---|---|
+| `leydata-consent-db` | 5433 | PostgreSQL primary — escribe y lee |
+| `leydata-consent-db-replica` | 5434 | PostgreSQL replica — solo lectura, standby |
+| `leydata-pgbouncer` | 5435 | Connection pooler frente al primary |
+
 La primera vez que inicia `leydata-consent-keycloak` puede tardar entre 30 y 60 segundos. Esperar antes de continuar.
+
+> **Primera vez:** `leydata-consent-db-replica` puede tardar unos segundos extra porque espera que el primary esté listo antes de hacer la copia inicial (`pg_basebackup`). Es normal.
 
 ---
 
@@ -414,10 +424,12 @@ docker-compose down
 
 ```bash
 docker-compose down -v
-rm -rf ./postgres_data
+rm -rf ./postgres_data ./postgres_replica_data
 docker-compose up -d
 bash scripts/setup-keycloak.sh   # o .\scripts\setup-keycloak.ps1 en Windows
 ```
+
+> Borrar `postgres_replica_data` es necesario para que la replica haga `pg_basebackup` desde cero al volver a levantar.
 
 Después del reset, actualizar `KC_BACKEND_SECRET` en el `.env` con el nuevo valor que imprime el script.
 
@@ -438,6 +450,21 @@ docker exec -it leydata-redis redis-cli ping
 
 # Ver keys almacenadas (en desarrollo)
 docker exec -it leydata-redis redis-cli keys "*"
+```
+
+### Verificar la replica de PostgreSQL
+
+```bash
+# Ver el estado de streaming desde el primary
+docker exec -it leydata-consent-db psql -U admin -c "SELECT client_addr, state, sent_lsn, write_lsn, replay_lsn FROM pg_stat_replication;"
+```
+
+Resultado esperado: una fila con `state = streaming`. Si la tabla está vacía, la replica no está conectada — ver sección de problemas frecuentes.
+
+```bash
+# Confirmar que la replica está en modo standby (read-only)
+docker exec -it leydata-consent-db-replica psql -U admin -c "SELECT pg_is_in_recovery();"
+# Resultado esperado: t (true)
 ```
 
 ### Compilar sin levantar
@@ -609,6 +636,86 @@ sudo systemctl stop redis
 # o
 sudo service redis stop
 ```
+
+---
+
+### La replica no se conecta al primary — `pg_stat_replication` vacío
+
+Verificar los logs de la replica:
+
+```bash
+docker logs leydata-consent-db-replica --tail 30
+```
+
+Si el directorio de datos no estaba vacío al arrancar, la replica no hizo `pg_basebackup`. Solución: borrar los datos de la replica y reiniciarla:
+
+```bash
+docker-compose stop db-replica
+rm -rf ./postgres_replica_data
+docker-compose up -d db-replica
+```
+
+Si el error es de autenticación (`password authentication failed for user "replicator"`), el primary fue recreado sin correr el script de replicación. Solución: reset completo con `docker-compose down -v && rm -rf ./postgres_data ./postgres_replica_data && docker-compose up -d`.
+
+---
+
+### El primary de PostgreSQL se cae — failover manual a la replica
+
+> **Contexto:** La replica está en modo standby (solo lectura). Spring Boot apunta al primary (5433 o PgBouncer 5435). Si el primary cae, el backend deja de funcionar — el failover **no es automático** (Patroni no está implementado aún — ver deuda técnica en ARQUITECTURA-PROBLEMAS-PENDIENTES.md).
+
+#### 1. Confirmar que el primary está caído
+
+```bash
+docker ps | grep leydata-consent-db
+# Si el contenedor no aparece o dice "Restarting", está caído
+
+# Intentar conectar directamente
+docker exec -it leydata-consent-db psql -U admin -c "SELECT 1;" 2>&1
+```
+
+#### 2. Promover la replica a primary
+
+```bash
+# Ejecutar pg_promote() dentro del contenedor de la replica
+docker exec -it leydata-consent-db-replica psql -U admin -c "SELECT pg_promote();"
+# Resultado esperado: pg_promote → t
+```
+
+Esto hace que la replica salga del modo standby y empiece a aceptar escrituras. El archivo `standby.signal` desaparece automáticamente.
+
+Verificar que ya no está en recovery:
+```bash
+docker exec -it leydata-consent-db-replica psql -U admin -c "SELECT pg_is_in_recovery();"
+# Resultado esperado: f (false) — ya es primary
+```
+
+#### 3. Redirigir el backend a la replica (ahora nuevo primary)
+
+La replica corre en el puerto **5434**. Hay dos opciones:
+
+**Opción A — cambiar el `.env` y reiniciar el backend:**
+```bash
+# En .env, cambiar DB_HOST o el puerto al que apunta Spring Boot
+# Si usas PgBouncer, actualizar la variable DB_HOST de pgbouncer a leydata-consent-db-replica
+
+# Reiniciar PgBouncer con el nuevo destino
+docker-compose restart pgbouncer
+```
+
+**Opción B — editar `application.properties` directamente (temporal):**
+```
+spring.datasource.url=jdbc:postgresql://localhost:5434/leydata_db
+```
+Reiniciar el backend.
+
+#### 4. Cuando el primary original se recupere
+
+**No volver a levantarlo como primary** — ahora existe otro primary y habría split-brain (dos nodos aceptando escrituras). Opciones:
+
+- **Opción simple (dev):** reset completo — `docker-compose down -v && rm -rf ./postgres_data ./postgres_replica_data && docker-compose up -d`
+- **Opción correcta (producción):** configurar el primary recuperado como nueva replica del nodo promovido usando `pg_basebackup`, luego re-registrarlo como standby.
+
+> En producción esto lo gestiona Patroni automáticamente. Ver Fase 3 en ARQUITECTURA-PROBLEMAS-PENDIENTES.md.
 
 ---
 
