@@ -225,21 +225,21 @@ create_user_with_role() {
       \"credentials\": [{\"type\":\"password\",\"value\":\"$PASSWORD\",\"temporary\":false}]
     }" -D - -o /dev/null)
 
-  UID=$(echo "$RESPONSE" | grep -i "^location:" | tr -d '\r' | awk -F'/' '{print $NF}')
+  KC_USER_ID=$(echo "$RESPONSE" | grep -i "^location:" | tr -d '\r' | awk -F'/' '{print $NF}')
 
-  if [ -z "$UID" ]; then
-    UID=$(curl -s "$KC_URL/admin/realms/$REALM/users?email=$EMAIL" \
+  if [ -z "$KC_USER_ID" ]; then
+    KC_USER_ID=$(curl -s "$KC_URL/admin/realms/$REALM/users?email=$EMAIL" \
       -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id']) if d else print('')")
-    [ -n "$UID" ] && echo "  $EMAIL ya existía." || echo "  No se pudo obtener ID de $EMAIL."
+    [ -n "$KC_USER_ID" ] && echo "  $EMAIL ya existía." || echo "  No se pudo obtener ID de $EMAIL."
   else
     echo "  $EMAIL creado."
   fi
 
-  if [ -n "$UID" ]; then
+  if [ -n "$KC_USER_ID" ]; then
     ROLE_JSON=$(curl -s "$KC_URL/admin/realms/$REALM/roles/$ROLE" \
       -H "Authorization: Bearer $TOKEN")
     CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-      -X POST "$KC_URL/admin/realms/$REALM/users/$UID/role-mappings/realm" \
+      -X POST "$KC_URL/admin/realms/$REALM/users/$KC_USER_ID/role-mappings/realm" \
       -H "Authorization: Bearer $TOKEN" \
       -H "Content-Type: application/json" \
       -d "[$ROLE_JSON]")
