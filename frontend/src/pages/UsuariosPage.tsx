@@ -116,7 +116,7 @@ const UsuariosPage = () => {
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <tr key={user.id}>
+                  <tr key={user.keycloakId}>
                     <td>
                       <div className={styles.userCell}>
                         <span className={[styles.avatar, styles[`avatar_${primaryRole(user).toLowerCase()}`]].join(' ')}>

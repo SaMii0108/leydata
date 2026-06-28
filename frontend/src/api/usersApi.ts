@@ -10,7 +10,7 @@ export class ApiError extends Error {
 }
 
 export interface UserSummaryDto {
-  id: string;
+  keycloakId: string;
   email: string;
   name: string;
   active: boolean;

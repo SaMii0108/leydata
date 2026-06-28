@@ -16,7 +16,6 @@ export interface CreateDomainPayload {
   code: string;
   name: string;
   description: string;
-  jefeId: string | null;
 }
 
 async function request<T>(
