@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/api/users/<uuid-aqui>/reactivate
+  url: {{baseUrl}}/api/users/<keycloak-id-aqui>/reactivate
   body: none
   auth: bearer
 }
@@ -15,9 +15,8 @@ auth:bearer {
 }
 
 docs {
-  Revierte una desactivación temporal.
+  Revierte una desactivación temporal. El {keycloak-id} es el sub del JWT del usuario a reactivar.
   1. keycloak.enableUser() — restaura la capacidad de login en Keycloak
-  2. users.active=true en BD local
   No aplica a usuarios bloqueados permanentemente.
   Requiere rol ADMIN.
 }

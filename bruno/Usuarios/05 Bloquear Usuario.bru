@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/api/users/<uuid-aqui>/block
+  url: {{baseUrl}}/api/users/<keycloak-id-aqui>/block
   body: none
   auth: bearer
 }
@@ -15,11 +15,10 @@ auth:bearer {
 }
 
 docs {
-  Bloqueo permanente e irreversible desde la API.
+  Bloqueo permanente e irreversible desde la API. El {keycloak-id} es el sub del JWT del usuario a bloquear.
   Pasos que ejecuta el sistema:
   1. keycloak.disableUser() — impide nuevos logins y renovación de tokens
-  2. Registra en user_status con blocked=true — el UserStatusFilter corta tokens existentes
-  3. Marca users.active=false en la BD local
+  2. Registra en user_status con blocked=true — el UserStatusFilter corta tokens existentes vía Redis
 
   Para desbloquear manualmente: usar el endpoint de Keycloak 06 (Habilitar/Deshabilitar)
   + DELETE FROM user_status WHERE keycloak_id = '<id>' en PostgreSQL.

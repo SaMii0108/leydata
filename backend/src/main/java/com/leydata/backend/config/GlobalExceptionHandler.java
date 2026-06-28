@@ -65,7 +65,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleNotReadable(HttpMessageNotReadableException ex) {
-        Map<String, Object> body = buildErrorResponse("BAD_REQUEST", "Cuerpo de la solicitud inválido o con formato incorrecto", HttpStatus.BAD_REQUEST);
+        Map<String, Object> body = buildErrorResponse("BAD_REQUEST",
+                "Cuerpo de la solicitud inválido o con formato incorrecto", HttpStatus.BAD_REQUEST);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
@@ -86,7 +87,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNoResource(NoResourceFoundException ex) {
-        Map<String, Object> body = buildErrorResponse("NOT_FOUND", "Ruta no encontrada: " + ex.getResourcePath(), HttpStatus.NOT_FOUND);
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", "Ruta no encontrada: " + ex.getResourcePath(),
+                HttpStatus.NOT_FOUND);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
@@ -120,7 +122,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
-    // ── MÓDULO PURPOSES ───────────────────────────────────────────────────────────
+    // ── MÓDULO PURPOSES
+    // ───────────────────────────────────────────────────────────
 
     @ExceptionHandler(PurposeNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handlePurposeNotFound(PurposeNotFoundException ex) {
@@ -166,7 +169,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessValidationException.class)
     public ResponseEntity<Map<String, Object>> handleBusinessValidation(BusinessValidationException ex) {
-        Map<String, Object> body = buildErrorResponse("UNPROCESSABLE_ENTITY", ex.getMessage(), HttpStatus.UNPROCESSABLE_ENTITY);
+        Map<String, Object> body = buildErrorResponse("UNPROCESSABLE_ENTITY", ex.getMessage(),
+                HttpStatus.UNPROCESSABLE_ENTITY);
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
     }
 

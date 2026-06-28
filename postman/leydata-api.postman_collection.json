@@ -240,8 +240,8 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/users/<uuid-aqui>",
-            "description": "Retorna un usuario por su ID. Requiere ADMIN."
+            "url": "{{baseUrl}}/api/users/<keycloak-id-aqui>",
+            "description": "Devuelve el detalle de un usuario por su keycloak_id (claim 'sub' del JWT). Los datos vienen de Keycloak directamente. Requiere rol ADMIN."
           }
         },
         {
@@ -263,7 +263,7 @@
               "raw": "{\n  \"firstName\": \"Nombre\",\n  \"lastName\": \"Apellido\",\n  \"email\": \"usuario@ejemplo.cl\",\n  \"password\": \"Contraseña1!\",\n  \"role\": \"DPO\",\n  \"domainId\": null\n}"
             },
             "url": "{{baseUrl}}/api/users",
-            "description": "Crea usuario en Keycloak y caché local. Requiere ADMIN."
+            "description": "Crea el operador en Keycloak. Si la asignación de dominios falla, el usuario se elimina de Keycloak como compensación.\nRespuesta incluye `keycloakId` — usar ese valor como {userId} en los demás endpoints.\nRoles válidos: ADMIN, DPO, JEFE_DOMINIO, USER, TITULAR. domainIds solo aplica con JEFE_DOMINIO."
           }
         },
         {
@@ -289,7 +289,7 @@
                 }
               }
             },
-            "url": "{{baseUrl}}/api/users/<uuid-aqui>",
+            "url": "{{baseUrl}}/api/users/<keycloak-id-aqui>",
             "description": "Edita nombre, email, contraseña, roles y dominios del usuario. Todos los campos son opcionales.\n\n- name: nuevo nombre completo (actualiza firstName/lastName en Keycloak)\n- email: nuevo email único (actualiza email y username en Keycloak)\n- password: nueva contraseña temporal — Keycloak fuerza cambio en el próximo login\n- roleCodes: reemplaza los roles actuales. Si se quita JEFE_DOMINIO, sus dominios se limpian\n- domainIds: reemplaza los dominios asignados. Solo válido con rol JEFE_DOMINIO\n\nRequiere rol ADMIN. No aplica a usuarios bloqueados."
           }
         },
@@ -303,7 +303,7 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/users/<uuid-aqui>/block",
+            "url": "{{baseUrl}}/api/users/<keycloak-id-aqui>/block",
             "description": "Bloquea el usuario: deshabilita en Keycloak + marca blocked=true + active=false. Requiere ADMIN."
           }
         },
@@ -317,8 +317,8 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/users/<uuid-aqui>/deactivate",
-            "description": "Desactiva el usuario (soft-delete). Requiere ADMIN."
+            "url": "{{baseUrl}}/api/users/<keycloak-id-aqui>/deactivate",
+            "description": "Suspensión temporal reversible. {userId} = keycloak_id del usuario.\n1. keycloak.disableUser() — impide nuevos logins y refresh de tokens\nPara revertir: usar /reactivate. Requiere rol ADMIN."
           }
         },
         {
@@ -331,8 +331,8 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/users/<uuid-aqui>/reactivate",
-            "description": "Reactiva un usuario desactivado. Requiere ADMIN."
+            "url": "{{baseUrl}}/api/users/<keycloak-id-aqui>/reactivate",
+            "description": "Revierte una desactivación temporal. {userId} = keycloak_id del usuario.\n1. keycloak.enableUser() — restaura la capacidad de login en Keycloak\nNo aplica a usuarios bloqueados permanentemente. Requiere rol ADMIN."
           }
         }
       ]

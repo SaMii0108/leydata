@@ -25,12 +25,12 @@ body:json {
 }
 
 docs {
-  Crea el usuario en Keycloak Y en la BD local de forma atómica.
-  Si la BD local falla, el usuario se elimina de Keycloak (compensación manual).
+  Crea el usuario en Keycloak. Si la asignación de dominios falla, el usuario se elimina de Keycloak (compensación).
+  Respuesta incluye "keycloakId" (el sub del JWT) — usar ese valor en los demás endpoints de usuario.
 
   roleCode válidos: ADMIN, DPO, JEFE_DOMINIO, USER, TITULAR
   domainIds: solo aplica si roleCode = JEFE_DOMINIO (lista de UUIDs de dominios activos)
-  password: se envía a Keycloak, nunca se guarda en la BD local
+  password: se envía a Keycloak, nunca se guarda localmente
 
   Requiere rol ADMIN.
 }

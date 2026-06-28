@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/api/users/<uuid-aqui>
+  url: {{baseUrl}}/api/users/<keycloak-id-aqui>
   body: none
   auth: bearer
 }
@@ -15,7 +15,7 @@ auth:bearer {
 }
 
 docs {
-  Devuelve el detalle de un usuario por su UUID local (BD local, no keycloak_id).
-  Los roles se consultan en tiempo real a Keycloak.
+  Devuelve el detalle de un usuario por su keycloak_id (claim "sub" del JWT).
+  Los datos se obtienen directamente de Keycloak — no depende de BD local.
   Requiere rol ADMIN.
 }
