@@ -17,6 +17,7 @@ backend/.settings/
 .env
 .env.local
 .github/
+graphify-out/
 
 
 # IDEs
@@ -28,6 +29,7 @@ backend/.settings/
 
 # BBDD
 postgres_data/
+postgres_replica_data/
 
 # Git Hub
 .github/

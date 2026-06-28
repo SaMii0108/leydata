@@ -1,0 +1,21 @@
+meta {
+  name: Verificaciones Fallidas
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/agreements/integrity-log/failed
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Lista todas las verificaciones de integridad fallidas (isValid = false) de todos los agreements.
+  Útil para auditoría y detección de manipulación de datos.
+  Autenticado. Cualquier rol.
+}

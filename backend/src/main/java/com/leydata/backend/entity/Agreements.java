@@ -42,7 +42,7 @@ public class Agreements {
     @JoinColumn(name = "document_id", insertable = false, updatable = false)
     private PrivacyDocuments document;
 
-    @Column(name = "document_id")
+    @Column(name = "document_id", nullable = false)
     private UUID documentId;
 
     @Column(name = "status", nullable = false)
@@ -61,11 +61,11 @@ public class Agreements {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "hash_sha256")
+    @Column(name = "hash_sha256", unique = true)
     private String hashSha256;
 
-    @Column(name = "previous_hash")
-    private String previousHash;
+    @Column(name = "previous_hash_sha256")
+    private String previousHashSha256;
 
     @OneToMany(mappedBy = "agreement", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<AgreementsPurposes> agreementsPurposes;

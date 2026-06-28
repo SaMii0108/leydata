@@ -26,18 +26,21 @@ echo ""
 
 # ── Esperar a que Keycloak esté listo ────────────────────────────────────────
 echo "→ Esperando a que Keycloak esté disponible..."
-for i in $(seq 1 30); do
-  STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$KC_URL/realms/master" 2>/dev/null || echo "000")
+# Keycloak 26 puede tardar más de 90s en arranque frío — esperamos hasta 3 minutos.
+MAX_ATTEMPTS=60
+for i in $(seq 1 $MAX_ATTEMPTS); do
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "$KC_URL/realms/master" 2>/dev/null || echo "000")
   if [ "$STATUS" = "200" ]; then
     echo "  Keycloak listo."
     break
   fi
-  echo "  Intento $i/30 — esperando 3 segundos..."
+  echo "  Intento $i/$MAX_ATTEMPTS — esperando 3 segundos..."
   sleep 3
 done
 
 if [ "$STATUS" != "200" ]; then
-  echo "ERROR: Keycloak no está disponible en $KC_URL. Verificar que el contenedor esté corriendo."
+  echo "ERROR: Keycloak no respondió en ${MAX_ATTEMPTS} intentos ($(( MAX_ATTEMPTS * 3 ))s)."
+  echo "       Verificar que el contenedor esté corriendo: docker logs leydata-consent-keycloak --tail 30"
   exit 1
 fi
 

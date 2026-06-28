@@ -1,0 +1,20 @@
+meta {
+  name: Obtener Agreement por ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/agreements/<uuid-agreement>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Retorna el agreement con el detalle completo de purposes aceptadas/rechazadas.
+  Autenticado. Cualquier rol.
+}

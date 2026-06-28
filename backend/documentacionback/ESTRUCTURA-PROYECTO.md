@@ -254,6 +254,31 @@ backend/src/main/java/com/leydata/backend/
 │   └── web/
 │       └── TemplateController.java
 │
+├── agreement/                           ← módulo: acuerdos de consentimiento (ledger SHA-256 encadenado)
+│   ├── domain/
+│   │   └── exception/
+│   │       └── AgreementNotFoundException.java
+│   ├── application/
+│   │   ├── dto/
+│   │   │   ├── CreateAgreementRequest.java
+│   │   │   ├── PurposeDecisionRequest.java
+│   │   │   ├── AgreementMetadataRequest.java
+│   │   │   ├── AgreementResponse.java
+│   │   │   ├── AgreementPurposeResponse.java
+│   │   │   ├── AgreementMetadataResponse.java
+│   │   │   ├── AgreementIntegrityLogResponse.java
+│   │   │   └── VerifyIntegrityRequest.java
+│   │   └── service/
+│   │       └── AgreementService.java
+│   ├── infrastructure/
+│   │   └── persistence/
+│   │       ├── AgreementsRepository.java
+│   │       ├── AgreementsPurposesRepository.java
+│   │       ├── AgreementMetadataRepository.java
+│   │       └── AgreementIntegrityLogRepository.java
+│   └── web/
+│       └── AgreementController.java
+│
 ├── userdomain/                          ← módulo: vínculo usuario ↔ dominio (Keycloak-first)
 │   ├── domain/
 │   │   └── UserDomain.java              ← keycloak_id + FK a Domains
@@ -403,6 +428,7 @@ No hay `DataSeeder`. En el modelo Keycloak-first no se siembran roles en la BD l
 | Documentos de privacidad | `privacydoc/` | `/api/privacy-documents/**` | DPO (escritura) · cualquier autenticado (lectura) |
 | Notificaciones in-app | `notification/` | `/api/notifications/**` | Cualquier autenticado |
 | Templates de consentimiento | `template/` | `/api/templates/**` | DPO · ADMIN |
+| Agreements (consentimiento) | `agreement/` | `/api/agreements/**` | Cualquier autenticado |
 | Vínculo usuario-dominio | `userdomain/` | — (uso interno) | Keycloak-first: vincula `keycloak_id` con dominios |
 | Estado de bloqueo | `userstatus/` | — (uso interno) | Keycloak-first: almacena flag `blocked` por `keycloak_id` |
 
@@ -416,6 +442,7 @@ Los siguientes repositorios en `repository/` tienen duplicado activo en un módu
 - `DataCategoriesRepository` → usar `datacategory/infrastructure/persistence/DataCategoryRepository`
 - `LegalBasisCatalogRepository` → usar `legalbasis/infrastructure/persistence/LegalBasisRepository`
 - `PurposeDataCategoriesRepository` → usar `purposedatacategory/infrastructure/persistence/PurposeDataCategoryRepository`
+- `AgreementsRepository`, `AgreementsPurposesRepository`, `AgreementIntegrityLogRepository`, `AgreementMetadataRepository` → usar los equivalentes en `agreement/infrastructure/persistence/`
 
 `TemplatesRepository` y `TemplatePurposesRepository` **ya no existen en `repository/`** — fueron migrados a `template/infrastructure/persistence/` como parte de la integración del módulo de templates.
 

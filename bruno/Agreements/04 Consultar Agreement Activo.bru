@@ -1,0 +1,27 @@
+meta {
+  name: Consultar Agreement Activo
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/agreements/active
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  dataSubjectId: <uuid-titular>
+  templateId: <uuid-template>
+}
+
+docs {
+  Consulta si existe un agreement ACTIVE para (dataSubjectId, templateId).
+  200 con el agreement si existe, 404 si no hay consentimiento activo.
+  Útil para que el orquestador decida si solicitar consentimiento antes de procesar datos.
+  Autenticado. Cualquier rol.
+}

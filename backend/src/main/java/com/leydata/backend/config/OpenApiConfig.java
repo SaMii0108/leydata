@@ -177,6 +177,9 @@ public class OpenApiConfig {
                                 5. `DPO` crea un **Template** de consentimiento (`/api/templates`), lo vincula a sus Finalidades, lo aprueba y activa → SHA-256 sellado
                                 6. `DPO` crea un Documento de Privacidad, vincula la Finalidad, lo publica → PDF con SHA-256
                                 7. `JEFE_DOMINIO` recibe notificación de publicación
+                                8. El orquestador consulta `/api/agreements/active` para saber si el titular ya consintió
+                                9. Si no hay consentimiento activo, el titular firma → se crea el **Agreement** (`/api/agreements`) con hash SHA-256 encadenado
+                                10. Si el titular ya tenía un ACTIVE para el mismo template, se revoca automáticamente y se crea uno nuevo (reconsent)
 
                                 ---
 
@@ -201,6 +204,44 @@ public class OpenApiConfig {
                                 **Estados del template:** `DRAFT → APPROVED → ACTIVE`
 
                                 Solo puede haber **una versión activa** por `TEMPLATE_KEY`. Activar una versión nueva desactiva automáticamente la anterior. El hash SHA-256 se calcula sobre el contenido del template y sus purposes en el momento de la activación.
+
+                                ---
+
+                                ## Agreements (acuerdos de consentimiento)
+
+                                | Método | URL | Descripción |
+                                |---|---|---|
+                                | `POST` | `/api/agreements` | Crear agreement — registra la decisión del titular por cada purpose |
+                                | `GET` | `/api/agreements` | Listar agreements (filtros: dataSubjectId, templateId, status) |
+                                | `GET` | `/api/agreements/{id}` | Obtener agreement con detalle de purposes |
+                                | `GET` | `/api/agreements/active?dataSubjectId=&templateId=` | Verificar si hay consentimiento ACTIVE para un titular+template |
+                                | `POST` | `/api/agreements/{id}/verify-integrity` | Verificar integridad SHA-256 bajo demanda |
+                                | `GET` | `/api/agreements/{id}/integrity-log` | Historial de verificaciones de integridad del agreement |
+                                | `GET` | `/api/agreements/integrity-log/failed` | Listar todas las verificaciones fallidas (isValid=false) |
+
+                                **Estados del agreement:** `ACTIVE | REVOKED | EXPIRED`
+
+                                Cada agreement encadena su SHA-256 al hash del agreement anterior (ledger de integridad).
+                                Si se crea un nuevo agreement para el mismo `(dataSubjectId, templateId)` con uno ACTIVE existente,
+                                el anterior se revoca automáticamente y sus purposes quedan en REVOKED (reconsent).
+
+                                **Body mínimo para crear un agreement:**
+                                ```json
+                                {
+                                  "dataSubjectId": "<uuid-titular>",
+                                  "templateId": "<uuid-template-activo>",
+                                  "documentId": "<uuid-documento-activo>",
+                                  "purposes": [
+                                    { "purposeId": "<uuid-finalidad>", "accepted": true }
+                                  ],
+                                  "metadata": {
+                                    "captureChannel": "WEB",
+                                    "authProvider": "keycloak"
+                                  }
+                                }
+                                ```
+
+                                Accesible por cualquier rol autenticado.
                                 """)
                         .contact(new Contact()
                                 .name("Equipo Ley Data")
