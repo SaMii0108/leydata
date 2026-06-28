@@ -588,7 +588,7 @@ public class TestDataSeeder implements CommandLineRunner {
         a.setStatus(status);
         a.setCreatedAt(createdAt);
         a.setHashSha256(hash);
-        a.setPreviousHash(prevHash);
+        a.setPreviousHashSha256(prevHash);
         a.setExpiration(createdAt.plusYears(1));
         return a;
     }
