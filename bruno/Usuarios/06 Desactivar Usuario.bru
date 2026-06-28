@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/api/users/<uuid-aqui>/deactivate
+  url: {{baseUrl}}/api/users/<keycloak-id-aqui>/deactivate
   body: none
   auth: bearer
 }
@@ -15,9 +15,8 @@ auth:bearer {
 }
 
 docs {
-  Suspensión temporal reversible.
+  Suspensión temporal reversible. El {keycloak-id} es el sub del JWT del usuario a desactivar.
   1. keycloak.disableUser() — impide nuevos logins y refresh de tokens
-  2. users.active=false en BD local — UserStatusFilter rechaza con 403 los tokens existentes
   Para revertir: usar endpoint 07 Reactivar.
   Requiere rol ADMIN.
 }

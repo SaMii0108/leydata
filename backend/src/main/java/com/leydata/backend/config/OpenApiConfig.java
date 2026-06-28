@@ -135,31 +135,35 @@ public class OpenApiConfig {
 
                                 ## Endpoints de usuarios
 
+                                El `{userId}` en todos los endpoints es el **keycloak_id** (`sub` del JWT) — no un UUID local.
+
                                 | Método | URL | Descripción |
                                 |---|---|---|
-                                | `GET` | `/api/users` | Listar usuarios (filtros opcionales abajo) |
+                                | `GET` | `/api/users` | Listar usuarios directo desde Keycloak |
                                 | `GET` | `/api/users?search=juan` | Busca por nombre/email en Keycloak |
                                 | `GET` | `/api/users?status=active` | Solo activos y no bloqueados |
                                 | `GET` | `/api/users?status=inactive` | Desactivados (no bloqueados) |
                                 | `GET` | `/api/users?status=blocked` | Bloqueados permanentemente |
                                 | `GET` | `/api/users?role=DPO` | Filtra por rol exacto |
-                                | `GET` | `/api/users/{id}` | Obtener usuario por ID |
-                                | `POST` | `/api/users` | Crear usuario |
-                                | `PUT` | `/api/users/{id}` | Editar nombre/rol/dominios |
-                                | `POST` | `/api/users/{id}/block` | Bloquear permanentemente |
-                                | `POST` | `/api/users/{id}/deactivate` | Desactivar (reversible) |
-                                | `POST` | `/api/users/{id}/reactivate` | Reactivar |
+                                | `GET` | `/api/users/{keycloakId}` | Obtener usuario por keycloak_id |
+                                | `POST` | `/api/users` | Crear usuario en Keycloak |
+                                | `PUT` | `/api/users/{keycloakId}` | Editar nombre/rol/dominios |
+                                | `POST` | `/api/users/{keycloakId}/block` | Bloquear permanentemente |
+                                | `POST` | `/api/users/{keycloakId}/deactivate` | Desactivar (reversible) |
+                                | `POST` | `/api/users/{keycloakId}/reactivate` | Reactivar |
+
+                                La respuesta de todos los endpoints de usuario incluye `keycloakId` (String) en lugar de `id` (UUID).
 
                                 ---
 
                                 ## Flujo de estados de usuario
 
                                 ```
-                                Activo (enabled en KC, active=true en BD)
+                                Activo (enabled=true en Keycloak)
                                   ↓ desactivar          ↑ reactivar
-                                Inactivo (disabled en KC, active=false en BD) — reversible
+                                Inactivo (enabled=false en Keycloak) — reversible
                                   ↓ bloquear
-                                Bloqueado (disabled en KC, active=false, blocked en user_status) — irreversible desde API
+                                Bloqueado (disabled en KC + fila en user_status) — irreversible desde API
                                 ```
 
                                 ---

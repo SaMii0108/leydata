@@ -231,6 +231,36 @@ public class KeycloakAdminService {
         }
     }
 
+    // Retorna los datos de un usuario por su keycloak_id. Lanza UserNotFoundException si no existe.
+    public Map<String, Object> getUser(String keycloakId) {
+        String token = getAdminToken();
+        String userJson;
+        try {
+            userJson = restClient.get()
+                    .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId)
+                    .header("Authorization", "Bearer " + token)
+                    .retrieve()
+                    .body(String.class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 404) {
+                throw new com.leydata.backend.user.domain.exception.UserNotFoundException(
+                        "Usuario no encontrado en Keycloak: " + keycloakId);
+            }
+            throw new RuntimeException("Error al obtener usuario de Keycloak: " + e.getMessage(), e);
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> u = objectMapper.readValue(userJson, Map.class);
+        String firstName = (String) u.getOrDefault("firstName", "");
+        String lastName  = (String) u.getOrDefault("lastName", "");
+        String fullName  = (firstName + " " + lastName).trim();
+        Map<String, Object> result = new HashMap<>();
+        result.put("keycloakId", keycloakId);
+        result.put("email",   u.get("email"));
+        result.put("name",    fullName.isBlank() ? u.get("username") : fullName);
+        result.put("enabled", u.getOrDefault("enabled", true));
+        return result;
+    }
+
     // Retorna todos los usuarios del realm con su nombre completo y roles asignados.
     // search: filtra por username/email/nombre en Keycloak (null = todos).
     public List<Map<String, Object>> listUsers(String search) {

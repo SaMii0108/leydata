@@ -102,11 +102,13 @@ JWT válido de Keycloak → UserStatusFilter → blocked=true → 403 FORBIDDEN
 
 Gestiona el ciclo de vida de los operadores del sistema (no de los titulares de datos). Un operador puede ser un ADMIN, un DPO o un JEFE_DOMINIO.
 
-**Modelo Keycloak-first:** Keycloak es la única fuente de verdad para identidad, contraseñas, tokens y roles. La BD local almacena exclusivamente datos de negocio: el `keycloak_id` (para hacer JOIN con dominios y auditoría), el flag `active`, y `createdAt`. No existe tabla de roles en la BD local.
+**Modelo Keycloak-first completo:** Keycloak es la única fuente de verdad para identidad, contraseñas, tokens, roles y estado activo/inactivo. La BD local ya no almacena usuarios — solo los dominios asignados (`user_domains`) y los bloqueos permanentes (`user_status`), ambos indexados por `keycloak_id`.
 
-- `GET /api/users` consulta Keycloak para obtener la lista de usuarios y sus roles, y enriquece cada resultado con los datos locales (dominios asignados, estado `blocked`). Acepta parámetros opcionales de filtro: `?search=` (busca por nombre/email en Keycloak), `?status=active|inactive|blocked`, `?role=DPO|ADMIN|JEFE_DOMINIO|USER|TITULAR`.
-- Al crear un usuario, el sistema primero lo registra en Keycloak y luego en la BD local. Si la BD local falla, el sistema borra automáticamente al usuario de Keycloak para evitar que quede un "fantasma" que puede autenticarse pero no operar.
-- Al bloquear o desactivar, el sistema primero deshabilita en Keycloak (impide login y refresh), y luego actualiza el estado local.
+El **identificador de usuario en todos los endpoints** es el `keycloak_id` (el claim `sub` del JWT), no un UUID local.
+
+- `GET /api/users` lista directamente desde Keycloak — devuelve todos los usuarios del realm sin depender de la BD local. Los datos de dominio y bloqueo se enriquecen desde `user_domains` y `user_status`.
+- Al crear un usuario, el sistema lo registra en Keycloak. Si la asignación de dominios falla, el sistema borra automáticamente al usuario de Keycloak como compensación.
+- Al bloquear o desactivar, el sistema deshabilita en Keycloak (impide login y refresh). El bloqueo además registra una fila en `user_status` para que el `UserStatusFilter` corte tokens ya emitidos.
 
 **Reglas de negocio del módulo:**
 - Un usuario nunca se elimina físicamente. Solo puede desactivarse (suspensión temporal, reversible) o bloquearse (permanente e irreversible desde la API).
@@ -147,7 +149,7 @@ GET /api/users?role=DPO           → solo usuarios con rol DPO
   "status": "success",
   "users": [
     {
-      "id": "uuid-local",
+      "keycloakId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
       "email": "pedro@empresa.cl",
       "name": "Pedro López",
       "active": true,
@@ -178,8 +180,8 @@ El ADMIN crea un nuevo operador del sistema. La operación es atómica: si algo 
 // Response 201
 {
   "status": "success",
-  "message": "Usuario creado correctamente en el sistema y en autenticación.",
-  "userId": "550e8400-e29b-41d4-a716-446655440000"
+  "message": "Usuario creado correctamente.",
+  "keycloakId": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -189,10 +191,10 @@ El ADMIN crea un nuevo operador del sistema. La operación es atómica: si algo 
 { "status": "CONFLICT", "code": 409, "message": "Ya existe un usuario con el email maria@empresa.cl" }
 ```
 
-**Caso negativo — falla la BD después de crear en Keycloak**
+**Caso negativo — falla la asignación de dominios después de crear en Keycloak**
 ```
 1. Keycloak crea el usuario ✅
-2. INSERT en BD local falla ❌
+2. Asignación de dominio falla (dominio inactivo, no encontrado, etc.) ❌
 3. Sistema compensa: keycloak.deleteUser(keycloakId) — el usuario desaparece de Keycloak
 4. Response 500 — el usuario no quedó en ningún sistema
 ```
@@ -266,7 +268,6 @@ El bloqueo es permanente e irreversible desde la API. Representa un incidente de
 **Qué hace el sistema al bloquear:**
 1. `keycloak.disableUser()` — deshabilita al usuario en Keycloak: no puede hacer login nuevo ni renovar su token.
 2. Crea un registro en `user_status` con `blocked=true` — el `UserStatusFilter` usa esto para rechazar tokens ya emitidos durante los ~5 minutos hasta que expiren.
-3. Marca `users.active=false` en la BD local.
 
 Una vez bloqueado, el único camino para desbloquear es intervenir directamente en Keycloak a nivel de administración (habilitar el usuario en el Admin Console y limpiar `user_status`).
 
@@ -295,9 +296,9 @@ Una vez bloqueado, el único camino para desbloquear es intervenir directamente 
 
 La desactivación es una suspensión temporal reversible.
 
-**Al desactivar:** el sistema llama a `keycloak.disableUser()` (impide nuevos logins y refresh) y marca `users.active=false`. Los tokens ya emitidos son cortados por el `UserStatusFilter` en cada request siguiente, hasta que expiren.
+**Al desactivar:** el sistema llama a `keycloak.disableUser()` (impide nuevos logins y refresh). El estado `active` se lee en tiempo real desde Keycloak — no hay escritura en BD local.
 
-**Al reactivar:** el sistema llama a `keycloak.enableUser()` (restaura la capacidad de login en Keycloak) y marca `users.active=true`. El usuario puede volver a autenticarse normalmente.
+**Al reactivar:** el sistema llama a `keycloak.enableUser()` (restaura la capacidad de login en Keycloak). El usuario puede volver a autenticarse normalmente.
 
 **Caso negativo — intento de desactivarse a sí mismo o desactivar a otro ADMIN**
 ```json
