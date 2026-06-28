@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/users")
@@ -24,9 +23,8 @@ import java.util.UUID;
 @Tag(name = "Usuarios", description = """
         Ciclo de vida de operadores del sistema. Requiere rol ADMIN.
         Modelo Keycloak-first: Keycloak es la fuente de verdad para identidad, contraseñas y roles.
-        La BD local almacena solo keycloak_id, email, name, active y dominios asignados.
-        GET /api/users consulta Keycloak para obtener la lista de usuarios con sus roles.
-        Las operaciones de bloqueo y desactivación deshabilitan al usuario en Keycloak antes de actualizar la BD local.
+        El identificador de usuario en todos los endpoints es el keycloak_id (claim "sub" del JWT).
+        GET /api/users lista directamente desde Keycloak, sin tabla local.
         """)
 public class UserController {
 
@@ -38,8 +36,8 @@ public class UserController {
     @Operation(
             summary = "Crear usuario [ADMIN]",
             description = """
-                    Crea el operador en Keycloak **y** en la BD local de forma atómica.
-                    Si la BD local falla, el usuario se elimina de Keycloak como compensación.
+                    Crea el operador en Keycloak y registra sus dominios en la BD local.
+                    Si la asignación de dominios falla, el usuario se elimina de Keycloak como compensación.
 
                     - `roleCode` válidos: `ADMIN`, `DPO`, `JEFE_DOMINIO`, `USER`, `TITULAR`
                     - `domainIds` solo aplica si `roleCode = JEFE_DOMINIO`
@@ -47,26 +45,26 @@ public class UserController {
                     """)
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Usuario creado"),
-            @ApiResponse(responseCode = "409", description = "Email ya registrado"),
-            @ApiResponse(responseCode = "400", description = "Rol no encontrado o dominio inactivo"),
+            @ApiResponse(responseCode = "409", description = "Email ya registrado en Keycloak"),
+            @ApiResponse(responseCode = "400", description = "Rol inválido o dominio inactivo"),
             @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
     public Map<String, Object> createUser(@RequestBody CreateUserRequest request) {
         UserResponse created = userService.createUser(request);
         return Map.of(
                 "status", "success",
-                "message", "Usuario creado correctamente en el sistema y en autenticación.",
-                "userId", created.getId());
+                "message", "Usuario creado correctamente.",
+                "keycloakId", created.getKeycloakId());
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     @Operation(summary = "Listar usuarios [ADMIN]",
             description = """
-                    Consulta Keycloak (fuente de verdad) y enriquece con datos locales (dominios, estado blocked).
+                    Lista directamente desde Keycloak (fuente de verdad). No depende de tabla local.
 
                     Parámetros opcionales (usar uno a la vez):
-                    - `search` — busca por nombre, email o username (delegado a Keycloak)
+                    - `search` — busca por nombre, email o username en Keycloak
                     - `status` — filtra por estado: `active` | `inactive` | `blocked`
                     - `role`   — filtra por rol: `ADMIN` | `DPO` | `JEFE_DOMINIO` | `USER` | `TITULAR`
                     """)
@@ -84,15 +82,15 @@ public class UserController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/{userId}")
-    @Operation(summary = "Obtener usuario por ID [ADMIN]")
+    @Operation(summary = "Obtener usuario por keycloak_id [ADMIN]")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Detalle del usuario"),
-            @ApiResponse(responseCode = "404", description = "Usuario no encontrado"),
+            @ApiResponse(responseCode = "404", description = "Usuario no encontrado en Keycloak"),
             @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
     public Map<String, Object> getUserById(
-            @Parameter(description = "UUID del usuario en la BD local") @PathVariable UUID userId) {
-        UserResponse user = userService.getUserById(userId);
+            @Parameter(description = "keycloak_id del usuario (claim sub del JWT)") @PathVariable String userId) {
+        UserResponse user = userService.getUserByKeycloakId(userId);
         return Map.of("status", "success", "user", user);
     }
 
@@ -101,20 +99,19 @@ public class UserController {
     @Operation(
             summary = "Editar usuario [ADMIN]",
             description = """
-                    Actualiza nombre, email, contraseña, roles y dominios asignados.
+                    Actualiza nombre, email, contraseña, roles y dominios asignados en Keycloak.
                     Si se quita el rol `JEFE_DOMINIO`, los dominios del usuario se limpian automáticamente.
                     Los dominios solo se pueden asignar a usuarios con rol `JEFE_DOMINIO`.
-                    Al cambiar la contraseña, Keycloak la marca como temporal y fuerza al usuario
-                    a cambiarla en su próximo login (required action UPDATE_PASSWORD).
+                    Al cambiar la contraseña, Keycloak la marca como temporal (required action UPDATE_PASSWORD).
                     """)
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Usuario actualizado"),
             @ApiResponse(responseCode = "400", description = "Rol inválido o dominio inactivo"),
-            @ApiResponse(responseCode = "404", description = "Usuario no encontrado"),
+            @ApiResponse(responseCode = "404", description = "Usuario no encontrado en Keycloak"),
             @ApiResponse(responseCode = "409", description = "Usuario bloqueado (no se puede modificar)")
     })
     public Map<String, Object> updateUserByAdmin(
-            @PathVariable UUID userId,
+            @PathVariable String userId,
             @RequestBody UpdateUserByAdminRequest request) {
         UserResponse updated = userService.updateUserByAdmin(userId, request);
         return Map.of(
@@ -129,12 +126,10 @@ public class UserController {
             summary = "Bloquear usuario permanentemente [ADMIN]",
             description = """
                     Bloqueo permanente e irreversible desde la API.
-                    Pasos que ejecuta el sistema:
                     1. `keycloak.disableUser()` — impide nuevos logins y renovación de tokens
                     2. Registra en `user_status` con blocked=true — el UserStatusFilter corta tokens existentes
-                    3. Marca `users.active=false` en la BD local
 
-                    Para desbloquear: habilitar el usuario en Keycloak Admin Console
+                    Para desbloquear: habilitar en Keycloak Admin Console
                     + `DELETE FROM user_status WHERE keycloak_id = '<id>'` en PostgreSQL.
                     """)
     @ApiResponses({
@@ -142,7 +137,7 @@ public class UserController {
             @ApiResponse(responseCode = "409", description = "Usuario ya estaba bloqueado"),
             @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
     })
-    public Map<String, Object> blockUser(@PathVariable UUID userId) {
+    public Map<String, Object> blockUser(@PathVariable String userId) {
         UserResponse blocked = userService.blockUser(userId);
         return Map.of(
                 "status", "success",
@@ -157,15 +152,14 @@ public class UserController {
             description = """
                     Suspensión temporal reversible.
                     1. `keycloak.disableUser()` — impide nuevos logins y renovación de tokens
-                    2. Marca `users.active=false` en la BD local — el UserStatusFilter rechaza con 403 tokens existentes
                     Para revertir: usar `/reactivate`.
                     """)
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Usuario desactivado"),
-            @ApiResponse(responseCode = "409", description = "Usuario ya estaba desactivado o está bloqueado"),
+            @ApiResponse(responseCode = "409", description = "Usuario ya desactivado o bloqueado"),
             @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
     })
-    public Map<String, Object> deactivateUser(@PathVariable UUID userId) {
+    public Map<String, Object> deactivateUser(@PathVariable String userId) {
         UserResponse deactivated = userService.deactivateUser(userId);
         return Map.of(
                 "status", "success",
@@ -179,7 +173,6 @@ public class UserController {
             description = """
                     Revierte una desactivación temporal.
                     1. `keycloak.enableUser()` — restaura la capacidad de login en Keycloak
-                    2. Marca `users.active=true` en la BD local
                     No aplica a usuarios bloqueados permanentemente.
                     """)
     @ApiResponses({
@@ -187,7 +180,7 @@ public class UserController {
             @ApiResponse(responseCode = "409", description = "Usuario ya activo o está bloqueado"),
             @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
     })
-    public Map<String, Object> reactivateUser(@PathVariable UUID userId) {
+    public Map<String, Object> reactivateUser(@PathVariable String userId) {
         UserResponse reactivated = userService.reactivateUser(userId);
         return Map.of(
                 "status", "success",
