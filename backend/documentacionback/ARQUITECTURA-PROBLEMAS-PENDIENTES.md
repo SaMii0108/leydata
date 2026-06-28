@@ -33,16 +33,27 @@
 
 ---
 
-### 🔴 Sin réplica de PostgreSQL (Single Point of Failure)
+### ✅ ~~Sin réplica de PostgreSQL (Single Point of Failure)~~ — RESUELTO PARCIALMENTE
 
-**Problema:** La arquitectura proyectada tiene un único nodo de PostgreSQL protegido por PgBouncer. Si el primary cae, **el sistema completo deja de funcionar** — incluyendo la consulta de consentimientos de la que dependen todos los sistemas de la empresa.
+**Fix aplicado (Fase 1 y 2):**
+- `db-replica` en `docker-compose.yml` — PostgreSQL 15 en modo standby con streaming replication desde el primary.
+- `docker/postgres-primary/init-replication.sh` — crea usuario `replicator`, configura `wal_level=replica` y `pg_hba.conf`.
+- `docker/postgres-replica/entrypoint.sh` — hace `pg_basebackup -R` en el primer arranque, luego inicia en modo standby automáticamente.
+- `pgbouncer` en `docker-compose.yml` — connection pooler frente al primary (puerto 5435). Elimina conexiones directas al contenedor de BD.
 
-**Impacto:** Caída total en producción. Inaceptable para un sistema de compliance con deadline legal.
+**Puertos resultantes:**
+- `5433` → PostgreSQL primary (escribe y lee)
+- `5434` → PostgreSQL replica (solo lectura, standby)
+- `5435` → PgBouncer (punto de entrada recomendado para el backend en producción)
 
-**Solución propuesta:**
-- Configurar al menos una **PostgreSQL Streaming Replica** (read replica).
-- Las consultas de lectura de consentimiento van a la replica; las escrituras transaccionales van al primary.
-- Usar **PgBouncer con dos pools** (write → primary, read → replica) o un proxy como Patroni/HAProxy para failover automático.
+**Pendiente — Fase 2b (deuda técnica):**
+Enrutar lecturas de Spring Boot a la replica via `AbstractRoutingDataSource`. Requiere:
+- Dos `DataSource` beans: `writeDataSource` (→ primary/pgbouncer) y `readDataSource` (→ replica)
+- Un `ReadWriteRoutingDataSource extends AbstractRoutingDataSource` que inspeccione `TransactionSynchronizationManager.isCurrentTransactionReadOnly()`
+- Anotar las queries de solo lectura con `@Transactional(readOnly=true)`
+
+**Pendiente — Fase 3 (deuda técnica):**
+Failover automático con **Patroni** (coordina etcd + PostgreSQL para promover la replica automáticamente si el primary cae sin intervención humana). Recomendado para producción antes del go-live de diciembre 2026.
 
 ---
 
@@ -198,12 +209,14 @@ Estado actual del diseño vs. lo que se necesita:
 [Load Balancer]                      ✅ planificado
    /|\
 [App][App][App]                      ✅ planificado (monolito stateless, escala horizontal)
-    │         │
-[PgBouncer]  [PgBouncer read]        ⚠️  solo 1 PgBouncer planificado
-    │              │
-[PostgreSQL Primary] → [Replica]     ❌ replica NO planificada
     │
-  [Redis Master]                     ✅ planificado
+[PgBouncer :5435]                    ✅ implementado en docker-compose
+    │
+[PostgreSQL Primary :5433] → [Replica :5434]   ✅ streaming replication implementada
+                                     ⚠️  routing de reads a replica pendiente (Fase 2b)
+                                     ❌ failover automático (Patroni) pendiente (Fase 3)
+    │
+  [Redis Master]                     ✅ implementado
     │
   [Redis Replica / Sentinel]         ❌ replica NO planificada
 
@@ -246,6 +259,7 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 | ~~`TemplateNotFoundException` sin handler en `GlobalExceptionHandler`~~ | ✅ Resuelto — `GET /api/templates/{id}` con ID inexistente devolvía 500, ahora 404. | `GlobalExceptionHandler.java` |
 | ~~Usuarios de prueba JEFE_DOMINIO y DPO no existían en el script~~ | ✅ Resuelto — `setup-keycloak.sh` ahora crea `jefe@test.cl` (JEFE_DOMINIO) y `dpo@leydata.cl` (DPO). | `scripts/setup-keycloak.sh` |
 | `AuditService` es un god node (26 edges en el grafo) | Considerar separar en `AuditWriter` (persistencia) y `AuditHashChain` (integridad) para facilitar testing unitario y futura migración a un servicio separado. | `AuditService.java` |
+| `ddl-auto=update` en producción | Hibernate gestiona el esquema automáticamente — válido para desarrollo, peligroso en producción (no hay rollback, no hay historial, riesgo con múltiples instancias). Antes del go-live migrar a **Flyway**: (1) exportar esquema actual como `V1__baseline.sql`, (2) cambiar a `ddl-auto=validate`, (3) todo cambio futuro en scripts `V2__...sql`. | `application.properties` |
 
 ---
 
@@ -257,11 +271,14 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 - [x] Mover `UserStatusFilter` a consultar Redis en vez de Postgres (cache-aside implementado)
 - [ ] Crear endpoint `GET /api/consent/check` para integración B2B
 - [ ] Implementar `ConsentimientoRevocadoEvent` para invalidación activa de Redis
+- [ ] Migrar gestión de esquema de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)
 - [ ] Correr corrida completa de pruebas de endpoints post todos los fixes
 
 ### Infraestructura
-- [ ] Configurar PostgreSQL Streaming Replica
-- [ ] Configurar PgBouncer con pool separado para reads y writes
+- [x] Configurar PostgreSQL Streaming Replica (`db-replica` en docker-compose, `docker/postgres-primary/` y `docker/postgres-replica/`)
+- [x] Agregar PgBouncer al Docker Compose (puerto 5435, pool → primary)
+- [ ] Enrutar lecturas Spring Boot a la replica (`AbstractRoutingDataSource`) — Fase 2b
+- [ ] Failover automático con Patroni — Fase 3
 - [x] Agregar Redis al Docker Compose (redis:7-alpine, puerto 6379)
 - [ ] Configurar Redis Sentinel o Cluster (para producción)
 - [ ] Implementar WAF con `X-Request-ID` generado y propagado
