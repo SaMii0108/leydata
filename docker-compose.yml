@@ -1,6 +1,5 @@
 services:
-
-  #  Base de datos principal (primary) — escribe y lee
+  # Base de datos principal (primary) — escribe y lee
   db:
     image: postgres:15
     container_name: leydata-consent-db
@@ -12,13 +11,13 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - postgres_primary_data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
       - ./docker/postgres-primary/init-replication.sh:/docker-entrypoint-initdb.d/99-init-replication.sh
     networks:
       - leydata-consent-network
 
-  #  Replica de streaming — solo lectura, elimina el SPOF de PostgreSQL
+  # Replica de streaming — solo lectura, elimina el SPOF de PostgreSQL
   db-replica:
     image: postgres:15
     container_name: leydata-consent-db-replica
@@ -31,7 +30,7 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - ./postgres_replica_data:/var/lib/postgresql/data
+      - postgres_replica_data:/var/lib/postgresql/data
       - ./docker/postgres-replica/entrypoint.sh:/entrypoint.sh
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
     command: ["postgres"]
@@ -40,7 +39,7 @@ services:
     networks:
       - leydata-consent-network
 
-  #  PgBouncer — connection pooling frente al primary
+  # PgBouncer — connection pooling frente al primary
   pgbouncer:
     image: edoburu/pgbouncer:latest
     container_name: leydata-pgbouncer
@@ -51,7 +50,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASS}
       DB_NAME: ${DB_NAME}
-      POOL_MODE: session
+      POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 20
     ports:
@@ -61,7 +60,7 @@ services:
     networks:
       - leydata-consent-network
 
-  #  Base de datos exclusiva para Keycloak
+  # Base de datos exclusiva para Keycloak
   keycloak-db:
     image: postgres:15
     container_name: leydata-consent-keycloak-db
@@ -75,41 +74,26 @@ services:
     networks:
       - leydata-consent-network
 
-  #  Keycloak 26: Identity Provider (IAM)
-  # Acceder al panel de administración en: http://localhost:8180
-  # Credenciales iniciales: admin / admin
-  #
-  # Configuración manual requerida tras el primer inicio:
-  #   1. Crear realm: "leydata"
-  #   2. Crear realm roles: ADMIN, DPO, JEFE_DOMINIO
-  #   3. Crear cliente: "leydata-frontend" (tipo OpenID Connect, public)
-  #   4. Crear cliente: "leydata-backend" (tipo confidential, service account)
-  #   5. Crear usuario admin@leydata.cl y asignarle rol ADMIN
-  #   (los demás usuarios se crean vía POST /api/users)
+  # Keycloak 26: Identity Provider (IAM)
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     container_name: leydata-consent-keycloak
     restart: always
     command: start-dev
     environment:
-      # Conexión a la BD de Keycloak
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak
-      # Credenciales del administrador de Keycloak (KC 26: reemplaza KEYCLOAK_ADMIN/_PASSWORD)
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      # Puerto interno HTTP
       KC_HTTP_PORT: "8080"
     ports:
-      # Expuesto en 8180 para no colisionar con el backend (8080)
       - "8180:8080"
     depends_on:
       - keycloak-db
     networks:
       - leydata-consent-network
-
 
   redis:
     image: redis:7-alpine
@@ -129,3 +113,5 @@ networks:
 volumes:
   keycloak_data:
   redis_data:
+  postgres_primary_data:
+  postgres_replica_data:
