@@ -5,7 +5,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import java.net.InetAddress;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -28,8 +27,8 @@ public class AgreementMetadata {
     @Column(name = "agreement_id", nullable = false)
     private UUID agreementId;
 
-    @Column(name = "ip_origin")
-    private InetAddress ipOrigin;
+    @Column(name = "ip_origin", columnDefinition = "inet")
+    private String ipOrigin;
 
     @Column(name = "user_agent", columnDefinition = "TEXT")
     private String userAgent;
