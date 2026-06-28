@@ -10,7 +10,7 @@ export class ApiError extends Error {
 }
 
 export interface UserSummaryDto {
-  id: string;
+  keycloakId: string;
   email: string;
   name: string;
   active: boolean;
@@ -65,12 +65,12 @@ export const createUser = async (
   payload: CreateUserPayload,
   token?: string | null,
 ): Promise<string> => {
-  const data = await request<{ status: string; message: string; userId: string }>(
+  const data = await request<{ status: string; message: string; keycloakId: string }>(
     '/api/users',
     { method: 'POST', body: JSON.stringify(payload) },
     token,
   );
-  return data.userId;
+  return data.keycloakId;
 };
 
 export const updateUser = async (
