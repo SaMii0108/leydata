@@ -1,9 +1,8 @@
 # LeyData — Problemas Arquitectónicos y Deuda Técnica Pendiente
 
 **Fecha de análisis:** 2026-06-27  
-**Última actualización:** 2026-06-27  
-**Branch:** feature/keycloak-first-model  
-**Versión:** 469f730 feat: add Templates module to Bruno and Postman collections  
+**Última actualización:** 2026-06-28  
+**Branch:** infra/postgres-replica-pgbouncer  
 **Contexto:** Evaluación pre-producción. La Ley 21.719 entra en vigor en diciembre de 2026.
 
 ---
@@ -140,35 +139,22 @@ Este endpoint debe ser el único punto de integración B2B, servido desde Redis 
 
 ---
 
-### 🔴 Falta el ciclo de captura de consentimiento
+### ✅ ~~Falta el ciclo de captura de consentimiento~~ — RESUELTO
 
-**Problema:** El sistema tiene el marco legal (finalidades, bases de licitud, documentos de privacidad, templates) pero **no implementa el ciclo donde el titular acepta o rechaza**. Sin esto, no hay consentimientos reales que consultar ni revocar.
+**Fix aplicado:** Módulo `agreement/` implementado con ciclo completo.
 
-**Lo que falta implementar:**
+**Endpoints disponibles:**
+- `POST /api/agreements` — registra decisión del titular por cada purpose; reconsent automático si ya había ACTIVE para el mismo `(dataSubjectId, templateId)`
+- `GET /api/agreements/active?dataSubjectId=&templateId=` — consulta para el orquestador (200 si existe, 404 si no)
+- `GET /api/agreements` — listado con filtros opcionales
+- `GET /api/agreements/{id}` — detalle completo con purposes
+- `POST /api/agreements/{id}/verify-integrity` — verificación SHA-256 bajo demanda
+- `GET /api/agreements/{id}/integrity-log` — historial de verificaciones
+- `GET /api/agreements/integrity-log/failed` — verificaciones fallidas para auditoría
 
-```
-Flujo de captura:
-1. Sistema externo (o portal) presenta al titular las finalidades con su base de licitud
-2. Titular acepta/rechaza cada finalidad → POST /api/agreements
-3. Backend registra en tabla agreements con:
-   - titularId (keycloak_id del TITULAR o identificador externo)
-   - purposeId
-   - accepted: true/false
-   - acceptedAt / rejectedAt
-   - ipAddress, userAgent (evidencia forense)
-   - consentStatementSnapshot (texto exacto que vio el titular al momento de aceptar)
-4. AgreementIntegrityLog guarda el hash SHA-256 del registro (ya existe la entidad)
-5. AuditService registra la acción
-```
+**Integridad:** cada agreement calcula un SHA-256 encadenado al agreement anterior (ledger análogo al de `system_audit_log`).
 
-**Entidades que ya existen pero sin endpoints completos:**
-- `Agreements` — tabla de consentimientos reales
-- `AgreementIntegrityLog` — hash de cada acuerdo
-- `AgreementMetadata` — metadatos adicionales del acuerdo
-- `AgreementsPurposes` — vínculo acuerdo ↔ finalidades
-- `DataSubjects` — titulares de datos
-
-**Módulos a crear:** `agreement/` con su ciclo completo `web/ → application/ → infrastructure/`.
+**Módulos creados:** `agreement/web/`, `agreement/application/service/`, `agreement/application/dto/`, `agreement/infrastructure/persistence/`, `agreement/domain/exception/`.
 
 ---
 
@@ -269,6 +255,8 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 - [x] Resolver race condition en `AuditService` (hash chain bajo concurrencia)
 - [x] Agregar `X-Request-ID` al audit log y a la entidad `SystemAuditLog`
 - [x] Mover `UserStatusFilter` a consultar Redis en vez de Postgres (cache-aside implementado)
+- [x] Implementar ciclo de captura de consentimiento (`agreement/` — `POST /api/agreements`, ledger SHA-256, reconsent automático)
+- [ ] Implementar ciclo de revocación de consentimiento (`PATCH /api/agreements/{id}/revoke` — flujo en sección 3)
 - [ ] Crear endpoint `GET /api/consent/check` para integración B2B
 - [ ] Implementar `ConsentimientoRevocadoEvent` para invalidación activa de Redis
 - [ ] Migrar gestión de esquema de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)

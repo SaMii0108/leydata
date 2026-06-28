@@ -22,8 +22,10 @@ El flujo de trabajo completo de la organización es el siguiente:
 6. El **DPO** crea un **Template de consentimiento** que agrupa las finalidades aprobadas, define el orden y visibilidad de cada una, lo aprueba y activa. Al activarlo se sella el template con un hash SHA-256 y cualquier versión anterior del mismo `TEMPLATE_KEY` queda desactivada.
 7. El **DPO** crea un Documento de Privacidad que agrupa una o más finalidades, lo somete a revisión, lo aprueba y lo publica. Al publicarlo se genera un PDF firmado con SHA-256 y la finalidad queda inmutable.
 8. El JEFE_DOMINIO que originó la solicitud recibe una notificación de que su finalidad fue publicada.
-8. El titular recibe o puede consultar ese documento publicado para conocer el tratamiento que se hace de sus datos.
-9. Toda acción del sistema queda registrada en un log de auditoría con cadena de hashes inmutable.
+9. El titular recibe o puede consultar ese documento publicado para conocer el tratamiento que se hace de sus datos.
+10. El **orquestador** consulta `GET /api/agreements/active` para verificar si el titular ya tiene un consentimiento activo para ese template. Si no lo tiene, presenta el formulario de consentimiento.
+11. El titular firma → se crea un **Agreement** (`POST /api/agreements`) que registra su decisión por cada finalidad. El sistema calcula un hash SHA-256 encadenado al agreement anterior del mismo titular (ledger de integridad). Si ya existía un Agreement ACTIVE para el mismo `(dataSubjectId, templateId)`, se revoca automáticamente y sus purposes pasan a REVOKED (reconsent).
+12. Toda acción del sistema queda registrada en un log de auditoría con cadena de hashes inmutable.
 
 ---
 
@@ -41,7 +43,8 @@ El flujo de trabajo completo de la organización es el siguiente:
 10. [Auditoría](#10-auditoría)
 11. [Notificaciones](#11-notificaciones)
 12. [Templates de consentimiento](#12-templates-de-consentimiento)
-13. [Referencia de errores](#13-referencia-rápida-de-códigos-de-error)
+13. [Agreements (consentimiento)](#13-agreements-consentimiento)
+14. [Referencia de errores](#14-referencia-rápida-de-códigos-de-error)
 
 ---
 
@@ -1580,7 +1583,179 @@ Devuelve la versión actualmente activa. Si no hay ninguna activa devuelve 404.
 
 ---
 
-## 13. Referencia rápida de códigos de error
+## 13. Agreements (consentimiento)
+
+### ¿Qué hace este módulo?
+
+Un **Agreement** es el registro formal de la decisión que toma un titular de datos respecto a un Template de consentimiento. Documenta, finalidad por finalidad, si el titular aceptó o rechazó cada una.
+
+Cada agreement genera un hash SHA-256 que encadena al hash del agreement anterior del sistema, formando un **ledger de integridad** análogo al de auditoría. Esto permite detectar cualquier alteración posterior de los registros de consentimiento.
+
+**Estados de un agreement:** `ACTIVE | REVOKED | EXPIRED`
+
+**Reconsent automático:** si ya existe un agreement ACTIVE para el mismo `(dataSubjectId, templateId)` y se crea uno nuevo, el anterior se revoca automáticamente y todas sus `AgreementsPurposes` pasan a `REVOKED`.
+
+> **Acceso:** cualquier usuario autenticado (todos los roles).
+
+---
+
+### `POST /api/agreements`
+
+El orquestador o el frontend registra la decisión del titular tras presentarle el template.
+
+**Caso positivo — primer consentimiento**
+```json
+// Request
+{
+  "dataSubjectId": "uuid-titular",
+  "templateId": "uuid-template-activo",
+  "documentId": "uuid-documento-publicado",
+  "purposes": [
+    { "purposeId": "uuid-newsletter", "accepted": true },
+    { "purposeId": "uuid-publicidad", "accepted": false }
+  ],
+  "metadata": {
+    "captureChannel": "WEB",
+    "signatureToken": null,
+    "authProvider": "keycloak",
+    "extraVariables": null
+  }
+}
+
+// Response 201
+{
+  "id": "uuid-agreement",
+  "dataSubjectId": "uuid-titular",
+  "templateId": "uuid-template",
+  "status": "ACTIVE",
+  "hashSha256": "a3f9b2c1...",
+  "createdAt": "2026-06-28T10:00:00Z",
+  "purposes": [
+    { "purposeId": "uuid-newsletter", "purposeName": "Newsletter de ofertas", "accepted": true, "status": "ACTIVE" },
+    { "purposeId": "uuid-publicidad", "purposeName": "Publicidad segmentada", "accepted": false, "status": "REJECTED" }
+  ]
+}
+```
+
+**Caso positivo — reconsent (ya existía un ACTIVE)**
+```
+POST /api/agreements  ← mismo dataSubjectId + templateId con ACTIVE existente
+
+→ Agreement anterior: status ACTIVE → REVOKED, sus AgreementsPurposes → REVOKED
+→ Nuevo agreement: status ACTIVE con las nuevas decisiones
+→ Response 201 con el nuevo agreement
+```
+
+**Caso negativo — template no activo**
+```json
+// Response 422
+{ "status": "UNPROCESSABLE_ENTITY", "code": 422, "message": "El template debe estar en estado ACTIVE para crear un agreement" }
+```
+
+**Caso negativo — purpose obligatoria rechazada**
+```json
+// Response 422
+{ "status": "UNPROCESSABLE_ENTITY", "code": 422, "message": "La purpose 'Facturación' es obligatoria y no puede rechazarse" }
+```
+
+---
+
+### `GET /api/agreements/active?dataSubjectId=&templateId=`
+
+El orquestador consulta si el titular ya dio consentimiento antes de iniciar un flujo de datos.
+
+```
+GET /api/agreements/active?dataSubjectId=uuid-titular&templateId=uuid-template
+```
+
+**Caso positivo — existe consentimiento activo**
+```
+Response 200 — AgreementResponse con status: ACTIVE
+```
+
+**Caso negativo — no hay consentimiento activo**
+```
+Response 404 — el orquestador debe solicitar consentimiento antes de continuar
+```
+
+---
+
+### `GET /api/agreements`
+
+Lista agreements con filtros opcionales.
+
+```
+GET /api/agreements
+GET /api/agreements?dataSubjectId=uuid-titular
+GET /api/agreements?templateId=uuid-template
+GET /api/agreements?status=ACTIVE
+GET /api/agreements?status=REVOKED
+```
+
+---
+
+### `GET /api/agreements/{id}`
+
+Devuelve el agreement con su detalle completo de purposes.
+
+```json
+// Response 200
+{
+  "id": "uuid-agreement",
+  "status": "ACTIVE",
+  "hashSha256": "a3f9b2c1...",
+  "purposes": [ ... ],
+  "metadata": { "captureChannel": "WEB", ... }
+}
+```
+
+---
+
+### `POST /api/agreements/{id}/verify-integrity`
+
+Recalcula el SHA-256 del agreement y lo compara con el almacenado. Registra el resultado en el ledger de integridad.
+
+```json
+// Request (opcional — por defecto checkType = "MANUAL")
+{ "checkType": "MANUAL" }
+
+// Response 200
+{
+  "agreementId": "uuid-agreement",
+  "storedHash": "a3f9b2c1...",
+  "recalculatedHash": "a3f9b2c1...",
+  "isValid": true,
+  "checkType": "MANUAL",
+  "createdAt": "2026-06-28T10:05:00Z"
+}
+```
+
+**Caso negativo — hash no coincide (posible alteración)**
+```json
+// Response 200 (informa, no lanza excepción)
+{
+  "isValid": false,
+  "storedHash": "a3f9b2c1...",
+  "recalculatedHash": "zz991234...",
+  "errorDetail": "El hash recalculado no coincide con el almacenado"
+}
+```
+
+---
+
+### `GET /api/agreements/{id}/integrity-log`
+
+Historial de todas las verificaciones de integridad del agreement. Permite auditar cuándo se verificó y si fue válido cada vez.
+
+---
+
+### `GET /api/agreements/integrity-log/failed`
+
+Lista todas las verificaciones fallidas (`isValid = false`) de todos los agreements del sistema. Endpoint para el equipo de auditoría — permite detectar registros de consentimiento que pudieron haber sido alterados.
+
+---
+
+## 14. Referencia rápida de códigos de error
 
 | Código HTTP | Status JSON | Cuándo ocurre |
 |-------------|-------------|---------------|

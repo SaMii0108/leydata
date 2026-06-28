@@ -13,10 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-<<<<<<< HEAD
 import static org.mockito.Mockito.doNothing;
-=======
->>>>>>> origin/feature/templates-consentimiento
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -28,10 +25,6 @@ import com.leydata.backend.audit.application.service.AuditService;
 import com.leydata.backend.entity.Purposes;
 import com.leydata.backend.entity.TemplatePurposes;
 import com.leydata.backend.entity.Templates;
-<<<<<<< HEAD
-=======
-import com.leydata.backend.entity.Users;
->>>>>>> origin/feature/templates-consentimiento
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
@@ -46,29 +39,15 @@ import com.leydata.backend.template.infrastructure.persistence.TemplatesReposito
 @ExtendWith(MockitoExtension.class)
 class TemplateServiceTest {
 
-<<<<<<< HEAD
     @Mock private TemplatesRepository templatesRepo;
     @Mock private TemplatePurposesRepository templatePurposesRepo;
     @Mock private PurposesRepository purposesRepo;
     @Mock private SecurityContextHelper securityContextHelper;
     @Mock private AuditService auditService;
-=======
-    @Mock
-    private TemplatesRepository templatesRepo;
-    @Mock
-    private TemplatePurposesRepository templatePurposesRepo;
-    @Mock
-    private PurposesRepository purposesRepo;
-    @Mock
-    private SecurityContextHelper securityContextHelper;
-    @Mock
-    private AuditService auditService;
->>>>>>> origin/feature/templates-consentimiento
 
     @InjectMocks
     private TemplateService service;
 
-<<<<<<< HEAD
     // Keycloak ID como String — arquitectura Keycloak-first
     private final String actorKeycloakId = UUID.randomUUID().toString();
 
@@ -76,15 +55,6 @@ class TemplateServiceTest {
     void setUp() {
         lenient().doNothing().when(securityContextHelper).requireDpoOrAdmin();
         lenient().when(securityContextHelper.getKeycloakId()).thenReturn(actorKeycloakId);
-=======
-    private final UUID actorId = UUID.randomUUID();
-
-    @BeforeEach
-    void setUp() {
-        Users dpo = new Users();
-        dpo.setId(actorId);
-        lenient().when(securityContextHelper.getAuthenticatedDpo()).thenReturn(dpo);
->>>>>>> origin/feature/templates-consentimiento
         lenient().when(securityContextHelper.getActorRole()).thenReturn("DPO");
         lenient().when(templatesRepo.save(any(Templates.class))).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -113,11 +83,7 @@ class TemplateServiceTest {
         assertThat(response.getVersion()).isEqualTo(1);
         assertThat(response.getIsActive()).isFalse();
         assertThat(response.getStatus()).isEqualTo("DRAFT");
-<<<<<<< HEAD
         // Regla 4: TEMPLATE_KEY siempre en UPPERCASE
-=======
-        // Regla 4: el TEMPLATE_KEY siempre se guarda en UPPERCASE
->>>>>>> origin/feature/templates-consentimiento
         assertThat(response.getTemplateKey()).isEqualTo("CONSENT_PAGOS");
     }
 
@@ -178,11 +144,7 @@ class TemplateServiceTest {
 
         TemplateResponse response = service.approve(id);
 
-<<<<<<< HEAD
         assertThat(response.getApprovedBy()).isEqualTo(actorKeycloakId);
-=======
-        assertThat(response.getApprovedBy()).isEqualTo(actorId);
->>>>>>> origin/feature/templates-consentimiento
         assertThat(response.getStatus()).isEqualTo("APPROVED");
     }
 
@@ -201,11 +163,7 @@ class TemplateServiceTest {
     void approve_esIdempotente_siYaTieneApprovedBy() {
         UUID id = UUID.randomUUID();
         Templates template = draftTemplate(id, "CONSENT_X", 1);
-<<<<<<< HEAD
         template.setApprovedBy(UUID.randomUUID().toString());
-=======
-        template.setApprovedBy(UUID.randomUUID());
->>>>>>> origin/feature/templates-consentimiento
         template.setApprovedAt(OffsetDateTime.now());
         when(templatesRepo.findById(id)).thenReturn(Optional.of(template));
 
@@ -222,11 +180,7 @@ class TemplateServiceTest {
     void activate_activaTemplateYDesactivaVersionAnterior() {
         UUID id = UUID.randomUUID();
         Templates template = draftTemplate(id, "CONSENT_X", 2);
-<<<<<<< HEAD
         template.setApprovedBy(UUID.randomUUID().toString());
-=======
-        template.setApprovedBy(UUID.randomUUID());
->>>>>>> origin/feature/templates-consentimiento
 
         UUID previousId = UUID.randomUUID();
         Templates previous = draftTemplate(previousId, "CONSENT_X", 1);
@@ -266,11 +220,7 @@ class TemplateServiceTest {
     void activate_lanzaBusinessValidationException_siVersionEsObsoleta() {
         UUID id = UUID.randomUUID();
         Templates template = draftTemplate(id, "CONSENT_X", 1);
-<<<<<<< HEAD
         template.setApprovedBy(UUID.randomUUID().toString());
-=======
-        template.setApprovedBy(UUID.randomUUID());
->>>>>>> origin/feature/templates-consentimiento
 
         Templates newer = draftTemplate(UUID.randomUUID(), "CONSENT_X", 2);
 
@@ -299,11 +249,7 @@ class TemplateServiceTest {
     void activate_lanzaBusinessValidationException_sinPurposeVisible() {
         UUID id = UUID.randomUUID();
         Templates template = draftTemplate(id, "CONSENT_X", 1);
-<<<<<<< HEAD
         template.setApprovedBy(UUID.randomUUID().toString());
-=======
-        template.setApprovedBy(UUID.randomUUID());
->>>>>>> origin/feature/templates-consentimiento
 
         when(templatesRepo.findById(id)).thenReturn(Optional.of(template));
         when(templatesRepo.findByTemplateKeyOrderByVersionDesc("CONSENT_X"))
@@ -321,11 +267,7 @@ class TemplateServiceTest {
         p.setId(id);
         p.setName("Marketing");
         p.setIsActive(true);
-<<<<<<< HEAD
         p.setApprovedBy(UUID.randomUUID().toString()); // String en arquitectura Keycloak-first
-=======
-        p.setApprovedBy(UUID.randomUUID());
->>>>>>> origin/feature/templates-consentimiento
         return p;
     }
 
@@ -454,12 +396,7 @@ class TemplateServiceTest {
         TemplatePurposes link = new TemplatePurposes();
         link.setOrderPosition(1);
         link.setIsVisible(true);
-<<<<<<< HEAD
         link.setPurpose(approvedActivePurpose(purposeId));
-=======
-        Purposes purpose = approvedActivePurpose(purposeId);
-        link.setPurpose(purpose);
->>>>>>> origin/feature/templates-consentimiento
 
         UpdateTemplatePurposeRequest req = new UpdateTemplatePurposeRequest();
         req.setOrderPosition(2);

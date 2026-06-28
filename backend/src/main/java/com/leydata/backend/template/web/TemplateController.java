@@ -34,13 +34,8 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/templates")
 @RequiredArgsConstructor
-<<<<<<< HEAD
 @PreAuthorize("hasAnyRole('DPO','ADMIN')")
 @Tag(name = "Templates", description = "Gestión de plantillas de consentimiento [DPO, ADMIN]")
-=======
-@PreAuthorize("hasRole('DPO')")
-@Tag(name = "Templates", description = "Gestión de plantillas de consentimiento [DPO]")
->>>>>>> origin/feature/templates-consentimiento
 public class TemplateController {
 
     private final TemplateService service;
@@ -49,73 +44,44 @@ public class TemplateController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-<<<<<<< HEAD
     @Operation(summary = "Crear template en DRAFT [DPO, ADMIN]")
-=======
-    @Operation(summary = "Crear template en DRAFT [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public TemplateResponse create(@Valid @RequestBody CreateTemplateRequest req) {
         return service.create(req);
     }
 
     @PostMapping("/{id}/new-version")
     @ResponseStatus(HttpStatus.CREATED)
-<<<<<<< HEAD
     @Operation(summary = "Crear nueva versión del template (mismo TEMPLATE_KEY) [DPO, ADMIN]")
-=======
-    @Operation(summary = "Crear nueva versión del template (mismo TEMPLATE_KEY) [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public TemplateResponse newVersion(@PathVariable UUID id) {
         return service.newVersion(id);
     }
 
     @GetMapping("/{id}")
-<<<<<<< HEAD
     @Operation(summary = "Obtener template por ID [DPO, ADMIN]")
-=======
-    @Operation(summary = "Obtener template por ID [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public TemplateResponse getById(@PathVariable UUID id) {
         return service.getById(id);
     }
 
     @GetMapping
-<<<<<<< HEAD
     @Operation(summary = "Listar templates con filtros opcionales [DPO, ADMIN]")
     public List<TemplateResponse> list(
             @RequestParam(required = false) String templateKey,
             @RequestParam(required = false) Boolean isActive,
             @RequestParam(required = false) String createdBy,
             @RequestParam(required = false) String approvedBy,
-=======
-    @Operation(summary = "Listar templates con filtros opcionales [DPO]")
-    public List<TemplateResponse> list(
-            @RequestParam(required = false) String templateKey,
-            @RequestParam(required = false) Boolean isActive,
-            @RequestParam(required = false) UUID createdBy,
-            @RequestParam(required = false) UUID approvedBy,
->>>>>>> origin/feature/templates-consentimiento
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdAfter,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdBefore) {
         return service.list(templateKey, isActive, createdBy, approvedBy, createdAfter, createdBefore);
     }
 
     @GetMapping("/family/{templateKey}")
-<<<<<<< HEAD
     @Operation(summary = "Historial de versiones de un TEMPLATE_KEY [DPO, ADMIN]")
-=======
-    @Operation(summary = "Historial de versiones de un TEMPLATE_KEY [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public List<TemplateResponse> getHistory(@PathVariable String templateKey) {
         return service.getHistory(templateKey);
     }
 
     @GetMapping("/active/{templateKey}")
-<<<<<<< HEAD
     @Operation(summary = "Obtener la versión activa de un TEMPLATE_KEY [DPO, ADMIN]")
-=======
-    @Operation(summary = "Obtener la versión activa de un TEMPLATE_KEY [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public TemplateResponse getActive(@PathVariable String templateKey) {
         return service.getActive(templateKey);
     }
@@ -123,11 +89,7 @@ public class TemplateController {
     // ── INTEGRIDAD ───────────────────────────────────────────────────────────────
 
     @GetMapping("/{id}/verify")
-<<<<<<< HEAD
     @Operation(summary = "Verificar integridad SHA-256 del template activado [DPO, ADMIN]")
-=======
-    @Operation(summary = "Verificar integridad SHA-256 del template activado [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public TemplateVerifyResponse verify(@PathVariable UUID id) {
         return service.verify(id);
     }
@@ -135,21 +97,13 @@ public class TemplateController {
     // ── WORKFLOW ─────────────────────────────────────────────────────────────────
 
     @PostMapping("/{id}/approve")
-<<<<<<< HEAD
     @Operation(summary = "Aprobar template [DPO, ADMIN]")
-=======
-    @Operation(summary = "Aprobar template [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public TemplateResponse approve(@PathVariable UUID id) {
         return service.approve(id);
     }
 
     @PostMapping("/{id}/activate")
-<<<<<<< HEAD
     @Operation(summary = "Activar template — desactiva la versión anterior del mismo TEMPLATE_KEY [DPO, ADMIN]")
-=======
-    @Operation(summary = "Activar template — desactiva la versión anterior del mismo TEMPLATE_KEY [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public TemplateResponse activate(@PathVariable UUID id) {
         return service.activate(id);
     }
@@ -158,42 +112,26 @@ public class TemplateController {
 
     @PostMapping("/{id}/purposes")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-<<<<<<< HEAD
     @Operation(summary = "Vincular purpose al template (solo DRAFT) [DPO, ADMIN]")
-=======
-    @Operation(summary = "Vincular purpose al template (solo DRAFT) [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public void addPurpose(@PathVariable UUID id, @Valid @RequestBody AddTemplatePurposeRequest req) {
         service.addPurpose(id, req);
     }
 
     @DeleteMapping("/{id}/purposes/{purposeId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-<<<<<<< HEAD
     @Operation(summary = "Desvincular purpose del template (solo DRAFT) [DPO, ADMIN]")
-=======
-    @Operation(summary = "Desvincular purpose del template (solo DRAFT) [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public void removePurpose(@PathVariable UUID id, @PathVariable UUID purposeId) {
         service.removePurpose(id, purposeId);
     }
 
     @GetMapping("/{id}/purposes")
-<<<<<<< HEAD
     @Operation(summary = "Listar purposes del template ordenadas por ORDER_POSITION [DPO, ADMIN]")
-=======
-    @Operation(summary = "Listar purposes del template ordenadas por ORDER_POSITION [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public List<TemplatePurposeResponse> listPurposes(@PathVariable UUID id) {
         return service.listPurposes(id);
     }
 
     @PatchMapping("/{id}/purposes/{purposeId}")
-<<<<<<< HEAD
     @Operation(summary = "Actualizar ORDER_POSITION o IS_VISIBLE de una purpose en el template (solo DRAFT) [DPO, ADMIN]")
-=======
-    @Operation(summary = "Actualizar ORDER_POSITION o IS_VISIBLE de una purpose en el template (solo DRAFT) [DPO]")
->>>>>>> origin/feature/templates-consentimiento
     public TemplatePurposeResponse updatePurpose(
             @PathVariable UUID id,
             @PathVariable UUID purposeId,

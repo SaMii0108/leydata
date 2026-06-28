@@ -659,6 +659,66 @@ Si el error es de autenticación (`password authentication failed for user "repl
 
 ---
 
+### El primary de PostgreSQL se cae — failover manual a la replica
+
+> **Contexto:** La replica está en modo standby (solo lectura). Spring Boot apunta al primary (5433 o PgBouncer 5435). Si el primary cae, el backend deja de funcionar — el failover **no es automático** (Patroni no está implementado aún — ver deuda técnica en ARQUITECTURA-PROBLEMAS-PENDIENTES.md).
+
+#### 1. Confirmar que el primary está caído
+
+```bash
+docker ps | grep leydata-consent-db
+# Si el contenedor no aparece o dice "Restarting", está caído
+
+# Intentar conectar directamente
+docker exec -it leydata-consent-db psql -U admin -c "SELECT 1;" 2>&1
+```
+
+#### 2. Promover la replica a primary
+
+```bash
+# Ejecutar pg_promote() dentro del contenedor de la replica
+docker exec -it leydata-consent-db-replica psql -U admin -c "SELECT pg_promote();"
+# Resultado esperado: pg_promote → t
+```
+
+Esto hace que la replica salga del modo standby y empiece a aceptar escrituras. El archivo `standby.signal` desaparece automáticamente.
+
+Verificar que ya no está en recovery:
+```bash
+docker exec -it leydata-consent-db-replica psql -U admin -c "SELECT pg_is_in_recovery();"
+# Resultado esperado: f (false) — ya es primary
+```
+
+#### 3. Redirigir el backend a la replica (ahora nuevo primary)
+
+La replica corre en el puerto **5434**. Hay dos opciones:
+
+**Opción A — cambiar el `.env` y reiniciar el backend:**
+```bash
+# En .env, cambiar DB_HOST o el puerto al que apunta Spring Boot
+# Si usas PgBouncer, actualizar la variable DB_HOST de pgbouncer a leydata-consent-db-replica
+
+# Reiniciar PgBouncer con el nuevo destino
+docker-compose restart pgbouncer
+```
+
+**Opción B — editar `application.properties` directamente (temporal):**
+```
+spring.datasource.url=jdbc:postgresql://localhost:5434/leydata_db
+```
+Reiniciar el backend.
+
+#### 4. Cuando el primary original se recupere
+
+**No volver a levantarlo como primary** — ahora existe otro primary y habría split-brain (dos nodos aceptando escrituras). Opciones:
+
+- **Opción simple (dev):** reset completo — `docker-compose down -v && rm -rf ./postgres_data ./postgres_replica_data && docker-compose up -d`
+- **Opción correcta (producción):** configurar el primary recuperado como nueva replica del nodo promovido usando `pg_basebackup`, luego re-registrarlo como standby.
+
+> En producción esto lo gestiona Patroni automáticamente. Ver Fase 3 en ARQUITECTURA-PROBLEMAS-PENDIENTES.md.
+
+---
+
 ### Puerto 8080 o 5433 ya en uso
 
 ```bash

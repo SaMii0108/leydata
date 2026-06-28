@@ -109,7 +109,7 @@ public class AgreementService {
             }
         }
 
-        UUID actorId = resolveActorIdOrNull();
+        String actorId = resolveActorIdOrNull();
 
         // Regla 15: si ya hay un ACTIVE para este (dataSubject, template), se cierra antes de crear el nuevo
         UUID previousAgreementsId = agreementsRepo
@@ -192,7 +192,7 @@ public class AgreementService {
                 AgreementMetadataResponse.from(savedMetadata));
     }
 
-    private void closeActiveAgreementForReconsent(Agreements previous, UUID actorId) {
+    private void closeActiveAgreementForReconsent(Agreements previous, String actorId) {
         previous.setStatus("REVOKED");
         agreementsRepo.save(previous);
 
@@ -382,9 +382,9 @@ public class AgreementService {
     }
 
     /** La creación de un agreement no siempre la dispara un usuario autenticado (puede ser el futuro orquestador). */
-    private UUID resolveActorIdOrNull() {
+    private String resolveActorIdOrNull() {
         try {
-            return securityContextHelper.getAuthenticatedUser().getId();
+            return securityContextHelper.getKeycloakId();
         } catch (Exception e) {
             return null;
         }

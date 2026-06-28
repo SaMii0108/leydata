@@ -11,19 +11,9 @@ import com.leydata.backend.entity.TemplatePurposes;
 public interface TemplatePurposesRepository
         extends JpaRepository<TemplatePurposes, TemplatePurposes.TemplatePurposesId> {
 
-<<<<<<< HEAD
     List<TemplatePurposes> findByTemplate_IdOrderByOrderPosition(UUID templateId);
     Optional<TemplatePurposes> findByTemplate_IdAndPurpose_Id(UUID templateId, UUID purposeId);
     boolean existsByTemplate_IdAndOrderPosition(UUID templateId, Integer orderPosition);
     boolean existsByTemplate_IdAndIsVisibleTrue(UUID templateId);
     void deleteByTemplate_IdAndPurpose_Id(UUID templateId, UUID purposeId);
 }
-=======
-                List<TemplatePurposes> findByTemplate_IdOrderByOrderPosition(UUID templateId);
-                Optional<TemplatePurposes> findByTemplate_IdAndPurpose_Id(UUID templateId, UUID purposeId);
-                boolean existsByTemplate_IdAndOrderPosition(UUID templateId, Integer orderPosition);
-                boolean existsByTemplate_IdAndIsVisibleTrue(UUID templateId);    
-                void deleteByTemplate_IdAndPurpose_Id(UUID templateId, UUID purposeId);
-
-}
->>>>>>> origin/feature/templates-consentimiento
