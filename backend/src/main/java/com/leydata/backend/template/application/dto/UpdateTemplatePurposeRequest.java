@@ -6,4 +6,8 @@ import lombok.Data;
 public class UpdateTemplatePurposeRequest {
     private Integer orderPosition;
     private Boolean isVisible;
+<<<<<<< HEAD
+=======
+    
+>>>>>>> origin/feature/templates-consentimiento
 }

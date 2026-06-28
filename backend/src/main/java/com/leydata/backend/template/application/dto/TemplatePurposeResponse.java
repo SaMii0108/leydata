@@ -16,7 +16,11 @@ public class TemplatePurposeResponse {
     Integer orderPosition;
     Boolean isVisible;
 
+<<<<<<< HEAD
     public static TemplatePurposeResponse from(TemplatePurposes tp) {
+=======
+    public static TemplatePurposeResponse from(TemplatePurposes tp){
+>>>>>>> origin/feature/templates-consentimiento
         return TemplatePurposeResponse.builder()
             .purposeId(tp.getPurpose().getId())
             .purposeName(tp.getPurpose().getName())
@@ -24,4 +28,8 @@ public class TemplatePurposeResponse {
             .isVisible(tp.getIsVisible())
             .build();
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/feature/templates-consentimiento
 }

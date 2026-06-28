@@ -20,6 +20,7 @@ public class TemplateResponse {
     Boolean isActive;
     String status;
     String changeReason;
+<<<<<<< HEAD
     // Keycloak IDs (String) en lugar de UUID locales
     String createdBy;
     OffsetDateTime createdAt;
@@ -28,6 +29,15 @@ public class TemplateResponse {
     OffsetDateTime activationDate;
 
     public static TemplateResponse from(Templates t) {
+=======
+    UUID createdBy;
+    OffsetDateTime createdAt;
+    UUID approvedBy;
+    OffsetDateTime approvedAt;
+    OffsetDateTime activationDate;
+
+    public static TemplateResponse from(Templates t){
+>>>>>>> origin/feature/templates-consentimiento
         return TemplateResponse.builder()
             .id(t.getId())
             .templateKey(t.getTemplateKey())
@@ -46,9 +56,17 @@ public class TemplateResponse {
             .build();
     }
 
+<<<<<<< HEAD
     private static String resolveStatus(Templates t) {
+=======
+    private static String resolveStatus(Templates t){
+>>>>>>> origin/feature/templates-consentimiento
         if (Boolean.TRUE.equals(t.getIsActive())) return "ACTIVE";
         if (t.getApprovedBy() != null) return "APPROVED";
         return "DRAFT";
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/feature/templates-consentimiento
 }

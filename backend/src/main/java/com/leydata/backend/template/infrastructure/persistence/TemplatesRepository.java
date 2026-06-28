@@ -14,4 +14,8 @@ public interface TemplatesRepository extends JpaRepository<Templates, UUID>, Jpa
     List<Templates> findByTemplateKeyOrderByVersionDesc(String templateKey);
     boolean existsByTemplateKeyAndIsActiveTrue(String templateKey);
     boolean existsByTemplateKeyAndVersion(String templateKey, Integer version);
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/feature/templates-consentimiento

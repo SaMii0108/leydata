@@ -27,15 +27,30 @@ public class AgreementIntegrityLog {
     @Column(name = "agreement_id", nullable = false)
     private UUID agreementId;
 
-    @Column(name = "expected_hash", nullable = false)
-    private String expectedHash;
+    @Column(name = "stored_hash", nullable = false)
+    private String storedHash;
 
-    @Column(name = "actual_hash", nullable = false)
-    private String actualHash;
+    @Column(name = "recalculated_hash", nullable = false)
+    private String recalculatedHash;
 
-    @Column(name = "detected_by")
-    private String detectedBy;
+    @Column(name = "is_valid", nullable = false)
+    private Boolean isValid;
 
-    @Column(name = "detected_at", nullable = false)
-    private LocalDateTime detectedAt;
+    @Column(name = "check_type", nullable = false)
+    private String checkType; // SCHEDULED, MANUAL, ON_DEMAND
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "error_detail", columnDefinition = "TEXT")
+    private String errorDetail;
+
+    @Column(name = "created_by")
+    private UUID createdBy; // Opcional si es manual
+
+    @Column(name = "hash_sha256", unique = true)
+    private String hashSha256;
+
+    @Column(name = "previous_hash_sha256_id")
+    private String previousHashSha256Id;
 }
