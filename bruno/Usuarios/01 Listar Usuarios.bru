@@ -27,4 +27,10 @@ docs {
     status  → active | inactive | blocked
     role    → ADMIN | DPO | JEFE_DOMINIO | USER | TITULAR
   Requiere rol ADMIN.
+
+  Formato del campo "domains" en cada usuario:
+  "domains": [
+    { "id": "uuid-del-dominio", "name": "Marketing" },
+    { "id": "uuid-del-dominio-2", "name": "Legal" }
+  ]
 }

@@ -57,17 +57,12 @@ const DomainsPage = () => {
     return () => { cancelled = true; };
   }, [accessToken]);
 
-  // Map: domain name → domain id (DomainDto.id)
-  // Used to convert UserSummaryDto.domains (names) → domain UUIDs for PUT /api/users/{keycloakId}
-  const domainNameToId = new Map(domains.map((d) => [d.name, d.id]));
-
-  // Map: domain id (DomainDto.id) → the JEFE_DOMINIO user assigned to it
+  // Map: domain id → the JEFE_DOMINIO user assigned to it
   const domainJefeMap = new Map<string, UserSummaryDto>();
   for (const user of allUsers) {
     if (!user.keycloakId || !user.roles.includes('JEFE_DOMINIO')) continue;
-    for (const domainName of user.domains) {
-      const domainId = domainNameToId.get(domainName);
-      if (domainId) domainJefeMap.set(domainId, user);
+    for (const domain of user.domains) {
+      domainJefeMap.set(domain.id, user);
     }
   }
 
@@ -157,35 +152,16 @@ const DomainsPage = () => {
 
     try {
       if (currentJefe?.keycloakId) {
-        // Verify all current domain names of the old jefe can be resolved to UUIDs.
-        // If any name is unresolvable, we would silently drop that domain — abort instead.
-        const unresolvable = currentJefe.domains.filter((name) => !domainNameToId.has(name));
-        if (unresolvable.length > 0) {
-          setAssignError(
-            `No se puede actualizar: dominios no resolubles (${unresolvable.join(', ')}). Recarga la página.`,
-          );
-          return;
-        }
         const remainingDomainIds = currentJefe.domains
-          .map((name) => domainNameToId.get(name))
-          .filter((id): id is string => Boolean(id) && id !== assignDomain.id);
+          .filter((d) => d.id !== assignDomain.id)
+          .map((d) => d.id);
         await updateUser(currentJefe.keycloakId, { domainIds: remainingDomainIds }, accessToken);
       }
 
       if (newJefeId) {
         const newJefe = allUsers.find((u) => u.keycloakId === newJefeId);
         if (newJefe) {
-          // Same defensive check for the new jefe's existing domains.
-          const unresolvable = newJefe.domains.filter((name) => !domainNameToId.has(name));
-          if (unresolvable.length > 0) {
-            setAssignError(
-              `No se puede actualizar: dominios no resolubles (${unresolvable.join(', ')}). Recarga la página.`,
-            );
-            return;
-          }
-          const currentDomainIds = newJefe.domains
-            .map((name) => domainNameToId.get(name))
-            .filter((id): id is string => Boolean(id));
+          const currentDomainIds = newJefe.domains.map((d) => d.id);
           const updatedDomainIds = currentDomainIds.includes(assignDomain.id)
             ? currentDomainIds
             : [...currentDomainIds, assignDomain.id];
