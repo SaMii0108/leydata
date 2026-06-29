@@ -5,6 +5,9 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.ColumnTransformer;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -28,6 +31,7 @@ public class AgreementMetadata {
     private UUID agreementId;
 
     @Column(name = "ip_origin", columnDefinition = "inet")
+    @ColumnTransformer(write = "?::inet")
     private String ipOrigin;
 
     @Column(name = "user_agent", columnDefinition = "TEXT")
@@ -43,6 +47,7 @@ public class AgreementMetadata {
     private String authProvider;
 
     @Column(name = "extra_variables", columnDefinition = "JSONB")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String extraVariables;
 
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -9,10 +9,11 @@ import com.leydata.backend.template.application.dto.TemplateResponse;
 import com.leydata.backend.template.application.dto.UpdateTemplatePurposeRequest;
 import com.leydata.backend.template.application.service.TemplateService;
 import com.leydata.backend.template.domain.exception.TemplateNotFoundException;
-import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
+import com.leydata.backend.userstatus.infrastructure.persistence.UserStatusRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -49,7 +50,10 @@ class TemplateControllerTest {
 
     // Requerido por UserStatusFilter (filtro de seguridad ejecutado en cada request)
     @MockitoBean
-    private UsersRepository usersRepository;
+    private UserStatusRepository userStatusRepository;
+
+    @MockitoBean
+    private StringRedisTemplate redisTemplate;
 
     private TemplateResponse draftResponse(UUID id) {
         return TemplateResponse.builder()
