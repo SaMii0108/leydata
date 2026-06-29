@@ -32,7 +32,6 @@ public class AgreementMetadata {
 
     @ColumnTransformer(write = "?::inet")
     @Column(name = "ip_origin", columnDefinition = "inet")
-    @ColumnTransformer(write = "?::inet")
     private String ipOrigin;
 
     @Column(name = "user_agent", columnDefinition = "TEXT")
@@ -49,7 +48,6 @@ public class AgreementMetadata {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "extra_variables", columnDefinition = "JSONB")
-    @JdbcTypeCode(SqlTypes.JSON)
     private String extraVariables;
 
     @Column(name = "created_at", nullable = false, updatable = false)
