@@ -1,4 +1,4 @@
-package com.leydata.backend.purpose.infrastructure.persistence;
+package com.leydata.backend.purposerequest.infrastructure.persistence;
 
 import com.leydata.backend.entity.PurposeRequests;
 import org.springframework.data.jpa.repository.JpaRepository;
