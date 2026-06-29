@@ -8,6 +8,7 @@ import com.leydata.backend.security.KeycloakAdminService;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.user.application.dto.CreateUserRequest;
 import com.leydata.backend.user.application.dto.UpdateUserByAdminRequest;
+import com.leydata.backend.user.application.dto.UserDomainResponse;
 import com.leydata.backend.user.application.dto.UserResponse;
 import com.leydata.backend.user.domain.exception.UserNotFoundException;
 import com.leydata.backend.userdomain.domain.UserDomain;
@@ -238,11 +239,11 @@ public class UserService {
     private UserResponse buildResponse(String keycloakId, String email, String name,
                                        boolean active, List<String> roles) {
         boolean blocked = isBlocked(keycloakId);
-        List<String> domainNames = userDomainRepository.findByKeycloakId(keycloakId).stream()
+        List<UserDomainResponse> domains = userDomainRepository.findByKeycloakId(keycloakId).stream()
                 .filter(ud -> Boolean.TRUE.equals(ud.getDomain().getActive()))
-                .map(ud -> ud.getDomain().getName())
+                .map(ud -> new UserDomainResponse(ud.getDomain().getId(), ud.getDomain().getName()))
                 .toList();
-        return new UserResponse(keycloakId, email, name, active, blocked, roles, domainNames);
+        return new UserResponse(keycloakId, email, name, active, blocked, roles, domains);
     }
 
     private void assignUserDomains(String keycloakId, List<String> currentRoles, List<UUID> domainIds) {
