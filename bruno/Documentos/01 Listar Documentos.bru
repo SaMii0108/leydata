@@ -1,0 +1,29 @@
+meta {
+  name: Listar Documentos
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/privacy-documents
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  category:
+  status:
+}
+
+docs {
+  Lista documentos con filtros opcionales.
+  DPO / ADMIN: ven todos los estados (DRAFT, IN_REVIEW, APPROVED, PUBLISHED, ARCHIVED).
+  Otros roles: solo ven documentos PUBLISHED.
+
+  category válidos: POLITICA_PRIVACIDAD, AVISO_COOKIES, DATOS_SENSIBLES, MARKETING_DIRECTO, MENORES_EDAD, TRANSFERENCIA_TERCEROS
+  status válidos: DRAFT, IN_REVIEW, APPROVED, PUBLISHED, ARCHIVED, REJECTED
+}

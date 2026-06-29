@@ -20,7 +20,7 @@ public class NotificationService {
     private final NotificationRepository repo;
     private final SecurityContextHelper securityContextHelper;
 
-    public void create(UUID recipientId, NotificationType type, String title, String message, UUID referenceId) {
+    public void create(String recipientId, NotificationType type, String title, String message, UUID referenceId) {
         Notification n = Notification.builder()
                 .recipientId(recipientId)
                 .type(type)
@@ -35,7 +35,7 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationResponse> getMyNotifications() {
-        UUID userId = securityContextHelper.getAuthenticatedUser().getId();
+        String userId = securityContextHelper.getKeycloakId();
         return repo.findByRecipientIdOrderByCreatedAtDesc(userId)
                 .stream()
                 .map(NotificationResponse::from)
@@ -44,13 +44,13 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public long getUnreadCount() {
-        UUID userId = securityContextHelper.getAuthenticatedUser().getId();
+        String userId = securityContextHelper.getKeycloakId();
         return repo.countByRecipientIdAndReadFalse(userId);
     }
 
     @Transactional
     public NotificationResponse markAsRead(UUID notificationId) {
-        UUID userId = securityContextHelper.getAuthenticatedUser().getId();
+        String userId = securityContextHelper.getKeycloakId();
         Notification n = repo.findById(notificationId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("Notificación no encontrada: " + notificationId));
         if (!n.getRecipientId().equals(userId)) {
@@ -62,7 +62,7 @@ public class NotificationService {
 
     @Transactional
     public void markAllAsRead() {
-        UUID userId = securityContextHelper.getAuthenticatedUser().getId();
+        String userId = securityContextHelper.getKeycloakId();
         repo.markAllAsRead(userId);
     }
 }

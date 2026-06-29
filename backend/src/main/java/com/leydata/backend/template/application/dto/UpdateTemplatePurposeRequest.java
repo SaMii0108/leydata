@@ -6,5 +6,4 @@ import lombok.Data;
 public class UpdateTemplatePurposeRequest {
     private Integer orderPosition;
     private Boolean isVisible;
-    
 }

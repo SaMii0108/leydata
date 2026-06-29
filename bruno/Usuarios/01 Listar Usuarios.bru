@@ -1,0 +1,30 @@
+meta {
+  name: Listar Usuarios
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/users
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  ~search: juan
+  ~status: active
+  ~role: DPO
+}
+
+docs {
+  Sin parámetros: devuelve todos los usuarios.
+  Parámetros opcionales (usar uno a la vez, activar la línea quitando ~):
+    search  → busca por nombre, email o username (delegado a Keycloak)
+    status  → active | inactive | blocked
+    role    → ADMIN | DPO | JEFE_DOMINIO | USER | TITULAR
+  Requiere rol ADMIN.
+}

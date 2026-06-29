@@ -1,0 +1,30 @@
+meta {
+  name: Crear Categoría Custom
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/data-categories
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "code": "MASCOTA",
+    "name": "Datos de mascotas del cliente",
+    "isSensitive": false
+  }
+}
+
+docs {
+  Crea una categoría personalizada de la organización.
+  code se normaliza a MAYÚSCULAS y es único.
+  Las categorías del sistema (Art. 16 Ley 21.719) son inmutables y no se pueden crear desde aquí.
+  Requiere rol DPO o ADMIN.
+}

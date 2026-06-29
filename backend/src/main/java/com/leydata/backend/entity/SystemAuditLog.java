@@ -45,7 +45,7 @@ public class SystemAuditLog implements Persistable<UUID> {
     private String newData; // estado nuevo
 
     @Column(name = "actor_id")
-    private UUID actorId; // ID del usuario que ejecutó la acción
+    private String actorId; // keycloak_id (sub) del usuario que ejecutó la acción
 
     @Column(name = "actor_role", nullable = false)
     private String actorRole; // rol exacto al momento de la acción: "ADMIN", "DPO", "JEFE_DOMINIO"
@@ -55,6 +55,9 @@ public class SystemAuditLog implements Persistable<UUID> {
 
     @Column(name = "user_agent", columnDefinition = "TEXT")
     private String userAgent; // navegador + SO del operador
+
+    @Column(name = "request_id", length = 64)
+    private String requestId; // X-Request-ID generado por WAF/NGINX — permite correlacionar con sus logs
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt; // timestamp de la acción

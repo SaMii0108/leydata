@@ -1,0 +1,21 @@
+meta {
+  name: Bases que Requieren Consentimiento
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/legal-basis/consent
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Filtra solo las bases donde consentRequired=true.
+  Útil para el frontend al distinguir qué finalidades requieren captura activa del titular.
+  Requiere rol DPO, ADMIN o JEFE_DOMINIO.
+}

@@ -41,9 +41,9 @@ public class TemplateService {
     // ── CRUD ─────────────────────────────────────────────────────────────────────
 
     public TemplateResponse create(CreateTemplateRequest req) {
-        UUID actorId = securityContextHelper.getAuthenticatedDpo().getId();
+        securityContextHelper.requireDpoOrAdmin();
+        String actorId = securityContextHelper.getKeycloakId();
 
-        // Regla 4: el TEMPLATE_KEY siempre se guarda en UPPERCASE
         String templateKey = req.getTemplateKey().toUpperCase();
 
         Templates entity = new Templates();
@@ -75,10 +75,11 @@ public class TemplateService {
     }
 
     public TemplateResponse newVersion(UUID sourceId) {
+        securityContextHelper.requireDpoOrAdmin();
         Templates source = findOrThrow(sourceId);
-        UUID actorId = securityContextHelper.getAuthenticatedDpo().getId();
+        String actorId = securityContextHelper.getKeycloakId();
 
-        // Regla 1: mismo TEMPLATE_KEY, versión incremental (VERSION + 1)
+        // Regla 1: mismo TEMPLATE_KEY, versión incremental
         int nextVersion = templatesRepo.findByTemplateKeyOrderByVersionDesc(source.getTemplateKey())
                 .stream()
                 .mapToInt(Templates::getVersion)
@@ -116,13 +117,15 @@ public class TemplateService {
 
     @Transactional(readOnly = true)
     public TemplateResponse getById(UUID id) {
+        securityContextHelper.requireDpoOrAdmin();
         return TemplateResponse.from(findOrThrow(id));
     }
 
     @Transactional(readOnly = true)
     public List<TemplateResponse> list(String templateKey, Boolean isActive,
-                                        UUID createdBy, UUID approvedBy,
+                                        String createdBy, String approvedBy,
                                         OffsetDateTime createdAfter, OffsetDateTime createdBefore) {
+        securityContextHelper.requireDpoOrAdmin();
         Specification<Templates> spec = Specification
                 .where(TemplateSpecifications.hasTemplateKey(templateKey))
                 .and(TemplateSpecifications.isActive(isActive))
@@ -138,6 +141,7 @@ public class TemplateService {
 
     @Transactional(readOnly = true)
     public List<TemplateResponse> getHistory(String templateKey) {
+        securityContextHelper.requireDpoOrAdmin();
         return templatesRepo.findByTemplateKeyOrderByVersionDesc(templateKey.toUpperCase())
                 .stream()
                 .map(TemplateResponse::from)
@@ -146,7 +150,7 @@ public class TemplateService {
 
     @Transactional(readOnly = true)
     public TemplateResponse getActive(String templateKey) {
-        // Regla 1: solo una versión activa por TEMPLATE_KEY
+        securityContextHelper.requireDpoOrAdmin();
         return templatesRepo.findByTemplateKeyAndIsActiveTrue(templateKey.toUpperCase())
                 .map(TemplateResponse::from)
                 .orElseThrow(() -> new BusinessValidationException(
@@ -156,19 +160,20 @@ public class TemplateService {
     // ── WORKFLOW ─────────────────────────────────────────────────────────────────
 
     public TemplateResponse approve(UUID id) {
+        securityContextHelper.requireDpoOrAdmin();
         Templates template = findOrThrow(id);
 
-        // Idempotente: si ya está aprobado, no se modifica nada, se devuelve el estado actual
+        // Idempotente: si ya está aprobado no se modifica nada
         if (template.getApprovedBy() != null) {
             return TemplateResponse.from(template);
         }
-        // Regla 9: el template debe tener al menos una finalidad visible
+        // Regla 9: debe tener al menos una finalidad visible
         if (!templatePurposesRepo.existsByTemplate_IdAndIsVisibleTrue(id)) {
             throw new BusinessValidationException(
                     "El template debe tener al menos una finalidad visible antes de aprobarse");
         }
 
-        UUID actorId = securityContextHelper.getAuthenticatedDpo().getId();
+        String actorId = securityContextHelper.getKeycloakId();
         template.setApprovedBy(actorId);
         template.setApprovedAt(OffsetDateTime.now());
 
@@ -179,7 +184,7 @@ public class TemplateService {
                 .recordId(saved.getId())
                 .action("APROBAR_TEMPLATE")
                 .oldData(Map.of("approvedBy", "null"))
-                .newData(Map.of("approvedBy", String.valueOf(actorId)))
+                .newData(Map.of("approvedBy", actorId))
                 .actorId(actorId)
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
@@ -188,12 +193,13 @@ public class TemplateService {
     }
 
     public TemplateResponse activate(UUID id) {
+        securityContextHelper.requireDpoOrAdmin();
         Templates template = findOrThrow(id);
 
         if (Boolean.TRUE.equals(template.getIsActive())) {
             throw new BusinessValidationException("El template ya está activo");
         }
-        // Regla 11: no se puede activar una versión obsoleta (debe ser la versión más alta del TEMPLATE_KEY)
+        // Regla 11: no se puede activar una versión obsoleta
         int maxVersion = templatesRepo.findByTemplateKeyOrderByVersionDesc(template.getTemplateKey())
                 .stream()
                 .mapToInt(Templates::getVersion)
@@ -204,17 +210,16 @@ public class TemplateService {
             throw new BusinessValidationException(
                     "No se puede activar una versión obsoleta. La versión más reciente es la " + maxVersion);
         }
-        // Regla 10: para activar debe tener APPROVED_BY asignado
+        // Regla 10: debe estar aprobado y tener al menos un purpose visible
         if (template.getApprovedBy() == null) {
             throw new BusinessValidationException("El template debe estar aprobado antes de activarse");
         }
-        // Regla 10: para activar debe tener al menos un purpose visible
         if (!templatePurposesRepo.existsByTemplate_IdAndIsVisibleTrue(id)) {
             throw new BusinessValidationException(
                     "El template debe tener al menos una finalidad visible antes de activarse");
         }
 
-        UUID actorId = securityContextHelper.getAuthenticatedDpo().getId();
+        String actorId = securityContextHelper.getKeycloakId();
         String[] previousHash = new String[1];
 
         // Regla 2: desactivar la versión anterior del mismo TEMPLATE_KEY en la misma transacción
@@ -240,7 +245,6 @@ public class TemplateService {
             template.setActivationDate(OffsetDateTime.now());
         }
 
-        // Integridad: hash SHA-256 sobre el contenido sellado del template + sus purposes
         List<TemplatePurposes> purposes = templatePurposesRepo.findByTemplate_IdOrderByOrderPosition(id);
         template.setHashSha256(computeTemplateHash(template, purposes));
         template.setPreviousHashSha256(previousHash[0]);
@@ -265,16 +269,17 @@ public class TemplateService {
     // ── GESTIÓN DE PURPOSES ──────────────────────────────────────────────────────
 
     public void addPurpose(UUID templateId, AddTemplatePurposeRequest req) {
+        securityContextHelper.requireDpoOrAdmin();
         Templates template = findOrThrow(templateId);
-        requireDraft(template); // Regla 3: no se puede editar un template activo
+        requireDraft(template);
 
-        // Regla 8: ORDER_POSITION no puede repetirse dentro del mismo template
+        // Regla 8: ORDER_POSITION único dentro del template
         if (templatePurposesRepo.existsByTemplate_IdAndOrderPosition(templateId, req.getOrderPosition())) {
             throw new BusinessValidationException(
                     "Ya existe una finalidad en la posición " + req.getOrderPosition() + " de este template");
         }
 
-        // Regla 7: solo se vinculan purposes aprobadas y activas
+        // Regla 7: solo purposes aprobadas y activas
         Purposes purpose = validatePurposeApproved(req.getPurposeId());
 
         TemplatePurposes link = new TemplatePurposes();
@@ -286,6 +291,7 @@ public class TemplateService {
 
         templatePurposesRepo.save(link);
 
+        String actorId = securityContextHelper.getKeycloakId();
         auditService.log(AuditContext.builder()
                 .tableName("template_purposes")
                 .recordId(templateId)
@@ -294,22 +300,23 @@ public class TemplateService {
                 .newData(Map.of(
                         "templateId", String.valueOf(templateId),
                         "purposeId",  String.valueOf(req.getPurposeId())))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(actorId)
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
     }
 
     public void removePurpose(UUID templateId, UUID purposeId) {
+        securityContextHelper.requireDpoOrAdmin();
         Templates template = findOrThrow(templateId);
-        requireDraft(template); // Regla 3: no se puede editar un template activo
+        requireDraft(template);
 
         templatePurposesRepo.findByTemplate_IdAndPurpose_Id(templateId, purposeId)
                 .orElseThrow(() -> new BusinessValidationException(
                         "La finalidad no está vinculada a este template"));
 
-        // Hard delete: en DRAFT no hay evidencia que preservar todavía (Regla 6 aplica desde ACTIVE en adelante)
         templatePurposesRepo.deleteByTemplate_IdAndPurpose_Id(templateId, purposeId);
 
+        String actorId = securityContextHelper.getKeycloakId();
         auditService.log(AuditContext.builder()
                 .tableName("template_purposes")
                 .recordId(templateId)
@@ -318,13 +325,14 @@ public class TemplateService {
                         "templateId", String.valueOf(templateId),
                         "purposeId",  String.valueOf(purposeId)))
                 .newData(null)
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(actorId)
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
     }
 
     @Transactional(readOnly = true)
     public List<TemplatePurposeResponse> listPurposes(UUID templateId) {
+        securityContextHelper.requireDpoOrAdmin();
         findOrThrow(templateId);
         return templatePurposesRepo.findByTemplate_IdOrderByOrderPosition(templateId)
                 .stream()
@@ -333,8 +341,9 @@ public class TemplateService {
     }
 
     public TemplatePurposeResponse updatePurpose(UUID templateId, UUID purposeId, UpdateTemplatePurposeRequest req) {
+        securityContextHelper.requireDpoOrAdmin();
         Templates template = findOrThrow(templateId);
-        requireDraft(template); // Regla 3: no se puede editar un template activo
+        requireDraft(template);
 
         TemplatePurposes link = templatePurposesRepo.findByTemplate_IdAndPurpose_Id(templateId, purposeId)
                 .orElseThrow(() -> new BusinessValidationException(
@@ -344,7 +353,6 @@ public class TemplateService {
         Boolean oldIsVisible = link.getIsVisible();
 
         if (req.getOrderPosition() != null && !req.getOrderPosition().equals(link.getOrderPosition())) {
-            // Regla 8: ORDER_POSITION no puede repetirse dentro del mismo template
             if (templatePurposesRepo.existsByTemplate_IdAndOrderPosition(templateId, req.getOrderPosition())) {
                 throw new BusinessValidationException(
                         "Ya existe una finalidad en la posición " + req.getOrderPosition() + " de este template");
@@ -358,6 +366,7 @@ public class TemplateService {
 
         TemplatePurposes saved = templatePurposesRepo.save(link);
 
+        String actorId = securityContextHelper.getKeycloakId();
         auditService.log(AuditContext.builder()
                 .tableName("template_purposes")
                 .recordId(templateId)
@@ -368,21 +377,18 @@ public class TemplateService {
                 .newData(Map.of(
                         "orderPosition", String.valueOf(saved.getOrderPosition()),
                         "isVisible",     String.valueOf(saved.getIsVisible())))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(actorId)
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
         return TemplatePurposeResponse.from(saved);
     }
 
-    // ── UTILIDADES ───────────────────────────────────────────────────────────────
+    // ── INTEGRIDAD ───────────────────────────────────────────────────────────────
 
-    /**
-     * Verifica que el SHA-256 almacenado coincida con el hash recalculado a partir
-     * del contenido actual del template y sus purposes. Detecta alteraciones posteriores a la activación.
-     */
     @Transactional(readOnly = true)
     public TemplateVerifyResponse verify(UUID id) {
+        securityContextHelper.requireDpoOrAdmin();
         Templates template = findOrThrow(id);
 
         if (template.getHashSha256() == null) {
@@ -408,7 +414,7 @@ public class TemplateService {
                 .build();
     }
 
-    // ── Validaciones de negocio ───────────────────────────────────────────────────
+    // ── VALIDACIONES ─────────────────────────────────────────────────────────────
 
     private Purposes validatePurposeApproved(UUID purposeId) {
         Purposes purpose = purposesRepo.findById(purposeId)
@@ -444,14 +450,11 @@ public class TemplateService {
     }
 
     private void requireDraft(Templates template) {
-        // Regla 3: no se puede editar un template activo, se debe crear nueva versión
         if (Boolean.TRUE.equals(template.getIsActive())) {
             throw new BusinessValidationException(
                     "No se puede modificar un template activo. Cree una nueva versión.");
         }
     }
-
-    // ── Helpers ──────────────────────────────────────────────────────────────────
 
     private Templates findOrThrow(UUID id) {
         return templatesRepo.findById(id)

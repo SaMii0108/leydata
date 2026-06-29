@@ -78,6 +78,8 @@ public class PurposeDataCategoryService {
         // La política de retención se crea junto con el vínculo — nunca puede quedar sin definir
         DataRetentionPolicies retention = buildRetention(saved.getId(), req.getRetention());
         retentionRepo.save(retention);
+        // Setear en memoria: @OneToOne(mappedBy=...) no actualiza saved en la caché L1 de Hibernate
+        saved.setDataRetentionPolicy(retention);
 
         auditService.log(AuditContext.builder()
                 .tableName("purpose_data_categories")
@@ -90,11 +92,10 @@ public class PurposeDataCategoryService {
                         "dataUses",        req.getDataUses().toString(),
                         "retentionPeriod", req.getRetention().getRetentionPeriod(),
                         "retentionUnit",   req.getRetention().getRetentionUnit()))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
-        // Reload para obtener las relaciones (dataCategory, dataRetentionPolicy)
         return PurposeDataCategoryResponse.from(findOrThrow(saved.getId()), false);
     }
 
@@ -130,7 +131,7 @@ public class PurposeDataCategoryService {
                 .newData(Map.of(
                         "retentionPeriod", req.getRetentionPeriod(),
                         "retentionUnit",   req.getRetentionUnit()))
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
@@ -153,7 +154,7 @@ public class PurposeDataCategoryService {
                         "purposeId",      pdc.getPurposeId().toString(),
                         "dataCategoryId", pdc.getDataCategoryId().toString()))
                 .newData(null)
-                .actorId(securityContextHelper.getAuthenticatedDpo().getId())
+                .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 

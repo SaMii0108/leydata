@@ -13,5 +13,4 @@ public class AddTemplatePurposeRequest {
     @NotNull
     private Integer orderPosition;
     private Boolean isVisible = true;
-    
 }

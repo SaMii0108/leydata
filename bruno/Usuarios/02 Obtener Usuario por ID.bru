@@ -1,0 +1,21 @@
+meta {
+  name: Obtener Usuario por ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/users/<keycloak-id-aqui>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Devuelve el detalle de un usuario por su keycloak_id (claim "sub" del JWT).
+  Los datos se obtienen directamente de Keycloak — no depende de BD local.
+  Requiere rol ADMIN.
+}

@@ -22,8 +22,8 @@ public record PurposeResponse(
         String domainName,
         Boolean isActive,
         Boolean locked,
-        UUID createdBy,
-        UUID approvedBy,
+        String createdBy,
+        String approvedBy,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         String hashSha256

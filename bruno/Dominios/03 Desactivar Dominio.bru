@@ -1,0 +1,20 @@
+meta {
+  name: Desactivar Dominio
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/domains/<uuid-aqui>/deactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Marca el dominio como inactivo. No cancela solicitudes ni finalidades existentes.
+  Requiere rol ADMIN.
+}

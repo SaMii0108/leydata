@@ -5,7 +5,7 @@
 #
 # Qué hace:
 #   1. Crea el realm "leydata"
-#   2. Crea los roles: ADMIN, DPO, JEFE_DOMINIO
+#   2. Crea los roles: ADMIN, DPO, JEFE_DOMINIO, USER, TITULAR
 #   3. Crea el cliente "leydata-frontend" (public, para el frontend)
 #   4. Crea el cliente "leydata-backend" (confidential, service account)
 #   5. Asigna manage-users + view-realm al service account de leydata-backend
@@ -67,19 +67,32 @@ try {
 } catch {
     Write-Host "-> Creando realm '$REALM'..."
     $realmBody = @{
-        realm               = $REALM
-        enabled             = $true
-        displayName         = "Ley Data"
-        accessTokenLifespan = 300
+        realm                 = $REALM
+        enabled               = $true
+        displayName           = "Ley Data"
+        accessTokenLifespan   = 300
         ssoSessionMaxLifespan = 1800
+        loginWithEmailAllowed = $true
+        editUsernameAllowed   = $true
     } | ConvertTo-Json
     Invoke-RestMethod -Method Post -Uri "$KC_URL/admin/realms" -Headers $headers -Body $realmBody | Out-Null
     Write-Host "   Realm creado."
 }
 
+# Aplicar siempre (idempotente): permite al admin API actualizar username cuando cambia el email
+Write-Host "-> Actualizando configuracion del realm..."
+$realmPatch = @{ editUsernameAllowed = $true; loginWithEmailAllowed = $true } | ConvertTo-Json
+try {
+    Invoke-RestMethod -Method Put -Uri "$KC_URL/admin/realms/$REALM" `
+        -Headers $headers -Body $realmPatch -ErrorAction Stop | Out-Null
+    Write-Host "   Configuracion actualizada."
+} catch {
+    Write-Host "   HTTP $($_.Exception.Response.StatusCode.value__)"
+}
+
 # ── 2. Crear roles ────────────────────────────────────────────────────────────
 Write-Host "-> Creando roles..."
-foreach ($ROLE in @("ADMIN","DPO","JEFE_DOMINIO")) {
+foreach ($ROLE in @("ADMIN","DPO","JEFE_DOMINIO","USER","TITULAR")) {
     try {
         Invoke-RestMethod -Method Post -Uri "$KC_URL/admin/realms/$REALM/roles" `
             -Headers $headers -Body (@{ name = $ROLE } | ConvertTo-Json) -ErrorAction Stop | Out-Null
@@ -206,7 +219,58 @@ if ($USER_ID) {
     }
 }
 
-# ── 7. Mostrar KC_BACKEND_SECRET ──────────────────────────────────────────────
+# ── 7. Crear usuarios de prueba ───────────────────────────────────────────────
+Write-Host "-> Creando usuarios de prueba..."
+
+function Create-UserWithRole {
+    param($Username, $Email, $FirstName, $LastName, $Role, $Password = "Test1234!")
+
+    $body = @{
+        username        = $Username
+        email           = $Email
+        firstName       = $FirstName
+        lastName        = $LastName
+        enabled         = $true
+        emailVerified   = $true
+        requiredActions = @()
+        credentials     = @(@{ type = "password"; value = $Password; temporary = $false })
+    } | ConvertTo-Json -Depth 5
+
+    $uid = $null
+    try {
+        $resp = Invoke-WebRequest -Method Post -Uri "$KC_URL/admin/realms/$REALM/users" `
+            -Headers $headers -Body $body -UseBasicParsing -ErrorAction Stop
+        $uid = ($resp.Headers["Location"]) -replace ".*\/",""
+        Write-Host "   $Email creado."
+    } catch {
+        if ($_.Exception.Response.StatusCode.value__ -eq 409) {
+            Write-Host "   $Email ya existia."
+            $users = Invoke-RestMethod -Method Get `
+                -Uri "$KC_URL/admin/realms/$REALM/users?email=$Email" -Headers $headers
+            if ($users.Count -gt 0) { $uid = $users[0].id }
+        } else {
+            Write-Host "   Error al crear $Email : $($_.Exception.Message)"
+        }
+    }
+
+    if ($uid) {
+        $roleObj = Invoke-RestMethod -Method Get `
+            -Uri "$KC_URL/admin/realms/$REALM/roles/$Role" -Headers $headers
+        try {
+            Invoke-RestMethod -Method Post `
+                -Uri "$KC_URL/admin/realms/$REALM/users/$uid/role-mappings/realm" `
+                -Headers $headers -Body (@($roleObj) | ConvertTo-Json -Depth 5) -ErrorAction Stop | Out-Null
+            Write-Host "   Rol $Role asignado a $Email."
+        } catch {
+            Write-Host "   HTTP $($_.Exception.Response.StatusCode.value__) al asignar $Role a $Email"
+        }
+    }
+}
+
+Create-UserWithRole -Username "dpo" -Email "dpo@leydata.cl" -FirstName "DPO" -LastName "LeyData" -Role "DPO"
+Create-UserWithRole -Username "jefe" -Email "jefe@test.cl" -FirstName "Jefe" -LastName "Dominio" -Role "JEFE_DOMINIO"
+
+# ── 8. Mostrar KC_BACKEND_SECRET ───────────────────────────────────────────────
 $SECRET = (Invoke-RestMethod -Method Get `
     -Uri "$KC_URL/admin/realms/$REALM/clients/$BACKEND_ID/client-secret" `
     -Headers $headers).value
@@ -217,7 +281,9 @@ Write-Host " Keycloak configurado correctamente." -ForegroundColor Green
 Write-Host ""
 Write-Host " Credenciales de acceso:"
 Write-Host "   Admin UI:  http://localhost:8180  (admin / admin)"
-Write-Host "   App admin: admin@leydata.cl / Admin1234!"
+Write-Host "   App admin:  admin@leydata.cl  / Admin1234!  (rol ADMIN)"
+Write-Host "   App DPO:    dpo@leydata.cl    / Test1234!   (rol DPO)"
+Write-Host "   App prueba: jefe@test.cl      / Test1234!   (rol JEFE_DOMINIO)"
 Write-Host ""
 Write-Host " Variable de entorno para el backend:"
 Write-Host "   KC_BACKEND_SECRET=$SECRET" -ForegroundColor Yellow

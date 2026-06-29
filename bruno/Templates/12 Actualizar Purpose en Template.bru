@@ -1,0 +1,29 @@
+meta {
+  name: Actualizar Purpose en Template (orden/visibilidad)
+  type: http
+  seq: 12
+}
+
+patch {
+  url: {{baseUrl}}/api/templates/<uuid-template>/purposes/<uuid-finalidad>
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "orderPosition": 2,
+    "isVisible": false
+  }
+}
+
+docs {
+  Actualiza el orderPosition o isVisible de una purpose dentro del template.
+  Ambos campos son opcionales — enviar solo el que se quiere cambiar.
+  Solo aplica a templates en estado DRAFT.
+  Requiere rol DPO o ADMIN.
+}

@@ -22,10 +22,10 @@ public class Domains {
     private UUID id;
 
     @Column(name = "code", nullable = false, unique = true)
-    private String code; // "mkt", "legal", "stats"
+    private String code;
 
     @Column(name = "name", nullable = false)
-    private String name; // "Marketing", "Legal", "Analysis"
+    private String name;
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
@@ -35,9 +35,6 @@ public class Domains {
 
     @Column(name = "active", nullable = false)
     private Boolean active = true;
-
-    @OneToMany(mappedBy = "domain", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<UserDomains> userDomains;
 
     @OneToMany(mappedBy = "domain", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<PurposeRequests> purposeRequests;

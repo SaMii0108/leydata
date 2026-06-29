@@ -1,0 +1,28 @@
+meta {
+  name: Editar Documento (solo DRAFT)
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/privacy-documents/<uuid-aqui>
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Nombre actualizado",
+    "content": "Contenido actualizado del documento..."
+  }
+}
+
+docs {
+  Solo aplica a documentos en estado DRAFT.
+  Retorna 422 si el documento está en otro estado.
+  Requiere rol DPO.
+}

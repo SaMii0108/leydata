@@ -29,6 +29,7 @@ graphify-out/
 
 # BBDD
 postgres_data/
+postgres_replica_data/
 
 # Git Hub
 .github/
@@ -36,3 +37,4 @@ postgres_data/
 # Claude AI
 CLAUDE.md
 .claude/
+graphify-out/

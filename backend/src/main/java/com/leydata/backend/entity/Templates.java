@@ -25,6 +25,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class Templates {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -50,14 +51,16 @@ public class Templates {
     @Column(name = "change_reason", columnDefinition = "TEXT")
     private String changeReason;
 
+    // Keycloak ID (sub del JWT) del usuario que creó el template
     @Column(name = "created_by")
-    private UUID createdBy;
+    private String createdBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    // Keycloak ID del DPO que aprobó el template
     @Column(name = "approved_by")
-    private UUID approvedBy;
+    private String approvedBy;
 
     @Column(name = "approved_at")
     private OffsetDateTime approvedAt;
@@ -72,6 +75,5 @@ public class Templates {
     private String previousHashSha256;
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-        private List<TemplatePurposes> templatePurposes;
-
+    private List<TemplatePurposes> templatePurposes;
 }

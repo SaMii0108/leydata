@@ -87,6 +87,12 @@
 			<artifactId>spring-boot-starter-mail</artifactId>
 		</dependency>
 
+		<!-- Redis — caché para UserStatusFilter y futuras consultas de consentimiento B2B -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+
 		<!-- Apache PDFBox 3.x — Generación de PDFs de Documentos de Privacidad -->
 		<dependency>
 			<groupId>org.apache.pdfbox</groupId>

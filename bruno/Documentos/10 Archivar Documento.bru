@@ -1,0 +1,20 @@
+meta {
+  name: Archivar Documento (→ ARCHIVED)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/privacy-documents/<uuid-aqui>/archive
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Archiva el documento. Aplica a documentos PUBLISHED.
+  Requiere rol DPO.
+}

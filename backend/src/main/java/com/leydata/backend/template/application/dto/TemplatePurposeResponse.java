@@ -16,7 +16,7 @@ public class TemplatePurposeResponse {
     Integer orderPosition;
     Boolean isVisible;
 
-    public static TemplatePurposeResponse from(TemplatePurposes tp){
+    public static TemplatePurposeResponse from(TemplatePurposes tp) {
         return TemplatePurposeResponse.builder()
             .purposeId(tp.getPurpose().getId())
             .purposeName(tp.getPurpose().getName())
@@ -24,5 +24,4 @@ public class TemplatePurposeResponse {
             .isVisible(tp.getIsVisible())
             .build();
     }
-
 }

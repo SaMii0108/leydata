@@ -69,7 +69,7 @@ class AgreementServiceTest {
         lenient().when(agreementsRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         lenient().when(agreementsPurposesRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         lenient().when(integrityLogRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        lenient().when(securityContextHelper.getAuthenticatedUser()).thenThrow(new RuntimeException("sin usuario autenticado"));
+        lenient().when(securityContextHelper.getKeycloakId()).thenThrow(new RuntimeException("sin usuario autenticado"));
     }
 
     // ── Helpers de fixtures ────────────────────────────────────────────────────────
