@@ -1,4 +1,4 @@
-package com.leydata.backend.purpose.application.service;
+package com.leydata.backend.purposerequest.application.service;
 
 import com.leydata.backend.audit.application.dto.AuditContext;
 import com.leydata.backend.audit.application.service.AuditService;
@@ -7,10 +7,10 @@ import com.leydata.backend.entity.PurposeRequests;
 import com.leydata.backend.notification.application.service.NotificationService;
 import com.leydata.backend.notification.domain.enums.NotificationType;
 import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
-import com.leydata.backend.purpose.application.dto.PurposeRequestDto;
-import com.leydata.backend.purpose.application.dto.PurposeRequestSummaryDto;
-import com.leydata.backend.purpose.application.dto.ReviewRequestDto;
-import com.leydata.backend.purpose.infrastructure.persistence.PurposeRequestsRepository;
+import com.leydata.backend.purposerequest.application.dto.PurposeRequestDto;
+import com.leydata.backend.purposerequest.application.dto.PurposeRequestSummaryDto;
+import com.leydata.backend.purposerequest.application.dto.ReviewRequestDto;
+import com.leydata.backend.purposerequest.infrastructure.persistence.PurposeRequestsRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepository;
 import lombok.RequiredArgsConstructor;
