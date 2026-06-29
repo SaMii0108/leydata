@@ -18,4 +18,86 @@
 | 14 | Verificar integridad — hash inválido | Agreement con datos alterados manualmente en BD (simulación) | POST `/api/agreements/{id}/verify-integrity` | 200/409, `IS_VALID=false`, error_detail con la discrepancia |
 | 15 | Listar historial de integridad de un agreement | Agreement con varias verificaciones | GET `/api/agreements/{id}/integrity-log` | 200, lista ordenada |
 | 16 | Eliminar (DELETE) un agreement | Agreement existente | DELETE `/api/agreements/{id}` | 405/no soportado — los agreements no se eliminan (regla 13) |
-| 17 | Cascada al eliminar DATA_SUBJECT | DataSubject con agreements asociados | DELETE del data subject | Sus agreements se eliminan en cascada (regla 13, ON DELETE CASCADE) |
+| 17 | Eliminar un DATA_SUBJECT con agreements asociados | DataSubject con agreements asociados | DELETE del data subject | No se puede eliminar físicamente (regla 13, `ON DELETE RESTRICT`) — se anonimiza el `IDENTIFIER` en su lugar, los agreements permanecen intactos como evidencia legal |
+| 18 | Consultar agreement ACTIVE para (dataSubjectId, templateId) | DataSubject con un agreement ACTIVE en ese template | GET `/api/agreements/active?dataSubjectId=X&templateId=Y` | 200, devuelve el agreement ACTIVE |
+| 19 | Consultar agreement ACTIVE cuando no hay ninguno | DataSubject sin agreements ACTIVE en ese template | GET `/api/agreements/active?dataSubjectId=X&templateId=Y` | 404 |
+| 20 | Reconsentimiento — ya existe un ACTIVE para el mismo (dataSubject, template) | Agreement ACTIVE previo | POST `/api/agreements` con el mismo dataSubjectId/templateId | 201, el agreement anterior pasa a `REVOKED` (y sus AGREEMENTS_PURPOSES heredan REVOKED), el nuevo queda `ACTIVE` con `PREVIOUS_AGREEMENTS_ID` apuntando al cerrado (regla 15, 6.1, 9) |
+| 21 | Documento no cubre alguna purpose del request | Template con purpose visible no vinculada al documento vía DOCUMENT_PURPOSES | POST `/api/agreements` | 400, error (regla 16) |
+| 22 | Listar verificaciones de integridad fallidas | Hay al menos un AGREEMENT_INTEGRITY_LOG con IS_VALID=false | GET `/api/agreements/integrity-log/failed` | 200, lista solo con los fallidos |
+
+---
+
+## Pruebas unitarias (`AgreementService`, mocks de repositorios)
+
+> Stack: JUnit 5 + Mockito + AssertJ, mismo patrón que `TemplateServiceTest` (`@ExtendWith(MockitoExtension.class)`, `@Mock` por repo/colaborador, `@InjectMocks` el service).
+
+### `create()`
+
+| # | Caso | Regla |
+|---|------|-------|
+| U1 | Crea agreement correctamente con purposes válidas, calcula hash, devuelve `AgreementResponse` completo | 1,4,6,7,10 |
+| U2 | Lanza `BusinessValidationException` si `dataSubjectId` no existe | 12 |
+| U3 | Lanza `BusinessValidationException` si `templateId` no existe | 2 |
+| U4 | Lanza `BusinessValidationException` si el template no está `ACTIVE` | 2 |
+| U5 | Lanza `BusinessValidationException` si `documentId` no existe | — |
+| U6 | Lanza `BusinessValidationException` si falta una purpose visible del template en el request | 4 |
+| U7 | Lanza `BusinessValidationException` si el request incluye una purpose no visible en el template | 4 |
+| U8 | Lanza `BusinessValidationException` si el documento no cubre alguna purpose del request | 16 |
+| U9 | Lanza `BusinessValidationException` si una purpose `required=true` viene con `accepted=false` | 5 |
+| U10 | El snapshot de `AgreementsPurposes` copia code/name/description/shortDescription/required/revocable/hash/legalBasisCode desde `Purposes` al momento de creación | 6,7 |
+| U11 | `templateVersion` del agreement queda igual al `version` actual del template | 3 |
+| U12 | Si ya existe un `ACTIVE` para `(dataSubjectId, templateId)`: lo pasa a `REVOKED`, cascadea `REVOKED` a sus `AgreementsPurposes`, y el nuevo agreement queda con `previousAgreementsId` apuntando al cerrado | 15, 6.1, 9 |
+| U13 | Si NO existe un `ACTIVE` previo: `previousAgreementsId` queda `null` | 15 |
+| U14 | El hash del nuevo agreement encadena (`previousHashSha256`) contra el `hashSha256` del último `Agreements` insertado | 17 |
+| U15 | Cada `AgreementsPurposes` encadena su propio `previousHashSha256` contra el último `AgreementsPurposes.hashSha256` insertado | 17 |
+| U16 | `AgreementMetadata` se guarda con `ipOrigin`/`userAgent` recibidos como parámetros y los campos del body (`captureChannel`, etc.) | 14 |
+| U17 | Si el request no trae bloque `metadata`, no rompe — guarda metadata solo con ip/userAgent | — |
+
+### `getById()`
+
+| # | Caso |
+|---|------|
+| U18 | Devuelve el agreement con sus purposes y metadata ensamblados |
+| U19 | Lanza `AgreementNotFoundException` si no existe |
+
+### `list()`
+
+| # | Caso |
+|---|------|
+| U20 | Filtra por `dataSubjectId` |
+| U21 | Filtra por `templateId` cuando no hay `dataSubjectId` |
+| U22 | Filtra por `status` cuando no hay `dataSubjectId` ni `templateId` |
+| U23 | Sin filtros, devuelve todos |
+| U24 | Combina filtros (ej. `dataSubjectId` + `status`) |
+
+### `getActive()`
+
+| # | Caso |
+|---|------|
+| U25 | Devuelve el agreement si hay uno `ACTIVE` para `(dataSubjectId, templateId)` |
+| U26 | Devuelve `Optional.empty()` si no hay ninguno |
+
+### `verifyIntegrity()`
+
+| # | Caso | Regla |
+|---|------|-------|
+| U27 | `isValid=true` cuando el hash recalculado coincide con el almacenado | 10,11 |
+| U28 | `isValid=false` + `errorDetail` poblado cuando el contenido fue alterado | 10,11 |
+| U29 | El log creado encadena `previousHashSha256Id` contra el último `AgreementIntegrityLog.hashSha256` | 17 |
+| U30 | Lanza `AgreementNotFoundException` si el agreement no existe | — |
+
+### `getIntegrityLog()` / `listFailedVerifications()`
+
+| # | Caso |
+|---|------|
+| U31 | `getIntegrityLog` devuelve el historial ordenado; lanza `AgreementNotFoundException` si no existe el agreement |
+| U32 | `listFailedVerifications` devuelve solo los `IS_VALID=false` |
+
+### `AgreementIntegrityScheduler`
+
+| # | Caso |
+|---|------|
+| U33 | Recorre todos los agreements y llama `verifyIntegrity` para cada uno |
+| U34 | Si `verifyIntegrity` lanza una excepción para un agreement, lo loguea y sigue con el resto (no aborta el batch) |
+| U35 | Publica `AgreementIntegrityFailedEvent` solo cuando `isValid=false` |
+| U36 | No publica ningún evento cuando todos son válidos |

@@ -212,7 +212,7 @@ if ($USER_ID) {
     try {
         Invoke-RestMethod -Method Post `
             -Uri "$KC_URL/admin/realms/$REALM/users/$USER_ID/role-mappings/realm" `
-            -Headers $headers -Body (@($ADMIN_ROLE) | ConvertTo-Json -Depth 5) -ErrorAction Stop | Out-Null
+            -Headers $headers -Body ("[" + ($ADMIN_ROLE | ConvertTo-Json -Depth 5) + "]") -ErrorAction Stop | Out-Null
         Write-Host "   Rol ADMIN asignado."
     } catch {
         Write-Host "   HTTP $($_.Exception.Response.StatusCode.value__) al asignar rol"
@@ -259,7 +259,7 @@ function Create-UserWithRole {
         try {
             Invoke-RestMethod -Method Post `
                 -Uri "$KC_URL/admin/realms/$REALM/users/$uid/role-mappings/realm" `
-                -Headers $headers -Body (@($roleObj) | ConvertTo-Json -Depth 5) -ErrorAction Stop | Out-Null
+                -Headers $headers -Body ("[" + ($roleObj | ConvertTo-Json -Depth 5) + "]") -ErrorAction Stop | Out-Null
             Write-Host "   Rol $Role asignado a $Email."
         } catch {
             Write-Host "   HTTP $($_.Exception.Response.StatusCode.value__) al asignar $Role a $Email"
