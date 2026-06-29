@@ -1,15 +1,15 @@
 #!/bin/bash
 # Entrypoint del contenedor replica.
-# Si PGDATA estÃ¡ vacÃ­o, hace pg_basebackup desde el primary antes de arrancar.
+# Si PGDATA está vacío, hace pg_basebackup desde el primary antes de arrancar.
 set -e
 
 PGDATA="${PGDATA:-/var/lib/postgresql/data}"
 
 if [ -z "$(ls -A "$PGDATA" 2>/dev/null)" ]; then
-  echo "==> PGDATA vacÃ­o â€” iniciando pg_basebackup desde el primary (db:5432)..."
+  echo "==> PGDATA vacío — iniciando pg_basebackup desde el primary (db:5432)..."
 
   until PGPASSWORD=replicator_pass pg_isready -h db -U replicator -q; do
-    echo "    Esperando que el primary estÃ© listo..."
+    echo "    Esperando que el primary esté listo..."
     sleep 2
   done
 
@@ -24,7 +24,7 @@ if [ -z "$(ls -A "$PGDATA" 2>/dev/null)" ]; then
   # -R crea standby.signal y escribe primary_conninfo en postgresql.auto.conf
   echo "==> pg_basebackup completado. Arrancando en modo standby."
 else
-  echo "==> PGDATA ya existe â€” arrancando replica en modo standby."
+  echo "==> PGDATA ya existe — arrancando replica en modo standby."
 fi
 
 exec docker-entrypoint.sh "$@"
