@@ -24,6 +24,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -67,6 +68,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleNotReadable(HttpMessageNotReadableException ex) {
         Map<String, Object> body = buildErrorResponse("BAD_REQUEST",
                 "Cuerpo de la solicitud inválido o con formato incorrecto", HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingParam(MissingServletRequestParameterException ex) {
+        String message = "Parámetro requerido faltante: '" + ex.getParameterName() + "' (tipo " + ex.getParameterType() + ")";
+        Map<String, Object> body = buildErrorResponse("BAD_REQUEST", message, HttpStatus.BAD_REQUEST);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { AppUser, Role } from './mockUsers';
 
@@ -65,11 +65,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [pendingUser,  setPendingState] = useState<AppUser | null>(null);
 
+  // Ref para acceder al pendingUser actual de forma síncrona en selectRole,
+  // evitando llamar setUser dentro del updater de setPendingState (efecto secundario
+  // dentro de un updater, problemático en React 18 concurrent mode).
+  const pendingUserRef = useRef<AppUser | null>(null);
+
   const logout = useCallback(() => {
     setUser(null);
     setAccessToken(null);
     setRefreshToken(null);
     setPendingState(null);
+    pendingUserRef.current = null;
   }, []);
 
   const login = useCallback((
@@ -78,6 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   ) => {
     setUser(incomingUser);
     setPendingState(null);
+    pendingUserRef.current = null;
     if (tokens) {
       setAccessToken(tokens.access);
       setRefreshToken(tokens.refresh);
@@ -85,16 +92,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const setPendingUser = useCallback((u: AppUser) => {
+    pendingUserRef.current = u;
     setPendingState(u);
     setUser(null);
   }, []);
 
   const selectRole = useCallback((role: Role) => {
-    setPendingState((prev) => {
-      if (!prev) return null;
-      setUser({ ...prev, role });
-      return null;
-    });
+    const pending = pendingUserRef.current;
+    if (!pending) return;
+    pendingUserRef.current = null;
+    // Ambas actualizaciones en el mismo nivel → React 18 las agrupa
+    // en un solo render, sin ventana donde user y pendingUser sean null.
+    setUser({ ...pending, role });
+    setPendingState(null);
   }, []);
 
   // ── Auto-refresh del access_token ─────────────────────────────────────────

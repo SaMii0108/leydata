@@ -21,10 +21,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -47,10 +50,15 @@ public class AgreementService {
 
     private final AuditService auditService;
     private final SecurityContextHelper securityContextHelper;
+    private final jakarta.persistence.EntityManager entityManager;
 
     // ── CREACIÓN ─────────────────────────────────────────────────────────────────
 
     public AgreementResponse create(CreateAgreementRequest req, String ipOrigin, String userAgent) {
+
+        // Postgres normaliza el valor al guardarlo en una columna inet (ej: "0:0:0:0:0:0:0:1" -> "::1").
+        // Se normaliza acá para que el hash calculado en memoria coincida con el que se relee de la BD.
+        ipOrigin = normalizeIp(ipOrigin);
 
         DataSubjects dataSubject = dataSubjectsRepo.findById(req.getDataSubjectId())
                 .orElseThrow(() -> new BusinessValidationException(
@@ -120,7 +128,9 @@ public class AgreementService {
                 })
                 .orElse(null);
 
-        LocalDateTime now = LocalDateTime.now();
+        // Truncado a microsegundos: la columna es timestamp(6); sin esto, el hash
+        // calculado en memoria (nanosegundos) nunca coincide con el valor releído de la BD.
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
 
         Agreements agreement = new Agreements();
         agreement.setDataSubjectId(dataSubject.getId());
@@ -176,6 +186,10 @@ public class AgreementService {
         }
         metadata.setCreatedAt(now);
         AgreementMetadata savedMetadata = agreementMetadataRepo.save(metadata);
+        // Postgres normaliza ip_origin (columna inet) al guardar (ej: forma larga de IPv6 -> forma corta).
+        // Se relee tras el flush para que el hash use el mismo valor que se obtendrá en futuras verificaciones.
+        agreementMetadataRepo.flush();
+        entityManager.refresh(savedMetadata);
 
         // Regla 10: hash combinado AGREEMENTS + AGREEMENTS_PURPOSES + AGREEMENT_METADATA
         String previousAgreementHash = agreementsRepo.findTopByOrderByCreatedAtDesc()
@@ -264,7 +278,7 @@ public class AgreementService {
         log.setRecalculatedHash(recalculatedHash);
         log.setIsValid(isValid);
         log.setCheckType(checkType);
-        log.setCreatedAt(LocalDateTime.now());
+        log.setCreatedAt(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
         log.setErrorDetail(isValid ? null : "El hash recalculado no coincide con el almacenado");
         log.setCreatedBy(actorId);
 
@@ -362,6 +376,17 @@ public class AgreementService {
             return HexFormat.of().formatHex(digest.digest(content.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 no disponible en este JVM", e);
+        }
+    }
+
+    private String normalizeIp(String ipOrigin) {
+        if (ipOrigin == null || ipOrigin.isBlank()) {
+            return ipOrigin;
+        }
+        try {
+            return InetAddress.getByName(ipOrigin).getHostAddress();
+        } catch (UnknownHostException e) {
+            return ipOrigin;
         }
     }
 

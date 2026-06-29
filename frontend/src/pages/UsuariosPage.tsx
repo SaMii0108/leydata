@@ -18,7 +18,7 @@ const generatePassword = () =>
   'LEY-' + Math.random().toString(36).slice(2, 8).toUpperCase();
 
 const primaryRole = (u: UserSummaryDto): string => u.roles[0] ?? '';
-const primaryArea = (u: UserSummaryDto): string | null => u.domains[0] ?? null;
+const primaryArea = (u: UserSummaryDto): string | null => u.domains[0]?.name ?? null;
 
 const UsuariosPage = () => {
   const { accessToken } = useAuth();
@@ -116,7 +116,7 @@ const UsuariosPage = () => {
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <tr key={user.id}>
+                  <tr key={user.keycloakId}>
                     <td>
                       <div className={styles.userCell}>
                         <span className={[styles.avatar, styles[`avatar_${primaryRole(user).toLowerCase()}`]].join(' ')}>
