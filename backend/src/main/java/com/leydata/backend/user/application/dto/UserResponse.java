@@ -18,5 +18,5 @@ public class UserResponse {
     private Boolean active;
     private Boolean blocked;
     private List<String> roles;
-    private List<String> domains;
+    private List<UserDomainResponse> domains;
 }

@@ -29,9 +29,13 @@ const RoleSelectPage = () => {
   const { pendingUser, selectRole } = useAuth();
   const navigate = useNavigate();
 
+  // Solo en montaje: si no hay usuario pendiente (navegación directa a la URL),
+  // redirigir al login. No debe reaccionar al cambio de pendingUser → null que
+  // ocurre normalmente al confirmar el rol en handleSelect.
   useEffect(() => {
     if (!pendingUser) navigate('/login', { replace: true });
-  }, [pendingUser, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!pendingUser) return null;
 
