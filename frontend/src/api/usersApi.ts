@@ -9,6 +9,11 @@ export class ApiError extends Error {
   }
 }
 
+export interface UserDomain {
+  id: string;
+  name: string;
+}
+
 export interface UserSummaryDto {
   keycloakId: string;
   email: string;
@@ -16,7 +21,7 @@ export interface UserSummaryDto {
   active: boolean;
   blocked: boolean;
   roles: string[];
-  domains: string[];
+  domains: UserDomain[];
 }
 
 export interface CreateUserPayload {

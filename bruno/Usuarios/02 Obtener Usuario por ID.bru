@@ -18,4 +18,10 @@ docs {
   Devuelve el detalle de un usuario por su keycloak_id (claim "sub" del JWT).
   Los datos se obtienen directamente de Keycloak — no depende de BD local.
   Requiere rol ADMIN.
+
+  Formato del campo "domains" en la respuesta:
+  "domains": [
+    { "id": "uuid-del-dominio", "name": "Marketing" },
+    { "id": "uuid-del-dominio-2", "name": "Legal" }
+  ]
 }

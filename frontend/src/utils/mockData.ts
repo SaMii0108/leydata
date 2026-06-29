@@ -120,3 +120,314 @@ export const consentRecords: ConsentRecord[] = [
   { id: 'C-0008', titularId: 't2', area: 'Finanzas',          finalidad: 'Análisis de datos internos', estado: 'activo',    fechaOtorgamiento: '2026-02-14', fechaExpiracion: '2027-02-14' },
   { id: 'C-0009', titularId: 't3', area: 'Recursos Humanos',  finalidad: 'Marketing directo',          estado: 'pendiente', fechaOtorgamiento: '2026-04-01', fechaExpiracion: '2027-04-01' },
 ];
+
+// ── Tipos de datos ────────────────────────────────────────────────────────────
+
+export type TipoDato = 'Texto' | 'Email' | 'Teléfono' | 'Fecha' | 'Número' | 'RUT';
+
+// ── Documentos de Privacidad ───────────────────────────────────────────────────
+
+export type DocumentoEstado = 'vigente' | 'borrador' | 'obsoleto';
+
+export interface DocumentoPrivacidad {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  version: string;
+  estado: DocumentoEstado;
+  fechaVigencia: string;
+}
+
+export const DOCUMENTOS_PRIVACIDAD: DocumentoPrivacidad[] = [
+  { id: 'doc-001', nombre: 'Política de Privacidad General', descripcion: 'Documento maestro que establece los principios generales de tratamiento de datos personales en la organización, conforme a la Ley 21.719.', version: '2.1', estado: 'vigente', fechaVigencia: '2026-12-31' },
+  { id: 'doc-002', nombre: 'Política de Marketing', descripcion: 'Regula el tratamiento de datos personales para actividades de comunicación comercial, campañas promocionales y análisis de audiencias.', version: '1.0', estado: 'vigente', fechaVigencia: '2026-12-31' },
+  { id: 'doc-003', nombre: 'Política de Recursos Humanos', descripcion: 'Establece las condiciones para el tratamiento de datos del personal en procesos de selección, contratación, nómina y beneficios.', version: '1.5', estado: 'vigente', fechaVigencia: '2027-03-31' },
+  { id: 'doc-004', nombre: 'Política de Análisis de Datos', descripcion: 'Define los parámetros para el uso de datos anonimizados y seudonimizados en análisis estadísticos y mejora de productos.', version: '1.0', estado: 'vigente', fechaVigencia: '2027-06-30' },
+  { id: 'doc-005', nombre: 'Política de Atención de Pacientes', descripcion: 'Marco normativo para el tratamiento de datos clínicos y de salud en procesos de atención médica y seguimiento de pacientes.', version: '1.0', estado: 'borrador', fechaVigencia: '2027-12-31' },
+];
+
+export const getDocumento = (id: string): DocumentoPrivacidad | undefined =>
+  DOCUMENTOS_PRIVACIDAD.find((d) => d.id === id);
+
+export const getDocumentosVigentes = (): DocumentoPrivacidad[] =>
+  DOCUMENTOS_PRIVACIDAD.filter((d) => d.estado === 'vigente');
+
+// ── Solicitudes de Finalidad ───────────────────────────────────────────────────
+
+export type SolicitudEstado = 'pendiente' | 'aprobada' | 'rechazada';
+
+export interface SolicitudDato {
+  nombre: string;
+  tipo: TipoDato;
+  obligatorio: boolean;
+}
+
+export interface SolicitudFinalidad {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  dominio: string;
+  justificacion: string;
+  datos: SolicitudDato[];
+  estado: SolicitudEstado;
+  creadoPor: string;
+  creadoEn: string;
+  revisadoPor?: string;
+  revisadoEn?: string;
+  notaRevision?: string;
+  finalidadId?: string;
+}
+
+export const SOLICITUDES: SolicitudFinalidad[] = [
+  { id: 'sol-001', nombre: 'Marketing directo', descripcion: 'Envío de campañas y comunicaciones comerciales personalizadas basadas en los datos del titular.', dominio: 'Marketing', justificacion: 'Necesitamos contactar a clientes con ofertas y promociones relevantes para incrementar conversión y fidelización.', datos: [{ nombre: 'Nombre', tipo: 'Texto', obligatorio: true }, { nombre: 'Correo electrónico', tipo: 'Email', obligatorio: true }, { nombre: 'Teléfono', tipo: 'Teléfono', obligatorio: false }], estado: 'aprobada', creadoPor: 'Laura Vega', creadoEn: '2026-03-01', revisadoPor: 'Carlos Ruiz', revisadoEn: '2026-03-05', finalidadId: 'fin-a001' },
+  { id: 'sol-002', nombre: 'Gestión de RRHH', descripcion: 'Tratamiento de datos del personal para procesos administrativos, tributarios y contractuales.', dominio: 'Recursos Humanos', justificacion: 'Requerido para cumplir con obligaciones laborales, tributarias y de seguridad social vigentes conforme a la legislación chilena.', datos: [{ nombre: 'RUT', tipo: 'RUT', obligatorio: true }, { nombre: 'Dirección', tipo: 'Texto', obligatorio: true }, { nombre: 'Fecha de nacimiento', tipo: 'Fecha', obligatorio: false }], estado: 'aprobada', creadoPor: 'Laura Vega', creadoEn: '2026-02-15', revisadoPor: 'Carlos Ruiz', revisadoEn: '2026-02-20', finalidadId: 'fin-a002' },
+  { id: 'sol-003', nombre: 'Análisis estadístico interno', descripcion: 'Uso de datos anonimizados para análisis de comportamiento y mejora de productos y servicios.', dominio: 'Análisis', justificacion: 'Mejorar productos mediante análisis de patrones de comportamiento de usuarios, con datos debidamente anonimizados.', datos: [{ nombre: 'Correo electrónico', tipo: 'Email', obligatorio: true }, { nombre: 'Fecha de nacimiento', tipo: 'Fecha', obligatorio: false }], estado: 'aprobada', creadoPor: 'Laura Vega', creadoEn: '2026-04-01', revisadoPor: 'Carlos Ruiz', revisadoEn: '2026-04-10', finalidadId: 'fin-a003' },
+  { id: 'sol-004', nombre: 'Atención de pacientes', descripcion: 'Tratamiento de datos clínicos para seguimiento médico y coordinación de citas.', dominio: 'Legal', justificacion: 'Registro obligatorio de consentimientos para procedimientos médicos conforme a normativa sanitaria vigente.', datos: [{ nombre: 'Nombre completo', tipo: 'Texto', obligatorio: true }, { nombre: 'RUT', tipo: 'RUT', obligatorio: true }, { nombre: 'Fecha de nacimiento', tipo: 'Fecha', obligatorio: true }, { nombre: 'Teléfono de contacto', tipo: 'Teléfono', obligatorio: false }], estado: 'pendiente', creadoPor: 'Laura Vega', creadoEn: '2026-06-10' },
+  { id: 'sol-005', nombre: 'Transferencia a socios comerciales', descripcion: 'Cesión de datos a terceros socios para cumplir acuerdos comerciales vigentes.', dominio: 'Legal', justificacion: 'Requerido para ejecutar contratos con proveedores estratégicos que procesan datos en nombre de la empresa.', datos: [{ nombre: 'Nombre', tipo: 'Texto', obligatorio: true }, { nombre: 'Correo electrónico', tipo: 'Email', obligatorio: true }], estado: 'rechazada', creadoPor: 'Laura Vega', creadoEn: '2026-05-01', revisadoPor: 'Carlos Ruiz', revisadoEn: '2026-05-10', notaRevision: 'No cumple con los requisitos del Art. 14 de la Ley 21.719 para transferencia internacional de datos personales.' },
+];
+
+let _solCounter = 6;
+
+export const getSolicitud = (id: string): SolicitudFinalidad | undefined =>
+  SOLICITUDES.find((s) => s.id === id);
+
+export const addSolicitudFinalidad = (
+  data: Omit<SolicitudFinalidad, 'id' | 'estado' | 'creadoEn'>,
+): SolicitudFinalidad => {
+  const solicitud: SolicitudFinalidad = {
+    ...data,
+    id: `sol-${String(_solCounter++).padStart(3, '0')}`,
+    estado: 'pendiente',
+    creadoEn: new Date().toISOString().split('T')[0],
+  };
+  SOLICITUDES.push(solicitud);
+  return solicitud;
+};
+
+export const rechazarSolicitud = (id: string, revisadoPor: string, nota: string): void => {
+  const idx = SOLICITUDES.findIndex((s) => s.id === id);
+  if (idx === -1) return;
+  SOLICITUDES[idx] = {
+    ...SOLICITUDES[idx],
+    estado: 'rechazada',
+    revisadoPor,
+    revisadoEn: new Date().toISOString().split('T')[0],
+    notaRevision: nota,
+  };
+};
+
+// ── Finalidades (entidades aprobadas) ─────────────────────────────────────────
+
+export interface FinalidadDato {
+  nombre: string;
+  tipo: TipoDato;
+  obligatorio: boolean;
+}
+
+export interface Finalidad {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  dominio: string;
+  documentoPrivacidadId: string;
+  datos: FinalidadDato[];
+  estado: 'activa' | 'inactiva';
+  creadoEn: string;
+  solicitudId: string;
+}
+
+export const FINALIDADES: Finalidad[] = [
+  { id: 'fin-a001', nombre: 'Marketing directo', descripcion: 'Envío de campañas y comunicaciones comerciales personalizadas basadas en los datos del titular.', dominio: 'Marketing', documentoPrivacidadId: 'doc-002', datos: [{ nombre: 'Nombre', tipo: 'Texto', obligatorio: true }, { nombre: 'Correo electrónico', tipo: 'Email', obligatorio: true }, { nombre: 'Teléfono', tipo: 'Teléfono', obligatorio: false }], estado: 'activa', creadoEn: '2026-03-05', solicitudId: 'sol-001' },
+  { id: 'fin-a002', nombre: 'Gestión de RRHH', descripcion: 'Tratamiento de datos del personal para procesos administrativos, tributarios y contractuales.', dominio: 'Recursos Humanos', documentoPrivacidadId: 'doc-003', datos: [{ nombre: 'RUT', tipo: 'RUT', obligatorio: true }, { nombre: 'Dirección', tipo: 'Texto', obligatorio: true }, { nombre: 'Fecha de nacimiento', tipo: 'Fecha', obligatorio: false }], estado: 'activa', creadoEn: '2026-02-20', solicitudId: 'sol-002' },
+  { id: 'fin-a003', nombre: 'Análisis estadístico interno', descripcion: 'Uso de datos anonimizados para análisis de comportamiento y mejora de productos.', dominio: 'Análisis', documentoPrivacidadId: 'doc-004', datos: [{ nombre: 'Correo electrónico', tipo: 'Email', obligatorio: true }, { nombre: 'Fecha de nacimiento', tipo: 'Fecha', obligatorio: false }], estado: 'activa', creadoEn: '2026-04-10', solicitudId: 'sol-003' },
+];
+
+let _finCounter = 4;
+
+export const getFinalidad = (id: string): Finalidad | undefined =>
+  FINALIDADES.find((f) => f.id === id);
+
+export const getFinalidadesActivas = (): Finalidad[] =>
+  FINALIDADES.filter((f) => f.estado === 'activa');
+
+export const aprobarSolicitud = (
+  solicitudId: string,
+  revisadoPor: string,
+  documentoPrivacidadId: string,
+  nota?: string,
+): Finalidad | null => {
+  const idx = SOLICITUDES.findIndex((s) => s.id === solicitudId);
+  if (idx === -1) return null;
+  const solicitud = SOLICITUDES[idx];
+  const finalidad: Finalidad = {
+    id: `fin-${String(_finCounter++).padStart(4, '0')}`,
+    nombre: solicitud.nombre,
+    descripcion: solicitud.descripcion,
+    dominio: solicitud.dominio,
+    documentoPrivacidadId,
+    datos: solicitud.datos.map((d) => ({ nombre: d.nombre, tipo: d.tipo, obligatorio: d.obligatorio })),
+    estado: 'activa',
+    creadoEn: new Date().toISOString().split('T')[0],
+    solicitudId,
+  };
+  FINALIDADES.push(finalidad);
+  SOLICITUDES[idx] = { ...solicitud, estado: 'aprobada', revisadoPor, revisadoEn: new Date().toISOString().split('T')[0], notaRevision: nota, finalidadId: finalidad.id };
+  return finalidad;
+};
+
+// ── Plantillas de Consentimiento ───────────────────────────────────────────────
+
+export interface DataItem {
+  id: string;
+  nombre: string;
+  tipo: TipoDato;
+  obligatorio: boolean;
+  descripcionTitular: string;
+}
+
+export interface TemplateVersion {
+  version: number;
+  fecha: string;
+  autor: string;
+  nota: string;
+}
+
+export type TemplateEstado = 'activa' | 'inactiva' | 'borrador';
+
+export interface Template {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  finalidadId: string;
+  baseLicitud: string;
+  estado: TemplateEstado;
+  dominio: string;
+  version: number;
+  creadoPor: string;
+  creadoEn: string;
+  dataItems: DataItem[];
+  primaryColor: string;
+  buttonLabel: string;
+  versiones: TemplateVersion[];
+}
+
+export const BASES_LICITUD = [
+  'Consentimiento explícito del titular (Art. 12 letra a)',
+  'Ejecución de relación contractual (Art. 12 letra b)',
+  'Cumplimiento de obligación legal (Art. 12 letra c)',
+  'Protección de intereses vitales (Art. 12 letra d)',
+  'Misión de interés público (Art. 12 letra e)',
+  'Interés legítimo del responsable (Art. 12 letra f)',
+] as const;
+
+export const DOMINIOS = ['Marketing', 'Recursos Humanos', 'Tecnología', 'Legal', 'Finanzas', 'Análisis'] as const;
+
+export const TEMPLATES: Template[] = [
+  {
+    id: 'tpl-001',
+    nombre: 'Consentimiento Marketing',
+    descripcion: 'Plantilla para captura de consentimiento de marketing directo.',
+    finalidadId: 'fin-a001',
+    baseLicitud: 'Consentimiento explícito del titular (Art. 12 letra a)',
+    estado: 'activa',
+    dominio: 'Marketing',
+    version: 2,
+    creadoPor: 'Carlos Ruiz',
+    creadoEn: '2026-04-15',
+    dataItems: [
+      { id: 'di-001', nombre: 'Nombre', tipo: 'Texto', obligatorio: true, descripcionTitular: 'Identificación del titular para personalizar las comunicaciones de marketing.' },
+      { id: 'di-002', nombre: 'Correo electrónico', tipo: 'Email', obligatorio: true, descripcionTitular: 'Utilizaremos este correo para enviar notificaciones y comunicaciones de marketing.' },
+      { id: 'di-003', nombre: 'Teléfono', tipo: 'Teléfono', obligatorio: false, descripcionTitular: 'Utilizaremos este número para contactarte con ofertas y promociones.' },
+    ],
+    primaryColor: '#4361ee',
+    buttonLabel: 'Aceptar',
+    versiones: [
+      { version: 1, fecha: '2026-03-10', autor: 'Carlos Ruiz', nota: 'Versión inicial.' },
+      { version: 2, fecha: '2026-04-15', autor: 'Carlos Ruiz', nota: 'Datos actualizados desde finalidad aprobada.' },
+    ],
+  },
+  {
+    id: 'tpl-002',
+    nombre: 'Consentimiento RRHH',
+    descripcion: 'Plantilla para el tratamiento de datos del personal de la organización.',
+    finalidadId: 'fin-a002',
+    baseLicitud: 'Ejecución de relación contractual (Art. 12 letra b)',
+    estado: 'activa',
+    dominio: 'Recursos Humanos',
+    version: 1,
+    creadoPor: 'Carlos Ruiz',
+    creadoEn: '2026-03-10',
+    dataItems: [
+      { id: 'di-004', nombre: 'RUT', tipo: 'RUT', obligatorio: true, descripcionTitular: 'Requerido para procesos tributarios y de seguridad social.' },
+      { id: 'di-005', nombre: 'Dirección', tipo: 'Texto', obligatorio: true, descripcionTitular: 'Utilizaremos esta dirección para validar información contractual y laboral.' },
+      { id: 'di-006', nombre: 'Fecha de nacimiento', tipo: 'Fecha', obligatorio: false, descripcionTitular: 'Para cálculo de beneficios y tramos etarios aplicables.' },
+    ],
+    primaryColor: '#7c3aed',
+    buttonLabel: 'Acepto',
+    versiones: [
+      { version: 1, fecha: '2026-03-10', autor: 'Carlos Ruiz', nota: 'Versión inicial.' },
+    ],
+  },
+  {
+    id: 'tpl-003',
+    nombre: 'Análisis de Datos',
+    descripcion: 'Plantilla para investigación y análisis estadístico interno.',
+    finalidadId: 'fin-a003',
+    baseLicitud: 'Interés legítimo del responsable (Art. 12 letra f)',
+    estado: 'borrador',
+    dominio: 'Análisis',
+    version: 1,
+    creadoPor: 'Carlos Ruiz',
+    creadoEn: '2026-05-20',
+    dataItems: [
+      { id: 'di-007', nombre: 'Correo electrónico', tipo: 'Email', obligatorio: true, descripcionTitular: 'Utilizaremos este dato para segmentación y análisis de comportamiento.' },
+      { id: 'di-008', nombre: 'Fecha de nacimiento', tipo: 'Fecha', obligatorio: false, descripcionTitular: 'Para segmentación demográfica por rango etario.' },
+    ],
+    primaryColor: '#059669',
+    buttonLabel: 'Autorizar',
+    versiones: [
+      { version: 1, fecha: '2026-05-20', autor: 'Carlos Ruiz', nota: 'Versión inicial (borrador).' },
+    ],
+  },
+];
+
+let _tplCounter = 4;
+
+export const getTemplate = (id: string): Template | undefined =>
+  TEMPLATES.find((t) => t.id === id);
+
+export const addTemplate = (
+  data: Omit<Template, 'id' | 'version' | 'creadoEn' | 'versiones'>,
+): Template => {
+  const today = new Date().toISOString().split('T')[0];
+  const tpl: Template = {
+    ...data,
+    id: `tpl-${String(_tplCounter++).padStart(3, '0')}`,
+    version: 1,
+    creadoEn: today,
+    versiones: [{ version: 1, fecha: today, autor: data.creadoPor, nota: 'Versión inicial.' }],
+  };
+  TEMPLATES.push(tpl);
+  return tpl;
+};
+
+export const updateTemplate = (
+  id: string,
+  updates: Partial<Omit<Template, 'id' | 'versiones'>>,
+  autorEdicion: string,
+): void => {
+  const idx = TEMPLATES.findIndex((t) => t.id === id);
+  if (idx === -1) return;
+  const prev = TEMPLATES[idx];
+  const newVersion = prev.version + 1;
+  const today = new Date().toISOString().split('T')[0];
+  TEMPLATES[idx] = {
+    ...prev,
+    ...updates,
+    version: newVersion,
+    versiones: [
+      ...prev.versiones,
+      { version: newVersion, fecha: today, autor: autorEdicion, nota: `Versión ${newVersion} — plantilla actualizada.` },
+    ],
+  };
+};
