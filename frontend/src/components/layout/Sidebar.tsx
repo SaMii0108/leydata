@@ -63,10 +63,26 @@ const IconUser = () => (
     <circle cx="12" cy="7" r="4"/>
   </svg>
 );
+const IconRequest = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="12" y1="18" x2="12" y2="12"/>
+    <line x1="9" y1="15" x2="15" y2="15"/>
+  </svg>
+);
+const IconCheckSquare = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 11 12 14 22 4"/>
+    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+  </svg>
+);
 
 const navItems: NavItem[] = [
   { to: '/',                label: 'Métricas Generales', icon: <IconGrid />,    roles: ['ADMIN', 'DPO'] },
   { to: '/consentimientos', label: 'Consentimientos',    icon: <IconList />,    roles: ['DPO', 'JEFE_DOMINIO'] },
+  { to: '/solicitudes',          label: 'Mis Solicitudes',        icon: <IconRequest />,     roles: ['JEFE_DOMINIO'] },
+  { to: '/aprobacion-solicitudes', label: 'Aprobación de Solicitudes', icon: <IconCheckSquare />, roles: ['DPO'] },
   { to: '/usuarios',        label: 'Usuarios',           icon: <IconUsers />,   roles: ['ADMIN'] },
   { to: '/auditoria',       label: 'Auditoría',          icon: <IconAudit />,   roles: ['ADMIN', 'DPO'] },
   { to: '/cumplimiento',    label: 'Cumplimiento Legal', icon: <IconShield />,  roles: ['ADMIN', 'DPO'] },

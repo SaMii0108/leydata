@@ -15,6 +15,8 @@ import AuditTrailPage from './pages/AuditTrailPage';
 import TemplatesPage from './pages/TemplatesPage';
 import CompliancePage from './pages/CompliancePage';
 import PerfilPage from './pages/PerfilPage';
+import MisSolicitudesPage from './pages/MisSolicitudesPage';
+import AprobacionSolicitudesPage from './pages/AprobacionSolicitudesPage';
 import TitularPortalPage from './pages/TitularPortalPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -76,6 +78,16 @@ const App = () => (
             <Route path="plantillas" element={
               <ProtectedRoute roles={['DPO']}>
                 <TemplatesPage />
+              </ProtectedRoute>
+            } />
+            <Route path="solicitudes" element={
+              <ProtectedRoute roles={['JEFE_DOMINIO']}>
+                <MisSolicitudesPage />
+              </ProtectedRoute>
+            } />
+            <Route path="aprobacion-solicitudes" element={
+              <ProtectedRoute roles={['DPO']}>
+                <AprobacionSolicitudesPage />
               </ProtectedRoute>
             } />
             <Route path="perfil" element={
