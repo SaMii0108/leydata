@@ -36,9 +36,9 @@ import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurpose
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
 import com.leydata.backend.purpose.infrastructure.persistence.PurposeRequestsRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
-import com.leydata.backend.repository.AgreementMetadataRepository;
-import com.leydata.backend.repository.AgreementsPurposesRepository;
-import com.leydata.backend.repository.AgreementsRepository;
+import com.leydata.backend.agreement.infrastructure.persistence.AgreementMetadataRepository;
+import com.leydata.backend.agreement.infrastructure.persistence.AgreementsPurposesRepository;
+import com.leydata.backend.agreement.infrastructure.persistence.AgreementsRepository;
 import com.leydata.backend.repository.DataCategoriesRepository;
 import com.leydata.backend.repository.DataRetentionPoliciesRepository;
 import com.leydata.backend.repository.DataSubjectsRepository;
