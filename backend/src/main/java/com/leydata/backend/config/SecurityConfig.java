@@ -53,6 +53,8 @@ public class SecurityConfig {
                         ).permitAll()
 
                         //Gestión de usuarios (CRUD, bloqueo, activación): solo ADMIN
+                        // Excepción: un usuario puede consultar su propio perfil (validado en @PreAuthorize)
+                        .requestMatchers(HttpMethod.GET, "/api/users/*").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")

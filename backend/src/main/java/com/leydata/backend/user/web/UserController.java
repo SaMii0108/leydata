@@ -80,13 +80,13 @@ public class UserController {
         return Map.of("status", "success", "users", users);
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or #userId == authentication.token.subject")
     @GetMapping("/{userId}")
-    @Operation(summary = "Obtener usuario por keycloak_id [ADMIN]")
+    @Operation(summary = "Obtener usuario por keycloak_id [ADMIN o propietario]")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Detalle del usuario"),
             @ApiResponse(responseCode = "404", description = "Usuario no encontrado en Keycloak"),
-            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN y no es el propio usuario")
     })
     public Map<String, Object> getUserById(
             @Parameter(description = "keycloak_id del usuario (claim sub del JWT)") @PathVariable String userId) {
