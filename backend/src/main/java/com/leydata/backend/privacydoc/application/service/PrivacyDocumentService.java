@@ -17,7 +17,7 @@ import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
 import com.leydata.backend.privacydoc.infrastructure.pdf.PdfGeneratorService;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
-import com.leydata.backend.purpose.infrastructure.persistence.PurposeRequestsRepository;
+import com.leydata.backend.purposerequest.infrastructure.persistence.PurposeRequestsRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
 import com.leydata.backend.shared.EmailService;

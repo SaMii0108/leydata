@@ -1,4 +1,4 @@
-package com.leydata.backend.purpose.application.dto;
+package com.leydata.backend.purposerequest.application.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
