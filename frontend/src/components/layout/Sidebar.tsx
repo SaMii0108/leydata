@@ -60,12 +60,6 @@ const IconDoc = () => (
     <line x1="9" y1="17" x2="13" y2="17"/>
   </svg>
 );
-const IconCheckCircle = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-    <polyline points="22 4 12 14.01 9 11.01"/>
-  </svg>
-);
 const IconAudit = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -116,7 +110,7 @@ const navItems: NavItem[] = [
   { to: '/auditoria',              label: 'Auditoría',                 icon: <IconAudit />,       roles: ['ADMIN', 'DPO'] },
   { to: '/cumplimiento',           label: 'Cumplimiento Legal',        icon: <IconShield />,      roles: ['ADMIN', 'DPO'] },
   { to: '/aprobacion-solicitudes', label: 'Aprobación de Solicitudes', icon: <IconCheckSquare />, roles: ['DPO'] },
-  { to: '/finalidades/aprobacion', label: 'Finalidades',               icon: <IconCheckCircle />, roles: ['DPO'] },
+  { to: '/finalidades',            label: 'Finalidades',               icon: <IconTarget />,      roles: ['DPO'] },
   { to: '/documentos',             label: 'Documentos',                icon: <IconDoc />,         roles: ['DPO'] },
   { to: '/plantillas',             label: 'Plantillas',                icon: <IconPalette />,     roles: ['DPO'] },
   { to: '/perfil',                 label: 'Mi Perfil',                 icon: <IconUser />,        roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },

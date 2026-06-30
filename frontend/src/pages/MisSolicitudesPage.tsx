@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import { getMyPurposeRequests, ApiError } from '../api/purposeRequestsApi';
 import type { PurposeRequestSummary } from '../api/purposeRequestsApi';
+import Button from '../components/common/Button';
 import styles from './MisSolicitudesPage.module.css';
 
 const STATUS_LABEL: Record<PurposeRequestSummary['status'], string> = {
@@ -15,6 +17,8 @@ const formatDate = (iso: string) =>
 
 const MisSolicitudesPage = () => {
   const { accessToken } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [requests, setRequests] = useState<PurposeRequestSummary[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
@@ -31,7 +35,7 @@ const MisSolicitudesPage = () => {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [accessToken]);
+  }, [accessToken, location.key]);
 
   return (
     <div className={styles.page}>
@@ -40,6 +44,9 @@ const MisSolicitudesPage = () => {
           <h2 className={styles.title}>Mis Solicitudes de Finalidad</h2>
           <p className={styles.subtitle}>Solicitudes de tratamiento de datos enviadas al DPO</p>
         </div>
+        <Button variant="primary" size="sm" onClick={() => navigate('/solicitudes/nueva')}>
+          + Nueva Solicitud
+        </Button>
       </div>
 
       {error && (

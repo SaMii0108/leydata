@@ -339,6 +339,56 @@
 .textarea:focus { border-color: var(--color-primary); }
 .textarea:disabled { opacity: 0.6; }
 
+/* Datos en modal */
+.modalDatosList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.modalDatoItem {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.modalDatoNombre {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.modalDatoTipo {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary);
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
+.modalDatoOblig {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-danger);
+  background: var(--color-danger-bg, #fef2f2);
+  border: 1px solid var(--color-danger);
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
+.modalDatoOpcional {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
 /* Modal footer */
 .modalFooter {
   display: flex;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import {
   getAllPurposeRequests,
@@ -23,6 +24,8 @@ const formatDate = (iso: string) =>
 
 const AprobacionSolicitudesPage = () => {
   const { accessToken } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [requests, setRequests]     = useState<PurposeRequestSummary[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -50,6 +53,16 @@ const AprobacionSolicitudesPage = () => {
   }, [accessToken]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    const state = location.state as { purposeCreated?: boolean } | null;
+    if (state?.purposeCreated) {
+      setSuccessMsg('Finalidad creada correctamente.');
+      const id = setTimeout(() => setSuccessMsg(null), 4000);
+      window.history.replaceState({}, '');
+      return () => clearTimeout(id);
+    }
+  }, [location.state]);
 
   const openModal = (req: PurposeRequestSummary) => {
     setSelected(req);
@@ -96,6 +109,18 @@ const AprobacionSolicitudesPage = () => {
     decision !== null &&
     !(decision === 'REJECTED' && !notes.trim()) &&
     !submitting;
+
+  const parsedRequestDatos = (() => {
+    if (!selected?.requestedData) return [];
+    try {
+      const p = JSON.parse(selected.requestedData);
+      return Array.isArray(p)
+        ? (p as Array<{ nombre: string; tipo: string; obligatorio: boolean }>)
+        : [];
+    } catch {
+      return [];
+    }
+  })();
 
   return (
     <div className={styles.page}>
@@ -169,6 +194,15 @@ const AprobacionSolicitudesPage = () => {
                           Revisar
                         </Button>
                       )}
+                      {req.status === 'APPROVED' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate('/finalidades/nueva', { state: { request: req } })}
+                        >
+                          Crear Finalidad
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -197,6 +231,23 @@ const AprobacionSolicitudesPage = () => {
               <p className={styles.modalLabel}>Justificación</p>
               <p className={styles.modalJustification}>{selected.justification}</p>
             </div>
+
+            {parsedRequestDatos.length > 0 && (
+              <div className={styles.modalSection}>
+                <p className={styles.modalLabel}>Datos declarados</p>
+                <div className={styles.modalDatosList}>
+                  {parsedRequestDatos.map((d, i) => (
+                    <div key={i} className={styles.modalDatoItem}>
+                      <span className={styles.modalDatoNombre}>{d.nombre}</span>
+                      <span className={styles.modalDatoTipo}>{d.tipo}</span>
+                      <span className={d.obligatorio ? styles.modalDatoOblig : styles.modalDatoOpcional}>
+                        {d.obligatorio ? 'Obligatorio' : 'Opcional'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className={styles.modalSection}>
               <p className={styles.modalLabel}>Decisión</p>
