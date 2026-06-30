@@ -1,0 +1,34 @@
+meta {
+  name: Capturar Consentimiento
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{orchestratorUrl}}/consent/capture
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{externalToken}}
+}
+
+body:json {
+  {
+    "subjectId": "<opaque-subject-id>",
+    "templateId": "<uuid-template-activo>",
+    "documentId": "<uuid-documento-publicado>",
+    "purposes": [
+      { "purposeId": "<uuid-finalidad>", "accepted": true }
+    ]
+  }
+}
+
+docs {
+  Registra el consentimiento de un titular a través del Orquestador.
+  El Orquestador llama a POST /api/agreements en LeyData con credenciales M2M (client_credentials).
+  Pre-calienta Redis con ALLOWED por cada purpose aceptada, incluyendo legalBasisCode y validUntil reales.
+  Respuesta: { subjectId, agreementId, status: ALLOWED }
+  Requiere JWT del sistema externo (realm empresa-cliente). Ver archivo 01.
+}

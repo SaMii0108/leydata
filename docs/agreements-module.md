@@ -11,13 +11,13 @@
            │ observa
            ▼
 ┌──────────────────────┐
-│     ORQUESTADOR       │  (externo, pendiente de construir)
+│     ORQUESTADOR       │  implementado en orchestrator/ — puerto 8081
 │  pseudonimiza identidad│
 └──────────┬───────────┘
-           │ busca/crea
+           │ subjectIdentifier (string opaco: RUT, UUID externo, etc.)
            ▼
 ┌──────────────────────┐
-│    DATA_SUBJECTS      │  IDENTIFIER = valor pseudonimizado
+│    DATA_SUBJECTS      │  findOrCreate por IDENTIFIER en AgreementService
 └──────────┬───────────┘
            │
            ▼
@@ -51,7 +51,7 @@ El módulo de Agreements registra el acto de consentimiento real de un titular d
 
 Un AGREEMENT es evidencia legal: una vez creado no se edita. Cualquier cambio de voluntad del titular (revocar, renovar) genera un nuevo registro, nunca una modificación del existente. La integridad se protege con HASH_SHA256, calculado por el service al crear el acuerdo y revalidado por la base de datos (función `GENERATE_AGREEMENT_HASH`) y por verificaciones registradas en AGREEMENT_INTEGRITY_LOG.
 
-> **Estado de este documento:** entity, repository, DTO, service y controller del módulo ya están implementados (`agreement/`). El `STATUS` (REVOKED/EXPIRED) más allá de la creación, y el flujo de alta de DATA_SUBJECTS, dependen de un orquestador que aún no existe.
+> **Estado de este documento:** módulo completamente implementado incluyendo revocación explícita (`PATCH /{id}/revoke`), `AgreementRevocationCacheListener` (AFTER_COMMIT → invalida Redis), y soporte para `subjectIdentifier` (findOrCreate de DataSubject). El Orquestador está operativo en `orchestrator/` (puerto 8081).
 
 > Ver diagrama de "Flujo general" al inicio del documento.
 
@@ -71,7 +71,7 @@ Un AGREEMENT es evidencia legal: una vez creado no se edita. Cualquier cambio de
 9. `PREVIOUS_AGREEMENTS_ID` enlaza un agreement con el que reemplaza (renovación o cambio de voluntad), formando una cadena histórica. La definición de cuándo se genera esa cadena también depende del orquestador pendiente.
 10. `HASH_SHA256` del AGREEMENT se calcula dos veces como doble resguardo: el service lo calcula y persiste al crear el agreement; la base de datos expone `GENERATE_AGREEMENT_HASH(agreement_id)` para recalcularlo y compararlo en verificaciones de integridad. El hash cubre `AGREEMENTS`, `AGREEMENTS_PURPOSES` **y `AGREEMENT_METADATA`** (IP, user agent, capture_channel, signature_token, auth_provider) — si la metadata de captura se altera después de creado el agreement, la verificación de integridad debe fallar. `EXTRA_VARIABLES` y `CREATED_AT` de metadata quedan fuera del hash (el primero por ser JSON libre sin orden garantizado, el segundo por ser solo un timestamp de registro).
 11. Toda verificación de integridad (programada, manual o bajo demanda) sobre un AGREEMENT debe registrar un `AGREEMENT_INTEGRITY_LOG`, con el hash almacenado, el recalculado, si coinciden (`IS_VALID`) y el tipo de chequeo.
-12. Un DATA_SUBJECT debe existir previamente a la creación del AGREEMENT. Su alta no es responsabilidad de este módulo: el orquestador (pendiente de construir) identifica al titular dentro del sistema del cliente (ej. login en la base de datos de una farmacia) y decide cuándo solicitarle consentimiento o reconsentimiento. Este módulo asume que ya recibe un `dataSubjectId` válido.
+12. `CreateAgreementRequest` acepta dos formas de identificar al titular: `dataSubjectId` (UUID interno, para llamadas directas desde el portal) o `subjectIdentifier` (string opaco, para llamadas desde el Orquestador B2B, ej: "RUT:12345678-9"). Si se usa `subjectIdentifier`, `AgreementService` hace `findOrCreate` en `data_subjects` — si no existe crea la fila automáticamente. Si ninguno de los dos viene, se lanza `BusinessValidationException`.
 13. No se puede eliminar (`DELETE`) un AGREEMENT — el `ON DELETE RESTRICT` en `TEMPLATE_ID`, `DOCUMENT_ID` **y `DATA_SUBJECT_ID`** lo protege a nivel de BD. Un `DATA_SUBJECT` con `AGREEMENTS` asociados **no se puede eliminar físicamente**. Si el titular ejerce su derecho al olvido, se anonimiza su `IDENTIFIER` (se reemplaza por un valor opaco) en vez de borrar la fila — el agreement permanece como evidencia legal.
 14. La metadata técnica (`IP_ORIGIN`, `USER_AGENT`) se captura en el controller de `POST /api/agreements` a partir del `HttpServletRequest` (IP resuelta vía `getRemoteAddr()` únicamente — igual que `AuditService.extractClientIp()` — porque `X-Forwarded-For` puede ser falsificado por el cliente; en producción se asume `RemoteIpValve` configurado para reescribir el `remoteAddr` real detrás de un proxy. User agent desde el header `User-Agent`) y se pasa como parámetros simples al service — el service no depende de objetos HTTP. El resto de campos de `AGREEMENT_METADATA` (`capture_channel`, `signature_token`, `auth_provider`, `extra_variables`) se reciben en el body del request.
 15. Solo puede existir un `AGREEMENT` en `STATUS = 'ACTIVE'` por combinación (`DATA_SUBJECT_ID`, `TEMPLATE_ID`) — forzado con índice único parcial en BD. Reconsentir implica que el `AgreementService` cierre/reemplace el agreement activo anterior (vía `PREVIOUS_AGREEMENTS_ID`) antes o en la misma operación de crear el nuevo.
@@ -105,10 +105,13 @@ ACTIVE → EXPIRED
 5. Verificar integridad de un AGREEMENT bajo demanda (recalcula hash, compara, registra en AGREEMENT_INTEGRITY_LOG).
 6. Listar verificaciones fallidas (`IS_VALID = FALSE`) para investigación.
 
-### Fuera de alcance por ahora (dependen del orquestador)
-- Revocar AGREEMENT.
-- Expirar AGREEMENT automáticamente.
-- Renovar AGREEMENT (crear nuevo enlazado vía PREVIOUS_AGREEMENTS_ID).
+### Revocación
+
+`PATCH /api/agreements/{id}/revoke` con body `{ "subjectId": "<identifier opaco>" }` — implementado. Valida que el agreement pertenezca al sujeto, lo marca REVOKED, propaga a sus `AgreementsPurposes`, registra en audit log y publica `AgreementRevokedEvent` para que el `AgreementRevocationCacheListener` elimine las keys de Redis tras el commit.
+
+### Fuera de alcance por ahora
+- Expirar AGREEMENT automáticamente (job pendiente — `EXPIRES_AT` existe en el modelo pero el scheduler no está implementado).
+- Renovar AGREEMENT vía `PREVIOUS_AGREEMENTS_ID` (el reconsentimiento automático en `create()` ya funciona, pero la renovación manual no tiene endpoint propio).
 
 ---
 
@@ -123,8 +126,7 @@ ACTIVE → EXPIRED
 | `GET` | `/api/agreements/{id}/integrity-log` | Historial de verificaciones de integridad del agreement |
 | `GET` | `/api/agreements/integrity-log/failed` | Listar verificaciones de integridad fallidas (`IS_VALID = FALSE`), caso de uso 6 |
 | `GET` | `/api/agreements/active?dataSubjectId=&templateId=` | Consultar si hay un agreement ACTIVE — usado por el orquestador antes de pedir o no consentimiento |
-
-> No se incluyen endpoints de revocación/expiración/renovación: dependen del orquestador no definido aún.
+| `PATCH` | `/api/agreements/{id}/revoke` | Revocar agreement: marca REVOKED en Postgres, publica evento, invalida Redis (AFTER_COMMIT) |
 
 ---
 

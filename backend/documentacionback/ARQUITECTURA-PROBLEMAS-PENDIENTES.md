@@ -1,8 +1,8 @@
 # LeyData — Problemas Arquitectónicos y Deuda Técnica Pendiente
 
 **Fecha de análisis:** 2026-06-27  
-**Última actualización:** 2026-06-28  
-**Branch:** infra/postgres-replica-pgbouncer  
+**Última actualización:** 2026-06-29  
+**Branch:** feature/orchestrator-module  
 **Contexto:** Evaluación pre-producción. La Ley 21.719 entra en vigor en diciembre de 2026.
 
 ---
@@ -45,11 +45,19 @@
 - `5434` → PostgreSQL replica (solo lectura, standby)
 - `5435` → PgBouncer (punto de entrada recomendado para el backend en producción)
 
-**Pendiente — Fase 2b (deuda técnica):**
-Enrutar lecturas de Spring Boot a la replica via `AbstractRoutingDataSource`. Requiere:
-- Dos `DataSource` beans: `writeDataSource` (→ primary/pgbouncer) y `readDataSource` (→ replica)
-- Un `ReadWriteRoutingDataSource extends AbstractRoutingDataSource` que inspeccione `TransactionSynchronizationManager.isCurrentTransactionReadOnly()`
-- Anotar las queries de solo lectura con `@Transactional(readOnly=true)`
+**✅ Fase 2b — RESUELTO:**
+Lecturas de Spring Boot enrutadas automáticamente a la réplica vía `AbstractRoutingDataSource`.
+
+**Archivos creados:**
+- `config/DataSourceType.java` — enum `WRITE / READ`
+- `config/ReadWriteRoutingDataSource.java` — routing por `TransactionSynchronizationManager.isCurrentTransactionReadOnly()`
+- `config/DataSourceConfig.java` — dos pools HikariCP + `LazyConnectionDataSourceProxy` como `@Primary DataSource`
+
+**`application.properties`:** bloque `spring.datasource.*` reemplazado por `spring.datasource.write.*` (→ PgBouncer :5435) y `spring.datasource.read.*` (→ réplica :5434).
+
+**Cómo funciona:** cualquier método anotado con `@Transactional(readOnly = true)` recibe conexión del pool de la réplica. Todos los services de lectura ya tenían esta anotación.
+
+Ver doc completo: [`DATASOURCE-ROUTING.md`](DATASOURCE-ROUTING.md)
 
 **Pendiente — Fase 3 (deuda técnica):**
 Failover automático con **Patroni** (coordina etcd + PostgreSQL para promover la replica automáticamente si el primary cae sin intervención humana). Recomendado para producción antes del go-live de diciembre 2026.
@@ -97,14 +105,21 @@ log_format main '$remote_addr - $request_id - $request - $status';
 
 ---
 
-### 🟠 Ventana de inconsistencia en caché de consentimientos (Redis)
+### ✅ ~~Ventana de inconsistencia en caché de consentimientos (Redis)~~ — RESUELTO
 
-**Problema:** El plan de invalidar Redis únicamente cuando se revoca un consentimiento crea una **ventana de inconsistencia ilimitada** si la invalidación falla (ej. timeout de red entre el servicio que revoca y Redis). Un sistema externo podría recibir "consentimiento vigente" para un consentimiento ya revocado durante horas.
+**Fix aplicado:** Doble mecanismo de consistencia implementado.
 
-**Solución propuesta:**
-- Usar **TTL corto (30–60 segundos)** en todas las keys de consentimiento, combinado con invalidación activa en la revocación.
-- El peor caso de inconsistencia queda acotado al TTL, documentable ante el CPDT como "latencia técnica de propagación".
-- Implementar un **evento de dominio** (`ConsentimientoRevocadoEvent`) que dispare la invalidación de Redis de forma explícita y logueable.
+1. **TTL duro de 300 segundos** en todas las keys `consent:{subjectId}:{purposeId}` del Orquestador. El peor caso de desincronización queda acotado a 5 minutos, documentable ante el CPDT como "latencia técnica de propagación".
+
+2. **`AgreementRevocationCacheListener`** (`AFTER_COMMIT`): al revocar vía `PATCH /api/agreements/{id}/revoke` directamente en el backend, se publica `AgreementRevokedEvent` y el listener elimina las keys de Redis **solo después de que Postgres haga commit**. Si Postgres hace rollback, el evento no se despacha — Redis nunca queda desincronizado.
+
+3. **Orquestador escribe REVOKED activamente**: cuando la revocación llega vía `POST /consent/revoke` del Orquestador, este escribe el estado `REVOKED` en Redis inmediatamente tras confirmar la persistencia en Postgres.
+
+**Archivos creados:**
+- `agreement/domain/event/AgreementRevokedEvent.java` — Spring event record con `subjectIdentifier` + `List<UUID> purposeIds`
+- `agreement/application/service/AgreementRevocationCacheListener.java` — `@TransactionalEventListener(phase = AFTER_COMMIT)`
+
+Ver explicación completa en `agreement/domain/event/README.md`.
 
 ---
 
@@ -126,16 +141,24 @@ log_format main '$remote_addr - $request_id - $request - $status';
 
 ---
 
-### 🟡 Falta endpoint de consulta de consentimiento para sistemas externos (Propagación B2B)
+### ✅ ~~Falta endpoint de consulta de consentimiento para sistemas externos (Propagación B2B)~~ — RESUELTO
 
-**Problema:** No existe un endpoint optimizado para la consulta de consentimiento B2B — el caso de uso principal del sistema: "¿puede el sistema X procesar el dato del titular Y para la finalidad Z?". Los sistemas externos tendrían que construir esta lógica ellos mismos interpretando múltiples endpoints.
+**Fix aplicado:** Módulo **Orquestador** implementado como servicio independiente (puerto 8081).
 
-**Solución propuesta:**
+**Endpoints disponibles:**
 ```
-GET /api/consent/check?titularId={id}&purposeId={id}&dataCategory={cat}
-→ { "permitted": true/false, "validUntil": "...", "legalBasis": "...", "cachedAt": "..." }
+GET  /consent/check?subjectId={id}&purposeId={uuid}  → { status: ALLOWED|REVOKED|DENIED|PENDING, legalBasisCode, validUntil }
+POST /consent/capture                                  → captura acuerdo + pre-warms Redis
+POST /consent/revoke                                   → revoca acuerdo + actualiza Redis
 ```
-Este endpoint debe ser el único punto de integración B2B, servido desde Redis (caché con TTL 30-60s), con autenticación por API Key (no JWT de usuario).
+
+**Flujo de seguridad:**
+- **Inbound:** JWT del IdP externo validado contra JWKS en `EXTERNAL_JWKS_URI`
+- **Outbound:** M2M `client_credentials` hacia Keycloak realm `leydata` — el backend nunca recibe el token del cliente externo
+
+**Patrón findOrCreate para titulares:** el campo `subjectId` del Orquestador es un string opaco (RUT, UUID externo, etc.). Al capturar un consentimiento el backend hace `findOrCreate` en `data_subjects` por `identifier`. Los sistemas externos nunca necesitan conocer el UUID interno.
+
+Ver guía completa: [`orchestrator/INTEGRATION.md`](../../orchestrator/INTEGRATION.md)
 
 ---
 
@@ -158,26 +181,18 @@ Este endpoint debe ser el único punto de integración B2B, servido desde Redis 
 
 ---
 
-### 🔴 Falta el ciclo de revocación de consentimiento
+### ✅ ~~Falta el ciclo de revocación de consentimiento~~ — RESUELTO
 
-**Problema:** No existe el flujo donde un titular revoca un consentimiento previamente otorgado. La Ley 21.719 exige que la revocación sea tan fácil como el otorgamiento y que tenga efecto inmediato.
+**Fix aplicado:** Endpoint `PATCH /api/agreements/{id}/revoke` implementado con invalidación activa de Redis tras commit de Postgres.
 
-**Lo que falta implementar:**
+**Archivos modificados/creados:**
+- `agreement/web/AgreementController.java` — endpoint `PATCH /{id}/revoke`, resuelve IP real desde header `X-Internal-Real-IP` (inyectado por el Orquestador; WAF/NGINX debe stripear el original)
+- `agreement/application/service/AgreementService.java` — método `revoke()`: valida que el agreement sea ACTIVE y pertenezca al `subjectId` del request; marca agreement y purposes como REVOKED; registra en audit log con IP; publica `AgreementRevokedEvent`
+- `agreement/domain/event/AgreementRevokedEvent.java` *(nuevo)* — record con `subjectIdentifier` y `List<UUID> purposeIds`
+- `agreement/application/service/AgreementRevocationCacheListener.java` *(nuevo)* — `@TransactionalEventListener(phase = AFTER_COMMIT)`: borra las keys `consent:{subjectId}:{purposeId}` de Redis **solo después de que Postgres haga commit**. Si Redis falla, la revocación legal ya está persistida — se loguea WARN sin rollback.
 
-```
-Flujo de revocación:
-1. Titular (autenticado con rol TITULAR) solicita revocar → PATCH /api/agreements/{id}/revoke
-2. Backend valida que el acuerdo pertenece al titular autenticado
-3. Marca el acuerdo como revocado:
-   - revokedAt = now()
-   - revokedBy = keycloakId del TITULAR
-   - revocationReason (opcional, libre)
-4. Invalida la key en Redis para que sistemas externos reciban "permitted: false" de inmediato
-5. Dispara ConsentimientoRevocadoEvent → notificación al DPO/responsable del dominio
-6. AuditService registra la revocación con todos los campos de trazabilidad
-```
-
-**Punto crítico con Redis:** la revocación debe invalidar la key `consent:{titularId}:{purposeId}` en Redis **dentro de la misma transacción** (o como compensación si Redis falla), para que el endpoint B2B `/api/consent/check` refleje el cambio de inmediato. Sin esto, la ventana de inconsistencia es el TTL completo (30-60s).
+**Por qué `AFTER_COMMIT` y no dentro de `@Transactional`:**
+Si se borra Redis dentro de la transacción y luego Postgres hace rollback, Redis queda sin la key pero Postgres dice ACTIVE — inconsistencia silenciosa. Con `AFTER_COMMIT`, el evento no se despacha si hay rollback.
 
 ---
 
@@ -199,7 +214,7 @@ Estado actual del diseño vs. lo que se necesita:
 [PgBouncer :5435]                    ✅ implementado en docker-compose
     │
 [PostgreSQL Primary :5433] → [Replica :5434]   ✅ streaming replication implementada
-                                     ⚠️  routing de reads a replica pendiente (Fase 2b)
+                                     ✅ routing de reads a replica (AbstractRoutingDataSource — Fase 2b)
                                      ❌ failover automático (Patroni) pendiente (Fase 3)
     │
   [Redis Master]                     ✅ implementado
@@ -256,16 +271,16 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 - [x] Agregar `X-Request-ID` al audit log y a la entidad `SystemAuditLog`
 - [x] Mover `UserStatusFilter` a consultar Redis en vez de Postgres (cache-aside implementado)
 - [x] Implementar ciclo de captura de consentimiento (`agreement/` — `POST /api/agreements`, ledger SHA-256, reconsent automático)
-- [ ] Implementar ciclo de revocación de consentimiento (`PATCH /api/agreements/{id}/revoke` — flujo en sección 3)
-- [ ] Crear endpoint `GET /api/consent/check` para integración B2B
-- [ ] Implementar `ConsentimientoRevocadoEvent` para invalidación activa de Redis
+- [x] Implementar ciclo de revocación de consentimiento (`PATCH /api/agreements/{id}/revoke` — `AgreementService.revoke()`, audit log, IP real desde Orquestador)
+- [x] Crear endpoint de consulta de consentimiento B2B (`GET /consent/check` en el Orquestador, con caché Redis y JWT externo)
+- [x] Implementar `AgreementRevokedEvent` para invalidación activa de Redis (`AgreementRevocationCacheListener` con `@TransactionalEventListener(phase = AFTER_COMMIT)`)
 - [ ] Migrar gestión de esquema de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)
 - [ ] Correr corrida completa de pruebas de endpoints post todos los fixes
 
 ### Infraestructura
 - [x] Configurar PostgreSQL Streaming Replica (`db-replica` en docker-compose, `docker/postgres-primary/` y `docker/postgres-replica/`)
 - [x] Agregar PgBouncer al Docker Compose (puerto 5435, pool → primary)
-- [ ] Enrutar lecturas Spring Boot a la replica (`AbstractRoutingDataSource`) — Fase 2b
+- [x] Enrutar lecturas Spring Boot a la replica (`AbstractRoutingDataSource`) — Fase 2b
 - [ ] Failover automático con Patroni — Fase 3
 - [x] Agregar Redis al Docker Compose (redis:7-alpine, puerto 6379)
 - [ ] Configurar Redis Sentinel o Cluster (para producción)

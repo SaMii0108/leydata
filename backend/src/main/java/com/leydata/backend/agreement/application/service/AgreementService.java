@@ -1,6 +1,7 @@
 package com.leydata.backend.agreement.application.service;
 
 import com.leydata.backend.agreement.application.dto.*;
+import com.leydata.backend.agreement.domain.event.AgreementRevokedEvent;
 import com.leydata.backend.agreement.domain.exception.AgreementNotFoundException;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementIntegrityLogRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementMetadataRepository;
@@ -18,6 +19,7 @@ import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.template.infrastructure.persistence.TemplatePurposesRepository;
 import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +53,7 @@ public class AgreementService {
     private final AuditService auditService;
     private final SecurityContextHelper securityContextHelper;
     private final jakarta.persistence.EntityManager entityManager;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ── CREACIÓN ─────────────────────────────────────────────────────────────────
 
@@ -60,9 +63,22 @@ public class AgreementService {
         // Se normaliza acá para que el hash calculado en memoria coincida con el que se relee de la BD.
         ipOrigin = normalizeIp(ipOrigin);
 
-        DataSubjects dataSubject = dataSubjectsRepo.findById(req.getDataSubjectId())
-                .orElseThrow(() -> new BusinessValidationException(
-                        "El data subject " + req.getDataSubjectId() + " no existe"));
+        DataSubjects dataSubject;
+        if (req.getDataSubjectId() != null) {
+            dataSubject = dataSubjectsRepo.findById(req.getDataSubjectId())
+                    .orElseThrow(() -> new BusinessValidationException(
+                            "El data subject " + req.getDataSubjectId() + " no existe"));
+        } else if (req.getSubjectIdentifier() != null && !req.getSubjectIdentifier().isBlank()) {
+            dataSubject = dataSubjectsRepo.findByIdentifier(req.getSubjectIdentifier())
+                    .orElseGet(() -> {
+                        DataSubjects s = new DataSubjects();
+                        s.setIdentifier(req.getSubjectIdentifier());
+                        s.setCreatedAt(java.time.LocalDateTime.now());
+                        return dataSubjectsRepo.save(s);
+                    });
+        } else {
+            throw new BusinessValidationException("Se requiere dataSubjectId o subjectIdentifier");
+        }
 
         Templates template = templatesRepo.findById(req.getTemplateId())
                 .orElseThrow(() -> new BusinessValidationException(
@@ -224,6 +240,48 @@ public class AgreementService {
                 .actorId(actorId)
                 .actorRole(actorId != null ? securityContextHelper.getActorRole() : "SYSTEM")
                 .build());
+    }
+
+    // ── REVOCACIÓN EXPLÍCITA (llamada por el Orquestador) ────────────────────────
+
+    @Transactional
+    public AgreementResponse revoke(UUID agreementId, String subjectId, String realIp) {
+        Agreements agreement = findOrThrow(agreementId);
+
+        if (!"ACTIVE".equals(agreement.getStatus())) {
+            throw new IllegalStateException("Solo se puede revocar un agreement en estado ACTIVE");
+        }
+
+        // Validar que el agreement pertenece al subjectId opaco enviado por el Orquestador
+        DataSubjects dataSubject = dataSubjectsRepo.findById(agreement.getDataSubjectId())
+                .orElseThrow(() -> new IllegalStateException("DataSubject no encontrado para este agreement"));
+        if (!dataSubject.getIdentifier().equals(subjectId)) {
+            throw new IllegalStateException("El agreement no pertenece al subjectId indicado");
+        }
+
+        agreement.setStatus("REVOKED");
+        agreementsRepo.save(agreement);
+
+        List<AgreementsPurposes> purposes = agreementsPurposesRepo.findByAgreementId(agreementId);
+        purposes.forEach(ap -> ap.setStatus("REVOKED"));
+        agreementsPurposesRepo.saveAll(purposes);
+
+        String actorId = resolveActorIdOrNull();
+        auditService.log(AuditContext.builder()
+                .tableName("agreements")
+                .recordId(agreementId)
+                .action("REVOCAR_AGREEMENT")
+                .oldData(Map.of("status", "ACTIVE"))
+                .newData(Map.of("status", "REVOKED", "revokedBySubject", subjectId, "ipAddress", realIp != null ? realIp : "unknown"))
+                .actorId(actorId)
+                .actorRole(actorId != null ? securityContextHelper.getActorRole() : "ORCHESTRATOR")
+                .build());
+
+        // Publica el evento — el listener elimina Redis DESPUÉS del commit (AFTER_COMMIT)
+        List<UUID> purposeIds = purposes.stream().map(AgreementsPurposes::getPurposeId).toList();
+        eventPublisher.publishEvent(new AgreementRevokedEvent(dataSubject.getIdentifier(), purposeIds));
+
+        return toResponse(agreement);
     }
 
     // ── CONSULTA ─────────────────────────────────────────────────────────────────

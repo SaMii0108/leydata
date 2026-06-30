@@ -1,0 +1,33 @@
+# Desarrollo local — se aplica automáticamente sobre docker-compose.yml
+# El backend corre desde el IDE; el Orquestador lo alcanza via la red del host.
+# En producción usar: docker-compose -f docker-compose.yml (ignora este archivo)
+#
+# ── INSTRUCCIONES POR PLATAFORMA ──────────────────────────────────────────────
+#
+# Mac / Windows nativo (Docker Desktop):
+#   host.docker.internal resuelve directamente al host → dejar como está abajo.
+#
+# WSL (Docker Desktop en Windows con backend corriendo en Linux):
+#   host.docker.internal apunta a Windows (192.168.65.254), NO a WSL.
+#   Obtener la IP de WSL con: wsl -- ip addr show eth0 | grep 'inet '
+#   Cambiar LEYDATA_BACKEND_URL a: http://<ip-wsl>:8080
+#   Ejemplo: http://172.30.171.177:8080  (cambia con cada reinicio de WSL)
+#
+# Linux nativo (Docker Engine sin Docker Desktop):
+#   Cambiar LEYDATA_BACKEND_URL a: http://172.17.0.1:8080  (IP del gateway docker0)
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  orchestrator:
+    environment:
+      # Cambiar según plataforma (ver instrucciones arriba)
+      LEYDATA_BACKEND_URL: http://host.docker.internal:8080
+      REDIS_HOST: redis
+      # Outbound M2M — cuenta de servicio del Orquestador en el realm leydata
+      KC_TOKEN_URI: http://keycloak:8080/realms/leydata/protocol/openid-connect/token
+      KC_ORCHESTRATOR_CLIENT_ID: leydata-orchestrator
+      KC_ORCHESTRATOR_CLIENT_SECRET: ${KC_ORCHESTRATOR_CLIENT_SECRET:-dev-secret-placeholder}
+      # Inbound — JWKS del segundo realm que simula el IdP externo del cliente
+      EXTERNAL_JWKS_URI: http://keycloak:8080/realms/empresa-cliente/protocol/openid-connect/certs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

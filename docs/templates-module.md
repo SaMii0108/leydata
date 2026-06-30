@@ -102,7 +102,6 @@ template/
       TemplateStatus.java
     exception/
       TemplateNotFoundException.java
-      TemplateBusinessException.java
   infrastructure/
     persistence/
       TemplatesRepository.java

@@ -53,6 +53,7 @@ services:
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 20
+      AUTH_TYPE: scram-sha-256
     ports:
       - "5435:5432"
     depends_on:
@@ -88,10 +89,31 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HTTP_PORT: "8080"
+      KC_HOSTNAME_URL: http://localhost:8180
+      KC_HOSTNAME_ADMIN_URL: http://localhost:8180
     ports:
       - "8180:8080"
     depends_on:
       - keycloak-db
+    networks:
+      - leydata-consent-network
+
+  # Orquestador — único punto de entrada externo (API Gateway / BFF)
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: leydata-orchestrator
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      LEYDATA_BACKEND_URL: http://backend:8080
+      REDIS_HOST: redis
+      KC_ISSUER_URI: http://keycloak:8080/realms/leydata
+    depends_on:
+      - redis
+      - keycloak
     networks:
       - leydata-consent-network
 

@@ -13,8 +13,12 @@ import java.util.UUID;
 @Setter
 public class CreateAgreementRequest {
 
-    @NotNull(message = "El dataSubjectId es obligatorio")
+    // UUID interno del titular (uso directo por la app web)
     private UUID dataSubjectId;
+
+    // Identificador opaco del titular (uso B2B vía Orquestador, ej: "RUT:12345678-9")
+    // Si dataSubjectId es null, se hace findOrCreate por este campo
+    private String subjectIdentifier;
 
     @NotNull(message = "El templateId es obligatorio")
     private UUID templateId;

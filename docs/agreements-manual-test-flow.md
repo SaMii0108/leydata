@@ -7,7 +7,7 @@ Este documento registra la secuencia exacta de requests usada para probar el mó
 - Backend corriendo en `http://localhost:8080`.
 - Keycloak corriendo en `http://localhost:8180`, realm `leydata` configurado (ver `scripts/setup-keycloak.ps1`).
 - Usuarios de prueba ya creados: `admin@leydata.cl` / `Admin1234!` (rol ADMIN), `dpo@leydata.cl` / `Test1234!` (rol DPO).
-- Endpoint temporal `POST /api/test/data-subjects` disponible (`TestDataSubjectController`, solo para entorno local — **eliminar antes de mergear a main**). Existe porque `DATA_SUBJECTS` es responsabilidad del orquestador en producción y no hay otra forma de crear filas de prueba.
+- El orquestador ya está implementado. `DATA_SUBJECTS` se crean automáticamente vía `findOrCreate` en `AgreementService` cuando se envía `subjectIdentifier` en el body. No se necesita ningún endpoint de prueba.
 
 ## 1. Obtener token (Keycloak)
 
@@ -25,18 +25,9 @@ El token dura 5 minutos (`expires_in: 300`). Para los pasos que requieren rol DP
 
 Todas las requests siguientes usan `Authorization: Bearer {token}`.
 
-## 2. Crear Data Subject de prueba
+## 2. Nota sobre Data Subjects
 
-```
-POST http://localhost:8080/api/test/data-subjects
-Content-Type: application/json
-
-{
-  "identifier": "test-titular-001"
-}
-```
-
-**Respuesta:** `{ "id": "<uuid>", "identifier": "test-titular-001" }` → guardar `id` como `dataSubjectId`.
+No es necesario crear el `DataSubject` manualmente. Al enviar `"subjectIdentifier"` en el body del agreement (paso 12), `AgreementService` hace un `findOrCreate` automático: si el identificador ya existe lo reutiliza, si no lo crea. El endpoint `POST /api/test/data-subjects` fue eliminado.
 
 ## 3. Crear Dominio (rol ADMIN)
 
@@ -163,7 +154,7 @@ POST http://localhost:8080/api/agreements
 Content-Type: application/json
 
 {
-  "dataSubjectId": "<paso 2>",
+  "subjectIdentifier": "test-titular-001",
   "templateId": "<paso 5>",
   "documentId": "<paso 9>",
   "purposes": [

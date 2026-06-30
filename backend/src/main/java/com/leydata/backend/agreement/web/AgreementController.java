@@ -79,4 +79,25 @@ public class AgreementController {
     public List<AgreementIntegrityLogResponse> listFailedVerifications() {
         return service.listFailedVerifications();
     }
+
+    @PatchMapping("/{id}/revoke")
+    @Operation(summary = "Revocar un agreement — cambia estado a REVOKED y sus purposes asociados",
+               description = "Llamado por el Orquestador. La IP real del titular viene en X-Internal-Real-IP si la petición viene de la red interna.")
+    public AgreementResponse revoke(
+            @PathVariable UUID id,
+            @RequestBody RevokeAgreementRequest req,
+            HttpServletRequest request) {
+        String realIp = resolveRealIp(request);
+        return service.revoke(id, req.subjectId(), realIp);
+    }
+
+    private String resolveRealIp(HttpServletRequest request) {
+        String internalIp = request.getHeader("X-Internal-Real-IP");
+        if (internalIp != null && !internalIp.isBlank()) {
+            return internalIp;
+        }
+        return request.getRemoteAddr();
+    }
+
+    public record RevokeAgreementRequest(String subjectId) {}
 }

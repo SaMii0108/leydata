@@ -1755,7 +1755,155 @@ Lista todas las verificaciones fallidas (`isValid = false`) de todos los agreeme
 
 ---
 
-## 14. Referencia rápida de códigos de error
+### `PATCH /api/agreements/{id}/revoke`
+
+Revoca manualmente un agreement activo. Cambia su estado a `REVOKED` y el de todas sus `AgreementsPurposes` a `REVOKED`.
+
+**Caso positivo**
+```json
+// Request
+PATCH /api/agreements/uuid-agreement/revoke
+
+{
+  "subjectId": "uuid-titular"
+}
+
+// Response 200
+{
+  "id": "uuid-agreement",
+  "dataSubjectId": "uuid-titular",
+  "status": "REVOKED",
+  "hashSha256": "a3f9b2c1...",
+  "purposes": [
+    { "purposeId": "uuid-newsletter", "accepted": true, "status": "REVOKED" },
+    { "purposeId": "uuid-publicidad", "accepted": false, "status": "REVOKED" }
+  ]
+}
+```
+
+**Efectos secundarios tras el commit:**
+- El evento `AgreementRevokedEvent` dispara `AgreementRevocationCacheListener` (`@TransactionalEventListener(AFTER_COMMIT)`)
+- El listener elimina las claves `consent:{subjectId}:{purposeId}` del Redis del Orquestador
+- Garantía: la caché nunca se invalida antes de que el cambio en Postgres sea definitivo (sin split-brain)
+
+**Caso negativo — agreement ya revocado**
+```json
+// Response 409
+{ "status": "CONFLICT", "code": 409, "message": "El agreement ya está en estado REVOKED" }
+```
+
+**Caso negativo — agreement no encontrado**
+```json
+// Response 404
+{ "status": "NOT_FOUND", "code": 404, "message": "Agreement no encontrado" }
+```
+
+> **Acceso:** cualquier usuario autenticado. En llamadas M2M desde el Orquestador, el `subjectId` del body se valida contra el `dataSubjectId` del agreement.
+
+---
+
+## 14. Orquestador B2B (puerto 8081)
+
+### ¿Qué hace el Orquestador?
+
+El **Orquestador** es la capa de acceso B2B de Ley Data. Los sistemas cliente externos (CRM, ERP, plataformas de marketing) se conectan al Orquestador en lugar de conectarse directamente al backend. El Orquestador:
+
+- Valida el JWT del sistema externo contra el JWKS del realm `empresa-cliente`
+- Consulta y actualiza Redis como caché de consentimiento (clave `consent:{subjectId}:{purposeId}`, TTL 300 s)
+- Propaga operaciones al backend con credenciales M2M (`client_credentials` desde el realm `leydata`)
+
+El Orquestador corre en el puerto **8081**. El backend (`8080`) no tiene exposición directa al exterior.
+
+> **Prerrequisito:** ejecutar `bash scripts/setup-empresa-cliente-realm.sh` para crear el realm `empresa-cliente` con el cliente `crm-sistema` y el usuario de prueba `operador@empresa.cl / operador123`.
+
+---
+
+### `GET /consent/check`
+
+Verifica si un titular (identificado con `subjectId` opaco) tiene consentimiento activo para una finalidad.
+
+```json
+// Request
+GET /consent/check?subjectId=abc123&purposeId=uuid-finalidad
+Authorization: Bearer <external-jwt>
+
+// Response 200
+{
+  "subjectId": "abc123",
+  "purposeId": "uuid-finalidad",
+  "status": "ALLOWED",
+  "legalBasisCode": "ART6_1_A",
+  "validUntil": "2027-06-28T10:00:00"
+}
+```
+
+**Valores de `status`:**
+
+| Valor | Significado |
+|---|---|
+| `ALLOWED` | Consentimiento activo y válido |
+| `REVOKED` | El titular revocó el consentimiento |
+| `DENIED` | El agreement expiró |
+| `PENDING` | Nunca se ha registrado consentimiento |
+
+**Flujo de caché:**
+1. Busca clave `consent:{subjectId}:{purposeId}` en Redis
+2. Si hay hit (JSON válido): deserializa y devuelve sin consultar LeyData
+3. Si hay miss o formato antiguo inválido: consulta `GET /api/agreements/active` en LeyData, construye la respuesta enriquecida y pre-calienta Redis
+
+---
+
+### `POST /consent/capture`
+
+Registra el consentimiento de un titular a través del Orquestador.
+
+```json
+// Request
+{
+  "subjectId": "abc123",
+  "templateId": "uuid-template-activo",
+  "documentId": "uuid-documento-publicado",
+  "purposes": [
+    { "purposeId": "uuid-finalidad", "accepted": true }
+  ]
+}
+
+// Response 201
+{
+  "subjectId": "abc123",
+  "agreementId": "uuid-agreement",
+  "status": "ALLOWED"
+}
+```
+
+**Post-condición:** Redis pre-calentado con `ALLOWED` por cada purpose aceptada. Los campos `legalBasisCode` y `validUntil` se toman del acuerdo real devuelto por LeyData (no se inventan).
+
+---
+
+### `POST /consent/revoke`
+
+Revoca el consentimiento de un titular a través del Orquestador.
+
+```json
+// Request
+{
+  "subjectId": "abc123",
+  "agreementId": "uuid-agreement"
+}
+
+// Response 200
+{
+  "subjectId": "abc123",
+  "agreementId": "uuid-agreement",
+  "status": "REVOKED"
+}
+```
+
+**Post-condición:** Redis actualizado con `REVOKED` por cada purpose del acuerdo. El Orquestador escribe (no borra) para que el dato `REVOKED` esté disponible inmediatamente mientras el `AgreementRevocationCacheListener` del backend completa el ciclo `AFTER_COMMIT`.
+
+---
+
+## 15. Referencia rápida de códigos de error
 
 | Código HTTP | Status JSON | Cuándo ocurre |
 |-------------|-------------|---------------|

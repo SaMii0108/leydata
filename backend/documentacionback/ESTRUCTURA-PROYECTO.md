@@ -16,7 +16,11 @@ backend/src/main/java/com/leydata/backend/
 ├── config/                              ← configuración transversal
 │   ├── GlobalExceptionHandler.java
 │   ├── OpenApiConfig.java
-│   └── SecurityConfig.java
+│   ├── SecurityConfig.java
+│   ├── DataSourceConfig.java            ← AbstractRoutingDataSource (write → PgBouncer :5435, read → replica :5434)
+│   ├── DataSourceType.java              ← enum WRITE | READ
+│   ├── ReadWriteRoutingDataSource.java  ← determineCurrentLookupKey() via TransactionSynchronizationManager
+│   └── README.md                        ← explica enrutamiento, LazyConnectionDataSourceProxy, @Transactional(readOnly)
 │
 ├── shared/                              ← componentes sin módulo dueño
 │   ├── SecurityContextHelper.java
@@ -60,8 +64,7 @@ backend/src/main/java/com/leydata/backend/
 │   └── UserStatusFilter.java
 │
 ├── seeder/                              ← inicialización de datos al arrancar
-│   ├── CatalogSeeder.java               ← catálogos fijos (bases de licitud, categorías de datos)
-│   └── TestDataSeeder.java              ← datos de prueba (solo perfil spring: test-data)
+│   └── CatalogSeeder.java               ← catálogos fijos (bases de licitud, categorías de datos)
 │
 ├── user/                                ← módulo: gestión de usuarios
 │   ├── domain/
@@ -256,6 +259,10 @@ backend/src/main/java/com/leydata/backend/
 │
 ├── agreement/                           ← módulo: acuerdos de consentimiento (ledger SHA-256 encadenado)
 │   ├── domain/
+│   │   ├── event/
+│   │   │   ├── AgreementRevokedEvent.java            ← Spring event publicado al revocar
+│   │   │   ├── AgreementIntegrityFailedEvent.java
+│   │   │   └── README.md                             ← explica AFTER_COMMIT vs. dentro de @Transactional
 │   │   └── exception/
 │   │       └── AgreementNotFoundException.java
 │   ├── application/
@@ -269,7 +276,8 @@ backend/src/main/java/com/leydata/backend/
 │   │   │   ├── AgreementIntegrityLogResponse.java
 │   │   │   └── VerifyIntegrityRequest.java
 │   │   └── service/
-│   │       └── AgreementService.java
+│   │       ├── AgreementService.java
+│   │       └── AgreementRevocationCacheListener.java ← @TransactionalEventListener(AFTER_COMMIT): invalida Redis
 │   ├── infrastructure/
 │   │   └── persistence/
 │   │       ├── AgreementsRepository.java
@@ -293,6 +301,33 @@ backend/src/main/java/com/leydata/backend/
     └── infrastructure/
         └── persistence/
             └── UserStatusRepository.java
+```
+
+---
+
+## Árbol del Orquestador
+
+```
+orchestrator/src/main/java/com/leydata/orchestrator/
+│
+├── OrchestratorApplication.java         ← @EnableConfigurationProperties(ConsentCacheProperties)
+│
+├── config/
+│   ├── SecurityConfig.java              ← ReactiveSecurityFilterChain, NimbusReactiveJwtDecoder (JWKS externo)
+│   ├── WebClientConfig.java             ← WebClient con OAuth2 M2M (client_credentials → leydata realm)
+│   ├── RedisConfig.java                 ← ReactiveStringRedisTemplate
+│   └── ConsentCacheProperties.java      ← @ConfigurationProperties("leydata.consent"): cacheTtlSeconds, cacheSoftTtlSeconds
+│
+└── consent/
+    ├── ConsentController.java            ← GET /consent/check, POST /consent/capture, POST /consent/revoke
+    ├── ConsentService.java               ← lógica de caché Redis + proxying a LeyData
+    └── dto/
+        ├── ConsentCheckResponse.java     ← { subjectId, purposeId, status, legalBasisCode, validUntil }
+        ├── CaptureConsentRequest.java
+        ├── RevokeConsentRequest.java
+        ├── ConsentStatusResponse.java    ← { subjectId, agreementId, status }
+        ├── AgreementBackendResponse.java ← DTO de la respuesta de LeyData (id, status, expiration, purposes)
+        └── AgreementPurposeBackendResponse.java ← { purposeId, accepted, status, legalBasisCode, expiresAt }
 ```
 
 ---
@@ -406,10 +441,9 @@ Repositorios compartidos sin módulo dueño definido: `Agreements`, `DataSubject
 
 | Archivo | Qué hace |
 |---|---|
-| `CatalogSeeder.java` | Inserta los registros del catálogo de bases de licitud de la Ley 21.719 si la tabla está vacía. |
-| `TestDataSeeder.java` | Crea dominios y usuarios de prueba con `keycloak_id` ficticios. **Solo se activa con el perfil Spring `test-data`.** No debe ejecutarse en producción. |
+| `CatalogSeeder.java` | Inserta los registros del catálogo de bases de licitud de la Ley 21.719 si la tabla está vacía. Idempotente — no inserta duplicados. |
 
-No hay `DataSeeder`. En el modelo Keycloak-first no se siembran roles en la BD local (Keycloak los gestiona) ni se crean usuarios administradores localmente (el admin se crea en Keycloak con `scripts/setup-keycloak.sh`).
+En el modelo Keycloak-first no se siembran roles en la BD local (Keycloak los gestiona) ni se crean usuarios administradores localmente (el admin se crea en Keycloak con `scripts/setup-keycloak.sh`).
 
 ---
 
@@ -431,6 +465,14 @@ No hay `DataSeeder`. En el modelo Keycloak-first no se siembran roles en la BD l
 | Agreements (consentimiento) | `agreement/` | `/api/agreements/**` | Cualquier autenticado |
 | Vínculo usuario-dominio | `userdomain/` | — (uso interno) | Keycloak-first: vincula `keycloak_id` con dominios |
 | Estado de bloqueo | `userstatus/` | — (uso interno) | Keycloak-first: almacena flag `blocked` por `keycloak_id` |
+
+**Módulos del Orquestador** (`orchestrator/` — puerto 8081):
+
+| Módulo | Endpoints | Acceso |
+|---|---|---|
+| Verificación B2B | `GET /consent/check` | JWT del sistema externo (realm `empresa-cliente`) |
+| Captura B2B | `POST /consent/capture` | JWT del sistema externo |
+| Revocación B2B | `POST /consent/revoke` | JWT del sistema externo |
 
 ---
 
