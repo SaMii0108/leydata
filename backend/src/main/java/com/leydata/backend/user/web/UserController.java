@@ -1,5 +1,6 @@
 package com.leydata.backend.user.web;
 
+import com.leydata.backend.user.application.dto.ChangePasswordRequest;
 import com.leydata.backend.user.application.dto.CreateUserRequest;
 import com.leydata.backend.user.application.dto.UpdateUserByAdminRequest;
 import com.leydata.backend.user.application.dto.UserResponse;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -118,6 +120,25 @@ public class UserController {
                 "status", "success",
                 "message", "Usuario actualizado correctamente",
                 "user", updated);
+    }
+
+    @PreAuthorize("#userId == authentication.token.subject")
+    @PatchMapping("/{userId}/password")
+    @Operation(summary = "Cambiar contraseña propia", description = "Permite a un usuario cambiar su propia contraseña en Keycloak.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Contraseña actualizada"),
+            @ApiResponse(responseCode = "400", description = "Contraseña inválida"),
+            @ApiResponse(responseCode = "403", description = "Solo puedes cambiar tu propia contraseña")
+    })
+    public ResponseEntity<Map<String, Object>> changeOwnPassword(
+            @PathVariable String userId,
+            @RequestBody ChangePasswordRequest request) {
+        try {
+            userService.changeOwnPassword(userId, request.getNewPassword());
+            return ResponseEntity.ok(Map.of("status", "success", "message", "Contraseña actualizada correctamente"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", e.getMessage()));
+        }
     }
 
     @PreAuthorize("hasRole('ADMIN')")

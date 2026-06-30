@@ -68,6 +68,19 @@
 }
 
 .input:focus { border-color: var(--color-primary); }
+.input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.inputReadonly {
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+.inputReadonly:focus { border-color: var(--color-border); }
+
+.fieldHint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
 
 .roleDisplay {
   display: flex;

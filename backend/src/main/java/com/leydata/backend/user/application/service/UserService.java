@@ -214,6 +214,13 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
+    public void changeOwnPassword(String keycloakId, String newPassword) {
+        if (newPassword == null || newPassword.isBlank() || newPassword.length() < 8) {
+            throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres.");
+        }
+        keycloakAdminService.resetPassword(keycloakId, newPassword, false);
+    }
+
     public UserResponse getUserByKeycloakId(String keycloakId) {
         Map<String, Object> kcUser = keycloakAdminService.getUser(keycloakId);
         List<String> roles = keycloakAdminService.getUserRoles(keycloakId);

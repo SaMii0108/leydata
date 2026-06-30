@@ -1,24 +1,35 @@
 import { useAuth } from '../features/auth/AuthContext';
 import { updateMockUser } from '../features/auth/mockUsers';
+import { changeOwnPassword, ApiError } from '../api/usersApi';
 import PerfilForm from '../components/common/PerfilForm';
 import styles from './PerfilPage.module.css';
 
 const PerfilPage = () => {
-  const { user, login } = useAuth();
+  const { user, accessToken, login } = useAuth();
   if (!user) return null;
 
-  const handleSaveProfile = (name: string, email: string) => {
-    updateMockUser(user.id, { name, email });
-    login({ ...user, name, email });
+  const isKeycloakUser = user.role !== 'TITULAR';
+
+  const handleSaveProfile = (name: string) => {
+    if (!isKeycloakUser) {
+      updateMockUser(user.id, { name, email: user.email });
+    }
+    login({ ...user, name });
   };
 
-  const handleSavePassword = (_current: string, next: string): string | null => {
-    // Solo aplica para titulares (auth mock). Usuarios Keycloak gestionan su contraseña externamente.
-    if (user.role === 'TITULAR') {
-      updateMockUser(user.id, { password: next });
-      login({ ...user, password: next });
+  const handleSavePassword = async (newPassword: string): Promise<string | null> => {
+    if (isKeycloakUser) {
+      try {
+        await changeOwnPassword(user.id, newPassword, accessToken);
+        return null;
+      } catch (err) {
+        return err instanceof ApiError ? err.message : 'Error al actualizar la contraseña';
+      }
+    } else {
+      updateMockUser(user.id, { password: newPassword });
+      login({ ...user, password: newPassword });
+      return null;
     }
-    return null;
   };
 
   return (
@@ -30,8 +41,7 @@ const PerfilPage = () => {
 
       <PerfilForm
         initialName={user.name}
-        initialEmail={user.email}
-        currentPassword={user.password}
+        email={user.email}
         role={user.role}
         area={user.area}
         onSaveProfile={handleSaveProfile}

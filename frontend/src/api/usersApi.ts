@@ -91,6 +91,18 @@ export const updateUser = async (
   return data.user;
 };
 
+export const changeOwnPassword = async (
+  id: string,
+  newPassword: string,
+  token?: string | null,
+): Promise<void> => {
+  await request<{ status: string; message: string }>(
+    `/api/users/${id}/password`,
+    { method: 'PATCH', body: JSON.stringify({ newPassword }) },
+    token,
+  );
+};
+
 export const blockUser = async (id: string, token?: string | null): Promise<UserSummaryDto> => {
   const data = await request<{ status: string; message: string; user: UserSummaryDto }>(
     `/api/users/${id}/block`,

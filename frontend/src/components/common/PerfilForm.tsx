@@ -5,57 +5,51 @@ import styles from './PerfilForm.module.css';
 
 interface PerfilFormProps {
   initialName: string;
-  initialEmail: string;
-  currentPassword?: string;
+  email: string;
   role: string;
   area: string | null;
-  onSaveProfile: (name: string, email: string) => void;
-  onSavePassword: (current: string, next: string) => string | null;
+  onSaveProfile: (name: string) => void;
+  onSavePassword: (newPassword: string) => Promise<string | null>;
 }
 
 const PerfilForm = ({
   initialName,
-  initialEmail,
-  currentPassword,
+  email,
   role,
   area,
   onSaveProfile,
   onSavePassword,
 }: PerfilFormProps) => {
-  const [name, setName]   = useState(initialName);
-  const [email, setEmail] = useState(initialEmail);
+  const [name, setName] = useState(initialName);
 
-  const [currentPwd, setCurrentPwd] = useState('');
   const [newPwd, setNewPwd]         = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
 
   const [profileSaved, setProfileSaved] = useState(false);
   const [pwdSaved, setPwdSaved]         = useState(false);
   const [pwdError, setPwdError]         = useState('');
+  const [pwdLoading, setPwdLoading]     = useState(false);
 
   const handleSaveProfile = () => {
-    onSaveProfile(name, email);
+    onSaveProfile(name);
     setProfileSaved(true);
     setTimeout(() => setProfileSaved(false), 2500);
   };
 
-  const handleSavePwd = () => {
+  const handleSavePwd = async () => {
     setPwdError('');
-    if (currentPwd !== currentPassword) {
-      setPwdError('La contraseña actual no es correcta.');
-      return;
-    }
-    if (newPwd.length < 6) {
-      setPwdError('La nueva contraseña debe tener al menos 6 caracteres.');
+    if (newPwd.length < 8) {
+      setPwdError('La nueva contraseña debe tener al menos 8 caracteres.');
       return;
     }
     if (newPwd !== confirmPwd) {
       setPwdError('Las contraseñas no coinciden.');
       return;
     }
-    const result = onSavePassword(currentPwd, newPwd);
+    setPwdLoading(true);
+    const result = await onSavePassword(newPwd);
+    setPwdLoading(false);
     if (result) { setPwdError(result); return; }
-    setCurrentPwd('');
     setNewPwd('');
     setConfirmPwd('');
     setPwdSaved(true);
@@ -87,10 +81,12 @@ const PerfilForm = ({
             <input
               id="pf-email"
               type="email"
-              className={styles.input}
+              className={[styles.input, styles.inputReadonly].join(' ')}
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              readOnly
+              tabIndex={-1}
             />
+            <span className={styles.fieldHint}>El correo no puede modificarse desde aquí.</span>
           </div>
           <div className={styles.fieldGroup}>
             <label className={styles.label}>Rol</label>
@@ -108,7 +104,7 @@ const PerfilForm = ({
             variant="primary"
             size="sm"
             onClick={handleSaveProfile}
-            disabled={!name.trim() || !email.trim()}
+            disabled={!name.trim()}
           >
             Guardar cambios
           </Button>
@@ -122,62 +118,44 @@ const PerfilForm = ({
           {pwdSaved && <span className={styles.savedMsg}>✓ Contraseña actualizada</span>}
         </div>
 
-        {currentPassword === undefined ? (
-          <p className={styles.externalAuthMsg}>
-            Tu contraseña es gestionada por el proveedor de identidad corporativo.
-            Para cambiarla, contacta al administrador del sistema.
-          </p>
-        ) : (
-          <>
-            <div className={styles.fields}>
-              <div className={styles.fieldGroup}>
-                <label className={styles.label} htmlFor="pf-current">Contraseña actual</label>
-                <input
-                  id="pf-current"
-                  type="password"
-                  className={styles.input}
-                  value={currentPwd}
-                  onChange={(e) => setCurrentPwd(e.target.value)}
-                  placeholder="••••••••"
-                />
-              </div>
-              <div className={styles.fieldGroup}>
-                <label className={styles.label} htmlFor="pf-new">Nueva contraseña</label>
-                <input
-                  id="pf-new"
-                  type="password"
-                  className={styles.input}
-                  value={newPwd}
-                  onChange={(e) => setNewPwd(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
-                />
-              </div>
-              <div className={styles.fieldGroup}>
-                <label className={styles.label} htmlFor="pf-confirm">Confirmar contraseña</label>
-                <input
-                  id="pf-confirm"
-                  type="password"
-                  className={styles.input}
-                  value={confirmPwd}
-                  onChange={(e) => setConfirmPwd(e.target.value)}
-                  placeholder="Repite la nueva contraseña"
-                />
-              </div>
-              {pwdError && <p className={styles.errorMsg}>{pwdError}</p>}
-            </div>
+        <div className={styles.fields}>
+          <div className={styles.fieldGroup}>
+            <label className={styles.label} htmlFor="pf-new">Nueva contraseña</label>
+            <input
+              id="pf-new"
+              type="password"
+              className={styles.input}
+              value={newPwd}
+              onChange={(e) => setNewPwd(e.target.value)}
+              placeholder="Mínimo 8 caracteres"
+              disabled={pwdLoading}
+            />
+          </div>
+          <div className={styles.fieldGroup}>
+            <label className={styles.label} htmlFor="pf-confirm">Confirmar contraseña</label>
+            <input
+              id="pf-confirm"
+              type="password"
+              className={styles.input}
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              placeholder="Repite la nueva contraseña"
+              disabled={pwdLoading}
+            />
+          </div>
+          {pwdError && <p className={styles.errorMsg}>{pwdError}</p>}
+        </div>
 
-            <div className={styles.cardFooter}>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSavePwd}
-                disabled={!currentPwd || !newPwd || !confirmPwd}
-              >
-                Actualizar contraseña
-              </Button>
-            </div>
-          </>
-        )}
+        <div className={styles.cardFooter}>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSavePwd}
+            disabled={!newPwd || !confirmPwd || pwdLoading}
+          >
+            {pwdLoading ? 'Actualizando…' : 'Actualizar contraseña'}
+          </Button>
+        </div>
       </section>
     </div>
   );
