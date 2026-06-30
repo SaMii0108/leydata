@@ -1,22 +1,66 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import ConsentPreview from '../components/common/ConsentPreview';
-import type { TemplateConfig } from '../components/common/ConsentPreview';
-import { getTemplate } from '../utils/mockData';
+import { useAuth } from '../features/auth/AuthContext';
+import {
+  getTemplate,
+  getTemplatePurposes,
+  ApiError,
+  type TemplateResponse,
+  type TemplatePurposeResponse,
+} from '../api/templatesApi';
 import styles from './TemplatePreviewPage.module.css';
+
+const STATUS_LABEL: Record<string, string> = {
+  DRAFT:    'Borrador',
+  APPROVED: 'Aprobada',
+  ACTIVE:   'Activa',
+};
 
 const TemplatePreviewPage = () => {
   const { id } = useParams<{ id: string }>();
+  const { accessToken } = useAuth();
   const navigate = useNavigate();
-  const tpl = id ? getTemplate(id) : undefined;
-  const [result, setResult] = useState<'accepted' | 'rejected' | null>(null);
-  const [checkedIds, setCheckedIds] = useState<string[]>([]);
 
-  if (!tpl) {
+  const [template, setTemplate] = useState<TemplateResponse | null>(null);
+  const [purposes, setPurposes] = useState<TemplatePurposeResponse[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [tpl, purps] = await Promise.all([
+          getTemplate(id, accessToken),
+          getTemplatePurposes(id, accessToken),
+        ]);
+        if (cancelled) return;
+        setTemplate(tpl);
+        setPurposes(purps);
+      } catch (err) {
+        if (!cancelled)
+          setError(err instanceof ApiError ? err.message : 'Error al cargar la plantilla.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [id, accessToken]);
+
+  if (loading) {
+    return <div className={styles.wrapper}><p className={styles.stateMsg}>Cargando vista previa…</p></div>;
+  }
+
+  if (error || !template) {
     return (
       <div className={styles.wrapper}>
         <div className={styles.notFound}>
-          <p>Plantilla no encontrada.</p>
+          <p>{error ?? 'Plantilla no encontrada.'}</p>
           <button className={styles.backLink} onClick={() => navigate('/plantillas')}>
             Volver a Plantillas
           </button>
@@ -25,91 +69,93 @@ const TemplatePreviewPage = () => {
     );
   }
 
-  const config: TemplateConfig = {
-    logo: '',
-    primaryColor: tpl.primaryColor,
-    titleColor: '#111827',
-    subtitleColor: '#6b7280',
-    buttonLabel: tpl.buttonLabel,
-    buttonSize: 'md',
-    buttonRadius: 'sm',
-    domain: tpl.dominio,
-    purpose: tpl.descripcion,
-    requiredFields: [],
-  };
-
-  const handleAccept = (ids: string[]) => {
-    setCheckedIds(ids);
-    setResult('accepted');
-  };
-
-  const handleReject = () => setResult('rejected');
-  const handleReset  = () => { setResult(null); setCheckedIds([]); };
+  const sorted          = [...purposes].sort((a, b) => a.orderPosition - b.orderPosition);
+  const visiblePurposes = sorted.filter((p) =>  p.isVisible);
+  const hiddenPurposes  = sorted.filter((p) => !p.isVisible);
 
   return (
     <div className={styles.wrapper}>
       {/* Barra superior */}
       <div className={styles.topBar}>
-        <button className={styles.backLink} onClick={() => navigate(`/plantillas`)}>
+        <button className={styles.backLink} onClick={() => navigate('/plantillas')}>
           ← Volver a Plantillas
         </button>
         <div className={styles.topMeta}>
           <span className={styles.previewLabel}>Vista previa</span>
-          <span className={styles.templateName}>{tpl.nombre}</span>
-          <span className={styles.versionTag}>v{tpl.version}</span>
+          <span className={styles.templateName}>{template.name}</span>
+          <span className={styles.versionTag}>v{template.version}</span>
         </div>
         <button
           className={styles.editBtn}
-          onClick={() => navigate(`/plantillas/${tpl.id}/editar`)}
+          onClick={() => navigate(`/plantillas/${template.id}/editar`)}
         >
           Editar plantilla
         </button>
       </div>
 
-      {/* Contenido centrado */}
+      {/* Contenido */}
       <div className={styles.content}>
-        {result ? (
-          /* Resultado de la interacción */
-          <div className={[styles.resultCard, result === 'accepted' ? styles.accepted : styles.rejected].join(' ')}>
-            <div className={styles.resultIcon}>
-              {result === 'accepted' ? '✓' : '✕'}
-            </div>
-            <h3 className={styles.resultTitle}>
-              {result === 'accepted' ? 'Consentimiento registrado' : 'Consentimiento rechazado'}
-            </h3>
-            {result === 'accepted' && checkedIds.length > 0 && (
-              <div className={styles.checkedList}>
-                <p className={styles.checkedLabel}>Datos autorizados:</p>
-                {tpl.dataItems
-                  .filter((d) => checkedIds.includes(d.id))
-                  .map((d) => <span key={d.id} className={styles.checkedItem}>✓ {d.nombre}</span>)}
-              </div>
-            )}
-            <p className={styles.resultNote}>
-              {result === 'accepted'
-                ? 'En el sistema real, este consentimiento quedaría registrado con timestamp, IP y hash de integridad.'
-                : 'El titular ha rechazado el tratamiento de sus datos.'}
-            </p>
-            <button className={styles.resetBtn} onClick={handleReset}>
-              Volver a probar
-            </button>
-          </div>
-        ) : (
-          <div className={styles.widgetWrap}>
-            <ConsentPreview
-              config={config}
-              dataItems={tpl.dataItems}
-              templateName={tpl.nombre}
-              interactive
-              showLabel={false}
-              onAccept={handleAccept}
-              onReject={handleReject}
-            />
-            <p className={styles.demoNote}>
-              Vista previa interactiva — los botones funcionan para demostración
-            </p>
+        {/* Banner de estado (solo si no está activa) */}
+        {template.status !== 'ACTIVE' && (
+          <div className={[styles.statusBanner, styles[`banner_${template.status.toLowerCase()}`]].join(' ')}>
+            Esta plantilla está en estado <strong>{STATUS_LABEL[template.status]}</strong>.
+            {template.status === 'DRAFT'    && ' Debe ser aprobada y activada antes de estar disponible para los titulares.'}
+            {template.status === 'APPROVED' && ' Debe ser activada para estar disponible para los titulares.'}
           </div>
         )}
+
+        {/* Tarjeta de vista previa */}
+        <div className={styles.previewCard}>
+          {/* Encabezado del formulario de consentimiento */}
+          <div className={styles.previewHeader}>
+            <h2 className={styles.previewTitle}>
+              {template.title || template.name}
+            </h2>
+            {template.description && (
+              <p className={styles.previewDesc}>{template.description}</p>
+            )}
+          </div>
+
+          {/* Finalidades visibles */}
+          <div className={styles.purposeSection}>
+            <p className={styles.purposeSectionTitle}>Finalidades de tratamiento de datos</p>
+            {visiblePurposes.length === 0 ? (
+              <p className={styles.emptyPurposes}>
+                Esta plantilla no tiene finalidades visibles asociadas.
+                {template.status === 'DRAFT' && ' Agrégalas desde "Editar plantilla" antes de aprobarla.'}
+              </p>
+            ) : (
+              <ul className={styles.purposeList}>
+                {visiblePurposes.map((p) => (
+                  <li key={p.purposeId} className={styles.purposeItem}>
+                    <span className={styles.checkbox} aria-hidden="true">☐</span>
+                    <span className={styles.purposeName}>{p.purposeName}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Finalidades ocultas — solo informativo para el DPO */}
+          {hiddenPurposes.length > 0 && (
+            <div className={styles.hiddenSection}>
+              <p className={styles.hiddenTitle}>
+                No visible para el titular ({hiddenPurposes.length} finalidad{hiddenPurposes.length !== 1 ? 'es' : ''} oculta{hiddenPurposes.length !== 1 ? 's' : ''})
+              </p>
+              <ul className={styles.hiddenList}>
+                {hiddenPurposes.map((p) => (
+                  <li key={p.purposeId} className={styles.hiddenItem}>{p.purposeName}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <p className={styles.previewNote}>
+          Vista previa basada en datos reales del backend
+          {' · '}
+          Los elementos de personalización visual se configurarán en versiones futuras
+        </p>
       </div>
     </div>
   );

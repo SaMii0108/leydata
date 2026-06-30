@@ -15,6 +15,7 @@ import DomainsPage from './pages/DomainsPage';
 import AuditTrailPage from './pages/AuditTrailPage';
 import TemplatesPage from './pages/TemplatesPage';
 import CreateTemplatePage from './pages/CreateTemplatePage';
+import EditTemplatePage from './pages/EditTemplatePage';
 import TemplateVersionsPage from './pages/TemplateVersionsPage';
 import TemplatePreviewPage from './pages/TemplatePreviewPage';
 import FinalidadesPage from './pages/FinalidadesPage';
@@ -130,7 +131,7 @@ const App = () => (
             } />
             <Route path="plantillas/:id/editar" element={
               <ProtectedRoute roles={['DPO']}>
-                <CreateTemplatePage />
+                <EditTemplatePage />
               </ProtectedRoute>
             } />
             <Route path="plantillas/:id/versiones" element={

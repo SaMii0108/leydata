@@ -33,9 +33,28 @@
   margin: 0;
 }
 
+.keyCode {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+}
+
 .notFound {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+/* Estados de carga y error */
+.stateMsg {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  padding: 32px 0;
+  text-align: center;
+  margin: 0;
 }
 
 /* Timeline */
@@ -70,7 +89,12 @@
   flex-shrink: 0;
 }
 
-.dotCurrent {
+.dotActive {
+  background: var(--color-success);
+  box-shadow: 0 0 0 2px var(--color-success-bg);
+}
+
+.dotApproved {
   background: var(--color-primary);
   box-shadow: 0 0 0 2px var(--color-primary-light);
 }
@@ -91,13 +115,23 @@
   padding: 16px 20px;
   margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .cardHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cardHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .versionBadge {
@@ -120,20 +154,45 @@
   letter-spacing: 0.04em;
 }
 
+.statusBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.status_active   { background: var(--color-success-bg);    color: var(--color-success); }
+.status_approved { background: var(--color-primary-light); color: var(--color-primary); }
+.status_draft    { background: var(--color-warning-bg);    color: var(--color-warning); }
+
 .versionDate {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
-.versionNota {
+.cardName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.cardDesc {
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
-  margin: 0 0 6px;
+  margin: 0;
   line-height: 1.5;
 }
 
-.versionAutor {
+.dateMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.dateRow {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  margin: 0;
 }

@@ -1,130 +1,143 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import { useAuth } from '../features/auth/AuthContext';
-import {
-  BASES_LICITUD, DOMINIOS,
-  addTemplate, updateTemplate, getTemplate,
-  getFinalidadesActivas, getFinalidad, getDocumento,
-  type DataItem, type TemplateEstado,
-} from '../utils/mockData';
+import { createTemplate, addTemplatePurpose, ApiError } from '../api/templatesApi';
+import { getPurposes, type PurposeResponse } from '../api/purposesApi';
 import styles from './CreateTemplatePage.module.css';
 
 interface FormState {
-  nombre: string;
-  descripcion: string;
-  finalidadId: string;
-  baseLicitud: string;
-  estado: TemplateEstado;
-  dominio: string;
-  primaryColor: string;
-  buttonLabel: string;
+  templateKey: string;
+  name: string;
+  description: string;
+  title: string;
 }
 
-const EMPTY_FORM: FormState = {
-  nombre: '',
-  descripcion: '',
-  finalidadId: '',
-  baseLicitud: BASES_LICITUD[0],
-  estado: 'borrador',
-  dominio: DOMINIOS[0],
-  primaryColor: '#4361ee',
-  buttonLabel: 'Aceptar',
-};
+type FormErrors = Partial<Record<keyof FormState, string>>;
+
+const TEMPLATE_KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
+
+const EMPTY: FormState = { templateKey: '', name: '', description: '', title: '' };
 
 const CreateTemplatePage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { accessToken } = useAuth();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const isEdit = Boolean(id);
 
-  const activas = getFinalidadesActivas();
+  const [form, setForm]       = useState<FormState>(EMPTY);
+  const [errors, setErrors]   = useState<FormErrors>({});
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [dataItems, setDataItems] = useState<DataItem[]>([]);
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
-  const [saved, setSaved] = useState(false);
+  const [allPurposes, setAllPurposes]                     = useState<PurposeResponse[]>([]);
+  const [selectedPurposeIds, setSelectedPurposeIds]       = useState<string[]>([]);
+  const [purposesLoading, setPurposesLoading]             = useState(true);
+  const [purposesLoadError, setPurposesLoadError]         = useState<string | null>(null);
+  const [purposeSelectionError, setPurposeSelectionError] = useState<string | null>(null);
+  const [createdTemplateId, setCreatedTemplateId]         = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isEdit || !id) return;
-    const tpl = getTemplate(id);
-    if (!tpl) { navigate('/plantillas'); return; }
-    setForm({
-      nombre: tpl.nombre,
-      descripcion: tpl.descripcion,
-      finalidadId: tpl.finalidadId,
-      baseLicitud: tpl.baseLicitud,
-      estado: tpl.estado,
-      dominio: tpl.dominio,
-      primaryColor: tpl.primaryColor,
-      buttonLabel: tpl.buttonLabel,
-    });
-    setDataItems(tpl.dataItems.map((d) => ({ ...d })));
-  }, [id, isEdit, navigate]);
+    let cancelled = false;
+    setPurposesLoading(true);
+    setPurposesLoadError(null);
+    getPurposes(accessToken)
+      .then((data) => { if (!cancelled) setAllPurposes(data); })
+      .catch((err) => {
+        if (!cancelled)
+          setPurposesLoadError(
+            err instanceof ApiError ? err.message : 'No se pudieron cargar las finalidades disponibles.',
+          );
+      })
+      .finally(() => { if (!cancelled) setPurposesLoading(false); });
+    return () => { cancelled = true; };
+  }, [accessToken]);
 
-  const set = <K extends keyof FormState>(key: K, val: FormState[K]) => {
+  const set = <K extends keyof FormState>(key: K, val: string) => {
     setForm((prev) => ({ ...prev, [key]: val }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
+    setApiError(null);
   };
 
-  const handleFinalidadChange = (finalidadId: string) => {
-    set('finalidadId', finalidadId);
-    if (!finalidadId) { setDataItems([]); return; }
-    const fin = getFinalidad(finalidadId);
-    if (fin) {
-      const now = Date.now();
-      setDataItems(
-        fin.datos.map((d, i) => ({
-          id: `di-auto-${now}-${i}`,
-          nombre: d.nombre,
-          tipo: d.tipo,
-          obligatorio: d.obligatorio,
-          descripcionTitular: '',
-        }))
-      );
-    }
-  };
-
-  const updateDescripcionTitular = (itemId: string, desc: string) => {
-    setDataItems((prev) =>
-      prev.map((d) => d.id === itemId ? { ...d, descripcionTitular: desc } : d)
+  const togglePurpose = (id: string) => {
+    setSelectedPurposeIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+    setPurposeSelectionError(null);
+    setApiError(null);
   };
 
   const validate = (): boolean => {
-    const e: Partial<Record<keyof FormState, string>> = {};
-    if (!form.nombre.trim())  e.nombre      = 'El nombre es obligatorio.';
-    if (!form.finalidadId)    e.finalidadId = 'Selecciona una finalidad aprobada.';
-    if (!form.dominio)        e.dominio     = 'Selecciona un dominio.';
+    const e: FormErrors = {};
+    if (!form.name.trim())
+      e.name = 'El nombre es obligatorio.';
+    if (!form.templateKey.trim())
+      e.templateKey = 'La clave de plantilla es obligatoria.';
+    else if (!TEMPLATE_KEY_RE.test(form.templateKey.trim()))
+      e.templateKey = 'Solo minúsculas, números, guiones (-) y guiones bajos (_). Debe empezar con letra o número.';
     setErrors(e);
-    return Object.keys(e).length === 0;
-  };
 
-  const handleSave = () => {
-    if (!validate()) return;
-    const payload = {
-      nombre: form.nombre,
-      descripcion: form.descripcion,
-      finalidadId: form.finalidadId,
-      baseLicitud: form.baseLicitud,
-      estado: form.estado,
-      dominio: form.dominio,
-      primaryColor: form.primaryColor,
-      buttonLabel: form.buttonLabel,
-      dataItems,
-      creadoPor: user?.name ?? 'DPO',
-    };
-    if (isEdit && id) {
-      updateTemplate(id, payload, user?.name ?? 'DPO');
+    let purposesValid = true;
+    if (selectedPurposeIds.length === 0) {
+      setPurposeSelectionError('Debes seleccionar al menos una finalidad.');
+      purposesValid = false;
     } else {
-      addTemplate(payload);
+      setPurposeSelectionError(null);
     }
-    setSaved(true);
-    setTimeout(() => navigate('/plantillas'), 1200);
+
+    return Object.keys(e).length === 0 && purposesValid;
   };
 
-  const finalidadSeleccionada = form.finalidadId ? getFinalidad(form.finalidadId) : null;
-  const docPrivacidad = finalidadSeleccionada ? getDocumento(finalidadSeleccionada.documentoPrivacidadId) : null;
+  const handleSubmit = async () => {
+    if (!validate()) return;
+
+    setLoading(true);
+    setApiError(null);
+    setPurposeSelectionError(null);
+
+    let tpl;
+    try {
+      tpl = await createTemplate(
+        {
+          templateKey: form.templateKey.trim(),
+          name: form.name.trim(),
+          ...(form.description.trim() ? { description: form.description.trim() } : {}),
+          ...(form.title.trim()       ? { title: form.title.trim() }             : {}),
+        },
+        accessToken,
+      );
+    } catch (err) {
+      setApiError(
+        err instanceof ApiError ? err.message : 'Error al crear la plantilla. Intenta nuevamente.',
+      );
+      setLoading(false);
+      return;
+    }
+
+    // La plantilla ya existe en el backend. Guardamos el id para que, si falla
+    // alguna asociación de finalidad, el usuario pueda ir a Editar sin recrearla.
+    setCreatedTemplateId(tpl.id);
+
+    // orderPosition sigue el orden de la lista mostrada en la interfaz, no el
+    // orden en que el usuario marcó los checkboxes.
+    const orderedSelected = allPurposes.filter((p) => selectedPurposeIds.includes(p.id));
+
+    for (let i = 0; i < orderedSelected.length; i++) {
+      try {
+        await addTemplatePurpose(
+          tpl.id,
+          { purposeId: orderedSelected[i].id, orderPosition: i + 1, isVisible: true },
+          accessToken,
+        );
+      } catch (err) {
+        setApiError(
+          `No se pudo asociar la finalidad "${orderedSelected[i].name}": ${err instanceof ApiError ? err.message : 'error de conexión'}. La plantilla fue creada — accede a "Editar plantilla" para completar la configuración.`,
+        );
+        setLoading(false);
+        return;
+      }
+    }
+
+    navigate(`/plantillas/${tpl.id}/editar`);
+  };
 
   return (
     <div className={styles.page}>
@@ -134,179 +147,164 @@ const CreateTemplatePage = () => {
 
       <div className={styles.pageHeader}>
         <div>
-          <h2 className={styles.title}>{isEdit ? 'Editar Plantilla' : 'Nueva Plantilla'}</h2>
+          <h2 className={styles.title}>Nueva Plantilla</h2>
           <p className={styles.subtitle}>
-            Solo el <strong>DPO</strong> puede crear y editar plantillas de consentimiento
+            La plantilla se creará en estado <strong>Borrador</strong>.
+            Solo el <strong>DPO</strong> puede crear plantillas de consentimiento.
           </p>
         </div>
       </div>
 
       <div className={styles.formBody}>
-        {/* ── Información básica ─────────────────────────────── */}
-        <FormSection title="Información básica">
+        <FormSection title="Identificación">
           <div className={styles.fieldGroup}>
             <label className={styles.label}>
-              Nombre de plantilla <span className={styles.required}>*</span>
+              Nombre <span className={styles.required}>*</span>
             </label>
             <input
-              className={[styles.input, errors.nombre ? styles.inputError : ''].join(' ')}
-              value={form.nombre}
-              onChange={(e) => set('nombre', e.target.value)}
-              placeholder="Ej: Consentimiento Marketing"
-              maxLength={80}
+              className={[styles.input, errors.name ? styles.inputError : ''].join(' ')}
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              placeholder="Ej: Consentimiento de Marketing Digital"
+              maxLength={120}
+              disabled={loading}
             />
-            {errors.nombre && <span className={styles.errorMsg}>{errors.nombre}</span>}
+            {errors.name && <span className={styles.errorMsg}>{errors.name}</span>}
+          </div>
+
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              Clave de plantilla <span className={styles.required}>*</span>
+            </label>
+            <input
+              className={[styles.input, errors.templateKey ? styles.inputError : ''].join(' ')}
+              value={form.templateKey}
+              onChange={(e) => set('templateKey', e.target.value)}
+              placeholder="Ej: marketing-digital"
+              maxLength={80}
+              disabled={loading}
+            />
+            {errors.templateKey
+              ? <span className={styles.errorMsg}>{errors.templateKey}</span>
+              : <span className={styles.hint}>
+                  Identifica la familia de versiones de esta plantilla. Solo minúsculas, números, <code>-</code> y <code>_</code>. No puede modificarse una vez creada.
+                </span>
+            }
+          </div>
+        </FormSection>
+
+        <FormSection title="Contenido">
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>Título para el titular</label>
+            <input
+              className={styles.input}
+              value={form.title}
+              onChange={(e) => set('title', e.target.value)}
+              placeholder="Ej: Solicitud de consentimiento para uso de datos"
+              maxLength={200}
+              disabled={loading}
+            />
+            <span className={styles.hint}>
+              Texto que verá el titular en el encabezado del formulario de consentimiento.
+            </span>
           </div>
 
           <div className={styles.fieldGroup}>
             <label className={styles.label}>Descripción</label>
             <textarea
               className={styles.textarea}
-              value={form.descripcion}
-              onChange={(e) => set('descripcion', e.target.value)}
-              placeholder="Descripción breve de la plantilla..."
-              rows={2}
-              maxLength={200}
+              value={form.description}
+              onChange={(e) => set('description', e.target.value)}
+              placeholder="Descripción interna de esta plantilla…"
+              rows={3}
+              maxLength={500}
+              disabled={loading}
             />
-          </div>
-
-          <div className={styles.row2}>
-            <div className={styles.fieldGroup}>
-              <label className={styles.label}>
-                Estado <span className={styles.required}>*</span>
-              </label>
-              <select
-                className={styles.select}
-                value={form.estado}
-                onChange={(e) => set('estado', e.target.value as TemplateEstado)}
-              >
-                <option value="borrador">Borrador</option>
-                <option value="activa">Activa</option>
-                <option value="inactiva">Inactiva</option>
-              </select>
-            </div>
-
-            <div className={styles.fieldGroup}>
-              <label className={styles.label}>
-                Dominio <span className={styles.required}>*</span>
-              </label>
-              <select
-                className={[styles.select, errors.dominio ? styles.inputError : ''].join(' ')}
-                value={form.dominio}
-                onChange={(e) => set('dominio', e.target.value)}
-              >
-                {DOMINIOS.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-              {errors.dominio && <span className={styles.errorMsg}>{errors.dominio}</span>}
-            </div>
+            <span className={styles.charCount}>{form.description.length} / 500</span>
           </div>
         </FormSection>
 
-        {/* ── Configuración legal ────────────────────────────── */}
-        <FormSection title="Configuración legal (Ley 21.719)">
-          <div className={styles.fieldGroup}>
-            <label className={styles.label}>
-              Finalidad aprobada <span className={styles.required}>*</span>
-            </label>
-            <select
-              className={[styles.select, errors.finalidadId ? styles.inputError : ''].join(' ')}
-              value={form.finalidadId}
-              onChange={(e) => handleFinalidadChange(e.target.value)}
-            >
-              <option value="">— Selecciona una finalidad aprobada —</option>
-              {activas.map((f) => (
-                <option key={f.id} value={f.id}>{f.nombre} · {f.dominio}</option>
-              ))}
-            </select>
-            {errors.finalidadId && <span className={styles.errorMsg}>{errors.finalidadId}</span>}
-            {finalidadSeleccionada && (
-              <p className={styles.hint}>{finalidadSeleccionada.descripcion}</p>
-            )}
-            {!form.finalidadId && activas.length === 0 && (
-              <p className={styles.hintWarn}>
-                No hay finalidades aprobadas. El Jefe de Dominio debe solicitar y el DPO aprobar una finalidad antes de crear plantillas.
-              </p>
-            )}
-          </div>
-
-          {docPrivacidad && (
-            <div className={styles.docPrivacidadBanner}>
-              <span className={styles.docPrivacidadIcon}>📄</span>
-              <div>
-                <p className={styles.docPrivacidadNombre}>{docPrivacidad.nombre} <span className={styles.docVersion}>v{docPrivacidad.version}</span></p>
-                <p className={styles.docPrivacidadDesc}>{docPrivacidad.descripcion}</p>
-              </div>
-            </div>
-          )}
-
-          <div className={styles.fieldGroup}>
-            <label className={styles.label}>
-              Base de licitud <span className={styles.required}>*</span>
-            </label>
-            <select
-              className={styles.select}
-              value={form.baseLicitud}
-              onChange={(e) => set('baseLicitud', e.target.value)}
-            >
-              {BASES_LICITUD.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
-            <p className={styles.hint}>
-              Artículo 12 de la Ley 21.719 — Bases de licitud del tratamiento de datos personales.
+        <FormSection title="Finalidades" required>
+          {purposesLoading ? (
+            <p className={styles.hint}>Cargando finalidades disponibles…</p>
+          ) : purposesLoadError ? (
+            <p className={styles.submitError}>{purposesLoadError}</p>
+          ) : allPurposes.length === 0 ? (
+            <p className={styles.hintWarn}>
+              No hay finalidades activas disponibles. El Jefe de Dominio debe solicitar y el DPO
+              aprobar una finalidad antes de poder crear plantillas.
             </p>
-          </div>
-        </FormSection>
-
-        {/* ── Datos heredados de la finalidad ──────────────── */}
-        <FormSection title="Datos del titular">
-          {!form.finalidadId ? (
-            <div className={styles.emptyItems}>
-              <p>Selecciona una finalidad aprobada para cargar los datos automáticamente.</p>
-            </div>
-          ) : dataItems.length === 0 ? (
-            <div className={styles.emptyItems}>
-              <p>La finalidad seleccionada no tiene datos definidos.</p>
-            </div>
           ) : (
-            <>
-              <div className={styles.autoloadNote}>
-                Datos heredados de la finalidad. El nombre, tipo y obligatoriedad vienen definidos por la solicitud aprobada. Puedes editar únicamente la <strong>descripción visible para el titular</strong>.
-              </div>
-              <div className={styles.itemsList}>
-                {dataItems.map((item) => (
-                  <div key={item.id} className={styles.itemCard}>
-                    <div className={styles.itemCardHeader}>
-                      <span className={styles.itemCardNombre}>{item.nombre}</span>
-                      <span className={styles.itemCardTipo}>{item.tipo}</span>
-                      <span className={item.obligatorio ? styles.badgeObligatorio : styles.badgeOpcional}>
-                        {item.obligatorio ? 'Obligatorio' : 'Opcional'}
-                      </span>
-                    </div>
-                    <div className={styles.fieldGroup} style={{ marginTop: 8 }}>
-                      <label className={styles.labelSm}>Descripción para el titular</label>
-                      <textarea
-                        className={styles.textareaSm}
-                        value={item.descripcionTitular}
-                        onChange={(e) => updateDescripcionTitular(item.id, e.target.value)}
-                        placeholder="Ej: Utilizaremos este dato para comunicaciones personalizadas…"
-                        rows={2}
-                        maxLength={250}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
+            <div className={styles.purposeChecklist}>
+              {allPurposes.map((p) => {
+                const position  = selectedPurposeIds.indexOf(p.id);
+                const isSelected = position !== -1;
+                return (
+                  <label
+                    key={p.id}
+                    className={[
+                      styles.purposeCheckItem,
+                      isSelected ? styles.purposeCheckItemSelected : '',
+                    ].join(' ')}
+                  >
+                    <input
+                      type="checkbox"
+                      className={styles.purposeCheck}
+                      checked={isSelected}
+                      onChange={() => togglePurpose(p.id)}
+                      disabled={loading}
+                    />
+                    <span className={styles.purposeLabel}>
+                      <span className={styles.purposeName}>{p.name}</span>
+                      {p.domainName && (
+                        <span className={styles.purposeDomain}>{p.domainName}</span>
+                      )}
+                    </span>
+                    {isSelected && (
+                      <span className={styles.purposePosition}>#{position + 1}</span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {purposeSelectionError && (
+            <span className={styles.errorMsg}>{purposeSelectionError}</span>
+          )}
+          {selectedPurposeIds.length > 0 && (
+            <p className={styles.hint}>
+              {selectedPurposeIds.length}{' '}
+              finalidad{selectedPurposeIds.length !== 1 ? 'es' : ''} seleccionada
+              {selectedPurposeIds.length !== 1 ? 's' : ''}. El número indica el orden inicial
+              en la plantilla.
+            </p>
           )}
         </FormSection>
 
-        {/* ── Acciones ──────────────────────────────────────── */}
+        {apiError && <p className={styles.submitError}>{apiError}</p>}
+
         <div className={styles.formActions}>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/plantillas')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/plantillas')} disabled={loading}>
             Cancelar
           </Button>
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={saved}>
-            {saved ? '✓ Guardado' : isEdit ? 'Guardar cambios' : 'Crear Plantilla'}
-          </Button>
+          {createdTemplateId && apiError ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate(`/plantillas/${createdTemplateId}/editar`)}
+            >
+              Ir a Editar plantilla
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSubmit}
+              disabled={loading || purposesLoading || allPurposes.length === 0}
+            >
+              {loading ? 'Creando…' : 'Crear Plantilla'}
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -315,17 +313,19 @@ const CreateTemplatePage = () => {
 
 const FormSection = ({
   title,
+  required,
   children,
-  action,
 }: {
   title: string;
+  required?: boolean;
   children: React.ReactNode;
-  action?: React.ReactNode;
 }) => (
   <section className={styles.section}>
     <div className={styles.sectionHeader}>
-      <h3 className={styles.sectionTitle}>{title}</h3>
-      {action}
+      <h3 className={styles.sectionTitle}>
+        {title}
+        {required && <span className={styles.sectionRequired}> *</span>}
+      </h3>
     </div>
     <div className={styles.sectionBody}>{children}</div>
   </section>
