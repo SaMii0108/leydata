@@ -12,7 +12,7 @@ export interface PurposeResponse {
   consentStatement: string | null;
   required: boolean;
   revocable: boolean;
-  presentationOrder: number;
+  presentationOrder: number | null;
   legalBasisId: string;
   legalBasisCode: string;
   legalBasisName: string;
@@ -23,11 +23,40 @@ export interface PurposeResponse {
   createdBy: string;
   approvedBy: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string | null;
   hashSha256: string | null;
 }
 
-async function request<T>(path: string, options: RequestInit = {}, token?: string | null): Promise<T> {
+export interface CreatePurposePayload {
+  code: string;
+  name: string;
+  description: string;
+  shortDescription?: string;
+  required: boolean;
+  revocable: boolean;
+  presentationOrder?: number;
+  legalBasisId: string;
+  domainId: string;
+  purposeRequestId?: string;
+  consentStatement?: string;
+}
+
+export interface UpdatePurposePayload {
+  name?: string;
+  description?: string;
+  shortDescription?: string;
+  required?: boolean;
+  revocable?: boolean;
+  presentationOrder?: number;
+  legalBasisId?: string;
+  consentStatement?: string;
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  token?: string | null,
+): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -47,3 +76,36 @@ export const getPurposes = async (token?: string | null): Promise<PurposeRespons
 
 export const getPurpose = async (id: string, token?: string | null): Promise<PurposeResponse> =>
   request<PurposeResponse>(`/api/purposes/${id}`, {}, token);
+
+export const getPurposesByDomain = async (
+  domainId: string,
+  token?: string | null,
+): Promise<PurposeResponse[]> =>
+  request<PurposeResponse[]>(`/api/purposes/domain/${domainId}`, {}, token);
+
+export const createPurpose = async (
+  payload: CreatePurposePayload,
+  token?: string | null,
+): Promise<PurposeResponse> =>
+  request<PurposeResponse>(
+    '/api/purposes',
+    { method: 'POST', body: JSON.stringify(payload) },
+    token,
+  );
+
+export const updatePurpose = async (
+  id: string,
+  payload: UpdatePurposePayload,
+  token?: string | null,
+): Promise<PurposeResponse> =>
+  request<PurposeResponse>(
+    `/api/purposes/${id}`,
+    { method: 'PUT', body: JSON.stringify(payload) },
+    token,
+  );
+
+export const deactivatePurpose = async (
+  id: string,
+  token?: string | null,
+): Promise<PurposeResponse> =>
+  request<PurposeResponse>(`/api/purposes/${id}`, { method: 'DELETE' }, token);

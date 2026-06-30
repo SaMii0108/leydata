@@ -19,11 +19,13 @@ import EditTemplatePage from './pages/EditTemplatePage';
 import TemplateVersionsPage from './pages/TemplateVersionsPage';
 import TemplatePreviewPage from './pages/TemplatePreviewPage';
 import FinalidadesPage from './pages/FinalidadesPage';
-import SolicitarFinalidadPage from './pages/SolicitarFinalidadPage';
-import AprobacionFinalidadesPage from './pages/AprobacionFinalidadesPage';
+import CrearFinalidadPage from './pages/CrearFinalidadPage';
 import DocumentosPrivacidadPage from './pages/DocumentosPrivacidadPage';
 import CompliancePage from './pages/CompliancePage';
 import PerfilPage from './pages/PerfilPage';
+import MisSolicitudesPage from './pages/MisSolicitudesPage';
+import NuevaSolicitudPage from './pages/NuevaSolicitudPage';
+import AprobacionSolicitudesPage from './pages/AprobacionSolicitudesPage';
 import TitularPortalPage from './pages/TitularPortalPage';
 import MockRegisterPage from './pages/MockRegisterPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -92,22 +94,15 @@ const App = () => (
               </ProtectedRoute>
             } />
 
-            {/* Finalidades — Jefe de Dominio */}
+            {/* Finalidades */}
             <Route path="finalidades" element={
-              <ProtectedRoute roles={['JEFE_DOMINIO']}>
+              <ProtectedRoute roles={['DPO', 'JEFE_DOMINIO']}>
                 <FinalidadesPage />
               </ProtectedRoute>
             } />
             <Route path="finalidades/nueva" element={
-              <ProtectedRoute roles={['JEFE_DOMINIO']}>
-                <SolicitarFinalidadPage />
-              </ProtectedRoute>
-            } />
-
-            {/* Finalidades — aprobación DPO */}
-            <Route path="finalidades/aprobacion" element={
               <ProtectedRoute roles={['DPO']}>
-                <AprobacionFinalidadesPage />
+                <CrearFinalidadPage />
               </ProtectedRoute>
             } />
 
@@ -122,6 +117,21 @@ const App = () => (
             <Route path="plantillas" element={
               <ProtectedRoute roles={['DPO']}>
                 <TemplatesPage />
+              </ProtectedRoute>
+            } />
+            <Route path="solicitudes" element={
+              <ProtectedRoute roles={['JEFE_DOMINIO']}>
+                <MisSolicitudesPage />
+              </ProtectedRoute>
+            } />
+            <Route path="solicitudes/nueva" element={
+              <ProtectedRoute roles={['JEFE_DOMINIO']}>
+                <NuevaSolicitudPage />
+              </ProtectedRoute>
+            } />
+            <Route path="aprobacion-solicitudes" element={
+              <ProtectedRoute roles={['DPO']}>
+                <AprobacionSolicitudesPage />
               </ProtectedRoute>
             } />
             <Route path="plantillas/nueva" element={
@@ -146,7 +156,6 @@ const App = () => (
                 <TemplatePreviewPage />
               </ProtectedRoute>
             } />
-
             <Route path="perfil" element={
               <ProtectedRoute roles={['ADMIN', 'DPO', 'JEFE_DOMINIO']}>
                 <PerfilPage />
