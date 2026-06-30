@@ -49,13 +49,13 @@ public class DomainController {
                 "domainId", created.getId());
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DPO')")
     @GetMapping("/all")
-    @Operation(summary = "Listar todos los dominios (incluidos inactivos) [ADMIN]",
+    @Operation(summary = "Listar todos los dominios (incluidos inactivos) [ADMIN, DPO]",
             description = "Devuelve todos los dominios con su estado activo/inactivo y JEFE_DOMINIO asignado.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lista de dominios"),
-            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN o DPO")
     })
     public Map<String, Object> getAllDomains() {
         List<DomainResponse> domains = domainService.getAllDomains();

@@ -59,8 +59,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")
 
-                        //Gestión de dominios: solo ADMIN
-                        .requestMatchers(HttpMethod.GET, "/api/domains/**").hasRole("ADMIN")
+                        //Gestión de dominios: escritura solo ADMIN, lectura DPO también
+                        .requestMatchers(HttpMethod.GET, "/api/domains/**").hasAnyRole("ADMIN", "DPO")
                         .requestMatchers(HttpMethod.POST, "/api/domains/**").hasRole("ADMIN")
 
                         //Solicitudes de propósito: crear = JEFE_DOMINIO, revisar = DPO o ADMIN
