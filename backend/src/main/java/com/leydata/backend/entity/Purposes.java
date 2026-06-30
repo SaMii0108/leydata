@@ -22,7 +22,7 @@ public class Purposes {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "code", nullable = false, unique = true)
+    @Column(name = "code", nullable = false)
     private String code;
 
     @Column(name = "name", nullable = false)
@@ -83,6 +83,15 @@ public class Purposes {
 
     @Column(name = "hash_sha256")
     private String hashSha256;
+
+    @Column(name = "purpose_family_id")
+    private UUID purposeFamilyId;
+
+    @Column(name = "version")
+    private Integer version;
+
+    @Column(name = "status")
+    private String status; // ACTIVE, SUPERSEDED
 
     @OneToMany(mappedBy = "purpose", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<DocumentPurposes> documentPurposes;

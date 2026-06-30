@@ -2,7 +2,6 @@ package com.leydata.backend.agreement.application.service;
 
 import com.leydata.backend.agreement.application.dto.*;
 import com.leydata.backend.agreement.domain.exception.AgreementNotFoundException;
-import com.leydata.backend.agreement.infrastructure.persistence.AgreementIntegrityLogRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementMetadataRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementsPurposesRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementsRepository;
@@ -39,7 +38,6 @@ public class AgreementService {
     private final AgreementsRepository agreementsRepo;
     private final AgreementsPurposesRepository agreementsPurposesRepo;
     private final AgreementMetadataRepository agreementMetadataRepo;
-    private final AgreementIntegrityLogRepository integrityLogRepo;
 
     private final DataSubjectsRepository dataSubjectsRepo;
     private final TemplatesRepository templatesRepo;
@@ -263,45 +261,13 @@ public class AgreementService {
 
     // ── INTEGRIDAD ───────────────────────────────────────────────────────────────
 
-    public AgreementIntegrityLogResponse verifyIntegrity(UUID agreementId, String checkType, UUID actorId) {
+    /** Recalcula el hash combinado sin escribir log — usado por IntegrityVerifier. */
+    @Transactional(readOnly = true)
+    public String recalculateHash(UUID agreementId) {
         Agreements agreement = findOrThrow(agreementId);
         List<AgreementsPurposes> purposes = agreementsPurposesRepo.findByAgreementId(agreementId);
         AgreementMetadata metadata = agreementMetadataRepo.findByAgreementId(agreementId).orElse(null);
-
-        String storedHash = agreement.getHashSha256();
-        String recalculatedHash = computeAgreementHash(agreement, purposes, metadata);
-        boolean isValid = Objects.equals(storedHash, recalculatedHash);
-
-        AgreementIntegrityLog log = new AgreementIntegrityLog();
-        log.setAgreementId(agreementId);
-        log.setStoredHash(storedHash);
-        log.setRecalculatedHash(recalculatedHash);
-        log.setIsValid(isValid);
-        log.setCheckType(checkType);
-        log.setCreatedAt(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
-        log.setErrorDetail(isValid ? null : "El hash recalculado no coincide con el almacenado");
-        log.setCreatedBy(actorId);
-
-        String previousLogHash = integrityLogRepo.findTopByOrderByCreatedAtDesc()
-                .map(AgreementIntegrityLog::getHashSha256)
-                .orElse(null);
-        log.setPreviousHashSha256Id(previousLogHash);
-        log.setHashSha256(computeIntegrityLogRowHash(log));
-
-        return AgreementIntegrityLogResponse.from(integrityLogRepo.save(log));
-    }
-
-    @Transactional(readOnly = true)
-    public List<AgreementIntegrityLogResponse> getIntegrityLog(UUID agreementId) {
-        findOrThrow(agreementId);
-        return integrityLogRepo.findByAgreementIdOrderByCreatedAtDesc(agreementId)
-                .stream().map(AgreementIntegrityLogResponse::from).toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<AgreementIntegrityLogResponse> listFailedVerifications() {
-        return integrityLogRepo.findByIsValidFalse()
-                .stream().map(AgreementIntegrityLogResponse::from).toList();
+        return computeAgreementHash(agreement, purposes, metadata);
     }
 
     // ── HASHING ──────────────────────────────────────────────────────────────────
@@ -356,17 +322,6 @@ public class AgreementService {
                 String.valueOf(ap.getAccepted()),
                 String.valueOf(ap.getPurposeHash()),
                 String.valueOf(ap.getCreatedAt()));
-        return sha256(content);
-    }
-
-    private String computeIntegrityLogRowHash(AgreementIntegrityLog log) {
-        String content = String.join("|",
-                String.valueOf(log.getAgreementId()),
-                String.valueOf(log.getStoredHash()),
-                String.valueOf(log.getRecalculatedHash()),
-                String.valueOf(log.getIsValid()),
-                String.valueOf(log.getCheckType()),
-                String.valueOf(log.getCreatedAt()));
         return sha256(content);
     }
 

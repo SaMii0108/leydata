@@ -1,5 +1,6 @@
 package com.leydata.backend.config;
 
+import com.leydata.backend.agreement.domain.exception.AgreementNotFoundException;
 import com.leydata.backend.datacategory.domain.exception.DataCategoryNotFoundException;
 import com.leydata.backend.orgdomain.domain.exception.DomainNotFoundException;
 import com.leydata.backend.purposedatacategory.domain.exception.PurposeDataCategoryNotFoundException;
@@ -8,6 +9,7 @@ import com.leydata.backend.privacydoc.domain.exception.BusinessValidationExcepti
 import com.leydata.backend.privacydoc.domain.exception.DocumentNotFoundException;
 import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionException;
 import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
+import com.leydata.backend.purposes.domain.exception.PurposeNotLockedException;
 import com.leydata.backend.template.domain.exception.TemplateNotFoundException;
 import com.leydata.backend.user.domain.exception.UserAlreadyExistsException;
 import com.leydata.backend.user.domain.exception.UserNotFoundException;
@@ -130,6 +132,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
+    // ── MÓDULO AGREEMENTS ────────────────────────────────────────────────────────
+
+    @ExceptionHandler(AgreementNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleAgreementNotFound(AgreementNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
     // ── MÓDULO PURPOSES
     // ───────────────────────────────────────────────────────────
 
@@ -158,6 +168,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RetentionPolicyLockedException.class)
     public ResponseEntity<Map<String, Object>> handleRetentionLocked(RetentionPolicyLockedException ex) {
         Map<String, Object> body = buildErrorResponse("RETENTION_LOCKED", ex.getMessage(), HttpStatus.CONFLICT);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(PurposeNotLockedException.class)
+    public ResponseEntity<Map<String, Object>> handlePurposeNotLocked(PurposeNotLockedException ex) {
+        Map<String, Object> body = buildErrorResponse("PURPOSE_NOT_LOCKED", ex.getMessage(), HttpStatus.CONFLICT);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 

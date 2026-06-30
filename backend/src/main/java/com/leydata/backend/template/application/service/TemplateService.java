@@ -414,6 +414,16 @@ public class TemplateService {
                 .build();
     }
 
+    // ── INTEGRIDAD (genérica) ──────────────────────────────────────────────────────
+
+    /** Recalcula el hash sin chequeo de permisos — usado por IntegrityVerifier (incl. job SCHEDULED). */
+    @Transactional(readOnly = true)
+    public String recalculateHash(UUID id) {
+        Templates template = findOrThrow(id);
+        List<TemplatePurposes> purposes = templatePurposesRepo.findByTemplate_IdOrderByOrderPosition(id);
+        return computeTemplateHash(template, purposes);
+    }
+
     // ── VALIDACIONES ─────────────────────────────────────────────────────────────
 
     private Purposes validatePurposeApproved(UUID purposeId) {

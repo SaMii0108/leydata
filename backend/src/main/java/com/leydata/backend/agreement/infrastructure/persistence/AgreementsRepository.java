@@ -4,6 +4,7 @@ import com.leydata.backend.entity.Agreements;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,5 +16,6 @@ public interface AgreementsRepository extends JpaRepository<Agreements, UUID> {
     List<Agreements> findByStatus(String status);
     Optional<Agreements> findByDataSubjectIdAndTemplateIdAndStatus(UUID dataSubjectId, UUID templateId, String status);
     boolean existsByDataSubjectIdAndTemplateIdAndStatus(UUID dataSubjectId, UUID templateId, String status);
+    boolean existsByTemplateIdIn(Collection<UUID> templateIds);
     Optional<Agreements> findTopByOrderByCreatedAtDesc();
 }

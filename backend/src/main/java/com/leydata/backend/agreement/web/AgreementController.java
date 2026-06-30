@@ -1,9 +1,7 @@
 package com.leydata.backend.agreement.web;
 
-import com.leydata.backend.agreement.application.dto.AgreementIntegrityLogResponse;
 import com.leydata.backend.agreement.application.dto.AgreementResponse;
 import com.leydata.backend.agreement.application.dto.CreateAgreementRequest;
-import com.leydata.backend.agreement.application.dto.VerifyIntegrityRequest;
 import com.leydata.backend.agreement.application.service.AgreementService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,27 +54,5 @@ public class AgreementController {
             @RequestParam(required = false) UUID templateId,
             @RequestParam(required = false) String status) {
         return service.list(dataSubjectId, templateId, status);
-    }
-
-    @PostMapping("/{id}/verify-integrity")
-    @Operation(summary = "Verificar integridad de un agreement bajo demanda")
-    public AgreementIntegrityLogResponse verifyIntegrity(
-            @PathVariable UUID id,
-            @RequestBody(required = false) VerifyIntegrityRequest req) {
-        String checkType = (req != null && req.getCheckType() != null) ? req.getCheckType() : "MANUAL";
-        // createdBy queda null hasta que se defina el modelo de autenticación de este módulo
-        return service.verifyIntegrity(id, checkType, null);
-    }
-
-    @GetMapping("/{id}/integrity-log")
-    @Operation(summary = "Historial de verificaciones de integridad del agreement")
-    public List<AgreementIntegrityLogResponse> getIntegrityLog(@PathVariable UUID id) {
-        return service.getIntegrityLog(id);
-    }
-
-    @GetMapping("/integrity-log/failed")
-    @Operation(summary = "Listar verificaciones de integridad fallidas (IS_VALID = false) para investigación")
-    public List<AgreementIntegrityLogResponse> listFailedVerifications() {
-        return service.listFailedVerifications();
     }
 }

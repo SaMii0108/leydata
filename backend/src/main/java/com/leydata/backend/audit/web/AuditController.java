@@ -1,9 +1,16 @@
 package com.leydata.backend.audit.web;
 
+import com.leydata.backend.audit.application.dto.AgreementTraceResponse;
 import com.leydata.backend.audit.application.dto.AuditLogResponseDto;
+import com.leydata.backend.audit.application.dto.EntityIntegrityLogResponse;
+import com.leydata.backend.audit.application.dto.VerifyIntegrityRequest;
+import com.leydata.backend.audit.application.service.AgreementTraceService;
 import com.leydata.backend.audit.application.service.AuditService;
+import com.leydata.backend.audit.application.service.IntegrityVerifier;
+import com.leydata.backend.audit.infrastructure.persistence.EntityIntegrityLogRepository;
 import com.leydata.backend.audit.infrastructure.persistence.SystemAuditLogRepository;
 import com.leydata.backend.entity.SystemAuditLog;
+import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.user.infrastructure.persistence.UsersRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/audit")
@@ -33,6 +41,10 @@ public class AuditController {
     private final SystemAuditLogRepository auditLogRepository;
     private final AuditService auditService;
     private final UsersRepository usersRepository;
+    private final IntegrityVerifier integrityVerifier;
+    private final EntityIntegrityLogRepository entityIntegrityLogRepository;
+    private final SecurityContextHelper securityContextHelper;
+    private final AgreementTraceService agreementTraceService;
 
     @GetMapping("/logs")
     @Operation(
@@ -126,6 +138,41 @@ public class AuditController {
                     "valid", false,
                     "message", "ALERTA: Se detectaron inconsistencias en la cadena de auditoría. Posible alteración de registros.");
         }
+    }
+
+    @PostMapping("/integrity/verify")
+    @Operation(summary = "Verificar integridad de una entidad bajo demanda [ADMIN]",
+            description = "entityType: AGREEMENT, PURPOSE, TEMPLATE o DOCUMENT.")
+    public EntityIntegrityLogResponse verifyEntityIntegrity(@RequestBody VerifyIntegrityRequest req) {
+        String checkType = req.getCheckType() != null ? req.getCheckType() : "MANUAL";
+        String actorId = securityContextHelper.getKeycloakId();
+        return integrityVerifier.verify(req.getEntityType(), req.getEntityId(), checkType, actorId);
+    }
+
+    @GetMapping("/integrity/log")
+    @Operation(summary = "Historial de verificaciones de integridad de una entidad [ADMIN]")
+    public List<EntityIntegrityLogResponse> getEntityIntegrityLog(
+            @RequestParam String entityType,
+            @RequestParam UUID entityId) {
+        return entityIntegrityLogRepository.findByEntityTypeAndEntityIdOrderByCreatedAtDesc(entityType, entityId)
+                .stream().map(EntityIntegrityLogResponse::from).toList();
+    }
+
+    @GetMapping("/integrity/failed")
+    @Operation(summary = "Listar verificaciones de integridad fallidas [ADMIN]")
+    public List<EntityIntegrityLogResponse> listFailedIntegrityChecks(
+            @RequestParam(required = false) String entityType) {
+        List<com.leydata.backend.entity.EntityIntegrityLog> logs = (entityType != null && !entityType.isBlank())
+                ? entityIntegrityLogRepository.findByIsValidFalseAndEntityType(entityType)
+                : entityIntegrityLogRepository.findByIsValidFalse();
+        return logs.stream().map(EntityIntegrityLogResponse::from).toList();
+    }
+
+    @GetMapping("/trace/agreement/{id}")
+    @Operation(summary = "Reconstruir la cadena AGREEMENT → DOCUMENT → TEMPLATE → PURPOSES [ADMIN]",
+            description = "Solo lectura — no escribe en ningún log. Verifica integridad por eslabón.")
+    public AgreementTraceResponse traceAgreement(@PathVariable UUID id) {
+        return agreementTraceService.trace(id);
     }
 
     private AuditLogResponseDto toDto(SystemAuditLog log) {

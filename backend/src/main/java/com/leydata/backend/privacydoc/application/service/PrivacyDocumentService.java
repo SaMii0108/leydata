@@ -496,6 +496,16 @@ public class PrivacyDocumentService {
                 .build();
     }
 
+    /** Recalcula el hash del PDF sin chequeo de permisos — usado por IntegrityVerifier. */
+    @Transactional(readOnly = true)
+    public String recalculateHash(UUID id) {
+        PrivacyDocuments doc = findOrThrow(id);
+        if (doc.getPdfContent() == null || doc.getPdfContent().length == 0) {
+            return null;
+        }
+        return pdfGenerator.computeCurrentHash(doc.getPdfContent());
+    }
+
     @Transactional(readOnly = true)
     public PrivacyDocumentResponse getActive(DocumentCategory category) {
         return documentRepo.findTopByCategoryAndStatusAndIsActiveTrueOrderByVersionDesc(
