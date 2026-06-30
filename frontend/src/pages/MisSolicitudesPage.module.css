@@ -26,42 +26,7 @@
   margin: 0;
 }
 
-.filterBar {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.searchInput {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  outline: none;
-  transition: border-color 0.15s;
-  width: 260px;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-.searchInput:focus { border-color: var(--color-primary); }
-
-.domainSelect {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-.domainSelect:focus { border-color: var(--color-primary); }
-
+/* Table section */
 .tableSection {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -70,7 +35,9 @@
   overflow: hidden;
 }
 
-.tableWrapper { overflow-x: auto; }
+.tableWrapper {
+  overflow-x: auto;
+}
 
 .stateMsg {
   padding: 24px 16px;
@@ -79,6 +46,7 @@
   color: var(--color-text-secondary);
 }
 
+/* Empty state */
 .emptyState {
   display: flex;
   flex-direction: column;
@@ -113,6 +81,7 @@
   margin: 0;
 }
 
+/* Table */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -139,73 +108,50 @@
   border-bottom: 1px solid var(--color-border);
   transition: background 0.12s;
 }
+
 .table tbody tr:last-child { border-bottom: none; }
 .table tbody tr:hover { background: var(--color-bg); }
 
 .table td {
-  padding: 13px 16px;
+  padding: 14px 16px;
   color: var(--color-text-primary);
-  vertical-align: middle;
+  vertical-align: top;
 }
 
-.cellName {
+/* Cell variants */
+.cellTitle {
   font-weight: 600;
-  min-width: 160px;
+  max-width: 240px;
 }
 
-.cellSecondary {
+.cellDomain {
   color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
-.lockBadge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 99px;
-  padding: 1px 7px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
-.codePill {
-  font-size: 11px;
-  font-weight: 700;
-  font-family: var(--font-mono, monospace);
+.cellDate {
   color: var(--color-text-secondary);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 2px 7px;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+}
+
+.cellReviewer {
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
-.yes {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  color: #065f46;
-  background: #d1fae5;
-  border-radius: 99px;
-  padding: 2px 9px;
-  white-space: nowrap;
+.cellNotes {
+  max-width: 260px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
 }
 
-.no {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
+.noValue {
   color: var(--color-text-muted);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 99px;
-  padding: 2px 9px;
-  white-space: nowrap;
 }
 
+/* Status badges */
 .statusBadge {
   display: inline-block;
   font-size: 11px;
@@ -217,5 +163,6 @@
   white-space: nowrap;
 }
 
-.status_active   { background: #d1fae5; color: #065f46; }
-.status_inactive { background: #fee2e2; color: #991b1b; }
+.status_pending  { background: #fef3c7; color: #92400e; }
+.status_approved { background: #d1fae5; color: #065f46; }
+.status_rejected { background: #fee2e2; color: #991b1b; }
