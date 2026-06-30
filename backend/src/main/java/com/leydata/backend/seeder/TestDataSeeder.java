@@ -6,7 +6,7 @@ import com.leydata.backend.privacydoc.domain.enums.DocumentCategory;
 import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
-import com.leydata.backend.purpose.infrastructure.persistence.PurposeRequestsRepository;
+import com.leydata.backend.purposerequest.infrastructure.persistence.PurposeRequestsRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementMetadataRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementsPurposesRepository;

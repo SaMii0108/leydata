@@ -1,9 +1,9 @@
-package com.leydata.backend.purpose.web;
+package com.leydata.backend.purposerequest.web;
 
-import com.leydata.backend.purpose.application.dto.PurposeRequestDto;
-import com.leydata.backend.purpose.application.dto.PurposeRequestSummaryDto;
-import com.leydata.backend.purpose.application.dto.ReviewRequestDto;
-import com.leydata.backend.purpose.application.service.PurposeRequestService;
+import com.leydata.backend.purposerequest.application.dto.PurposeRequestDto;
+import com.leydata.backend.purposerequest.application.dto.PurposeRequestSummaryDto;
+import com.leydata.backend.purposerequest.application.dto.ReviewRequestDto;
+import com.leydata.backend.purposerequest.application.service.PurposeRequestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;

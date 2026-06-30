@@ -1,4 +1,4 @@
-package com.leydata.backend.purpose.application.dto;
+package com.leydata.backend.purposerequest.application.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
