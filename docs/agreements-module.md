@@ -40,9 +40,11 @@
  calcula HASH_SHA256 (AGREEMENTS + AGREEMENTS_PURPOSES + AGREEMENT_METADATA)
      │
      ▼
- TRAZABILIDAD ── POST /agreements/{id}/verify-integrity ──▶ recalcula hash ──▶ AGREEMENT_INTEGRITY_LOG (IS_VALID)
-                 GET /agreements/{id}/integrity-log ──▶ historial de verificaciones
-                 GET /agreements/integrity-log/failed ──▶ verificaciones fallidas
+ TRAZABILIDAD → migraron al módulo audit/ (ver docs/audit-module.md)
+                POST /api/audit/integrity/verify      ──▶ recalcula hash ──▶ ENTITY_INTEGRITY_LOG
+                GET  /api/audit/integrity/log          ──▶ historial por entidad
+                GET  /api/audit/integrity/failed       ──▶ verificaciones fallidas (todas las entidades)
+                GET  /api/audit/trace/agreement/{id}   ──▶ cadena completa del acuerdo (template + doc + purposes)
 ```
 
 ## Descripción
@@ -70,7 +72,7 @@ Un AGREEMENT es evidencia legal: una vez creado no se edita. Cualquier cambio de
 8. `STATUS` inicia siempre en `ACTIVE`. El tránsito a `REVOKED` o `EXPIRED` está fuera del alcance de este documento: corresponde a un orquestador/job aún no diseñado.
 9. `PREVIOUS_AGREEMENTS_ID` enlaza un agreement con el que reemplaza (renovación o cambio de voluntad), formando una cadena histórica. La definición de cuándo se genera esa cadena también depende del orquestador pendiente.
 10. `HASH_SHA256` del AGREEMENT se calcula dos veces como doble resguardo: el service lo calcula y persiste al crear el agreement; la base de datos expone `GENERATE_AGREEMENT_HASH(agreement_id)` para recalcularlo y compararlo en verificaciones de integridad. El hash cubre `AGREEMENTS`, `AGREEMENTS_PURPOSES` **y `AGREEMENT_METADATA`** (IP, user agent, capture_channel, signature_token, auth_provider) — si la metadata de captura se altera después de creado el agreement, la verificación de integridad debe fallar. `EXTRA_VARIABLES` y `CREATED_AT` de metadata quedan fuera del hash (el primero por ser JSON libre sin orden garantizado, el segundo por ser solo un timestamp de registro).
-11. Toda verificación de integridad (programada, manual o bajo demanda) sobre un AGREEMENT debe registrar un `AGREEMENT_INTEGRITY_LOG`, con el hash almacenado, el recalculado, si coinciden (`IS_VALID`) y el tipo de chequeo.
+11. Toda verificación de integridad (programada, manual o bajo demanda) sobre un AGREEMENT se registra en `ENTITY_INTEGRITY_LOG` (módulo audit/) con el hash almacenado, el recalculado, si coinciden (`IS_VALID`) y el tipo de chequeo. La verificación cubre también TEMPLATE, DOCUMENT y PURPOSE en el mismo scheduler (`IntegrityScheduler`, cron diario 3am).
 12. `CreateAgreementRequest` acepta dos formas de identificar al titular: `dataSubjectId` (UUID interno, para llamadas directas desde el portal) o `subjectIdentifier` (string opaco, para llamadas desde el Orquestador B2B, ej: "RUT:12345678-9"). Si se usa `subjectIdentifier`, `AgreementService` hace `findOrCreate` en `data_subjects` — si no existe crea la fila automáticamente. Si ninguno de los dos viene, se lanza `BusinessValidationException`.
 13. No se puede eliminar (`DELETE`) un AGREEMENT — el `ON DELETE RESTRICT` en `TEMPLATE_ID`, `DOCUMENT_ID` **y `DATA_SUBJECT_ID`** lo protege a nivel de BD. Un `DATA_SUBJECT` con `AGREEMENTS` asociados **no se puede eliminar físicamente**. Si el titular ejerce su derecho al olvido, se anonimiza su `IDENTIFIER` (se reemplaza por un valor opaco) en vez de borrar la fila — el agreement permanece como evidencia legal.
 14. La metadata técnica (`IP_ORIGIN`, `USER_AGENT`) se captura en el controller de `POST /api/agreements` a partir del `HttpServletRequest` (IP resuelta vía `getRemoteAddr()` únicamente — igual que `AuditService.extractClientIp()` — porque `X-Forwarded-For` puede ser falsificado por el cliente; en producción se asume `RemoteIpValve` configurado para reescribir el `remoteAddr` real detrás de un proxy. User agent desde el header `User-Agent`) y se pasa como parámetros simples al service — el service no depende de objetos HTTP. El resto de campos de `AGREEMENT_METADATA` (`capture_channel`, `signature_token`, `auth_provider`, `extra_variables`) se reciben en el body del request.
@@ -102,12 +104,20 @@ ACTIVE → EXPIRED
 4. Listar AGREEMENTS por TEMPLATE_ID / STATUS (filtros administrativos).
 
 ### Integridad
-5. Verificar integridad de un AGREEMENT bajo demanda (recalcula hash, compara, registra en AGREEMENT_INTEGRITY_LOG).
-6. Listar verificaciones fallidas (`IS_VALID = FALSE`) para investigación.
+5. Verificar integridad de cualquier entidad bajo demanda — ahora centralizado en `POST /api/audit/integrity/verify` (módulo audit/).
+6. Listar verificaciones fallidas — `GET /api/audit/integrity/failed` con filtro opcional por `entityType=AGREEMENT`.
 
 ### Revocación
 
 `PATCH /api/agreements/{id}/revoke` con body `{ "subjectId": "<identifier opaco>" }` — implementado. Valida que el agreement pertenezca al sujeto, lo marca REVOKED, propaga a sus `AgreementsPurposes`, registra en audit log y publica `AgreementRevokedEvent` para que el `AgreementRevocationCacheListener` elimine las keys de Redis tras el commit.
+
+### Resolución automática de `documentId`
+
+`CreateAgreementRequest.documentId` dejó de ser obligatorio. Si no se envía, `AgreementService.create()` lo resuelve buscando el documento `PUBLISHED` activo vinculado a `templateId` (`PrivacyDocumentsRepository.findByTemplateIdAndStatusAndIsActiveTrue`) — si no existe, falla con un mensaje explícito en vez de un `documentId` inválido. Esto es lo que le permite al Orquestador armar el `POST /api/agreements` sin que el sistema cliente (CRM) tenga que conocer el UUID del documento de antemano; solo necesita el `templateKey` de negocio (ver [`docs/orchestrator-module.md`](orchestrator-module.md)).
+
+Sigue siendo posible enviar `documentId` explícito — útil para integraciones que ya lo conocían antes de este cambio, o para casos donde se quiera forzar un documento distinto al resuelto por defecto.
+
+**Invariante que lo sostiene:** `PrivacyDocumentService.publish()` ahora archiva automáticamente cualquier documento `PUBLISHED` previo con el mismo `templateId` antes de publicar uno nuevo — garantiza que la búsqueda anterior siempre resuelva a lo sumo un documento (ver [`docs/templates-module.md`](templates-module.md) y [`docs/privacydoc-module.md`](privacydoc-module.md) si existe).
 
 ### Fuera de alcance por ahora
 - Expirar AGREEMENT automáticamente (job pendiente — `EXPIRES_AT` existe en el modelo pero el scheduler no está implementado).
@@ -119,12 +129,9 @@ ACTIVE → EXPIRED
 
 | Método | Endpoint | Caso de uso |
 |--------|----------|-------------|
-| `POST` | `/api/agreements` | Crear agreement con el detalle de purposes aceptadas/rechazadas |
+| `POST` | `/api/agreements` | Crear agreement con el detalle de purposes aceptadas/rechazadas. `documentId` es opcional — si no viene, se resuelve automáticamente el documento `PUBLISHED` vinculado al `templateId` (ver más abajo). |
 | `GET` | `/api/agreements/{id}` | Obtener por ID con su detalle de purposes |
 | `GET` | `/api/agreements` | Listar (filtros: `dataSubjectId`, `templateId`, `status`) |
-| `POST` | `/api/agreements/{id}/verify-integrity` | Verificar integridad bajo demanda, registra `AGREEMENT_INTEGRITY_LOG` |
-| `GET` | `/api/agreements/{id}/integrity-log` | Historial de verificaciones de integridad del agreement |
-| `GET` | `/api/agreements/integrity-log/failed` | Listar verificaciones de integridad fallidas (`IS_VALID = FALSE`), caso de uso 6 |
 | `GET` | `/api/agreements/active?dataSubjectId=&templateId=` | Consultar si hay un agreement ACTIVE — usado por el orquestador antes de pedir o no consentimiento |
 | `PATCH` | `/api/agreements/{id}/revoke` | Revocar agreement: marca REVOKED en Postgres, publica evento, invalida Redis (AFTER_COMMIT) |
 
@@ -144,6 +151,6 @@ ACTIVE → EXPIRED
 10. ~~**Cadena de hash sin validar**~~ — **Resuelto.** `AGREEMENTS` y `AGREEMENTS_PURPOSES` ahora tienen `PREVIOUS_HASH_SHA256` validado por FK contra su propio `HASH_SHA256` (con `UNIQUE` agregado), igual patrón que `AUDIT_LOG` (regla 17).
 11. **Pendiente de actualizar cuando exista el orquestador con DATA_SUBJECTS:**
     - `AgreementController` no tiene ningún endpoint protegido con `@PreAuthorize` por ahora (decisión temporal, sin modelo de autenticación definido para este módulo). Hay que decidir quién llama a `POST /api/agreements` (¿el titular autenticado en el sistema cliente? ¿el orquestador como servicio interno?) y ajustar la seguridad de cada endpoint en consecuencia.
-    - `AgreementService.resolveActorIdOrNull()` y el `createdBy = null` hardcodeado en `AgreementController.verifyIntegrity()` son placeholders a la espera de saber quién es el actor real en cada operación.
+    - La verificación de integridad de agreements se hace ahora vía `POST /api/audit/integrity/verify` — el actor se obtiene del SecurityContext en `AuditController`.
     - La transición `ACTIVE → REVOKED/EXPIRED` fuera del flujo de reconsentimiento (regla 8), el cálculo de `EXPIRES_AT` por purpose (regla 6.1) y la cadena de renovación vía `PREVIOUS_AGREEMENTS_ID` (regla 9) siguen sin implementarse — son responsabilidad del orquestador, no de `AgreementService`.
     - El alta de `DATA_SUBJECTS` (regla 12) sigue sin un flujo propio; `AgreementService.create()` asume que el `dataSubjectId` recibido ya existe.

@@ -126,4 +126,42 @@ public class PurposeController {
     public PurposeResponse deactivate(@PathVariable UUID id) {
         return purposeService.deactivate(id);
     }
+
+    @PostMapping("/{id}/new-version")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(
+            summary = "Crear nueva versión de una finalidad bloqueada [DPO]",
+            description = """
+                    Solo aplica si la finalidad está bloqueada (`locked: true` — vinculada a un template con
+                    al menos un agreement, o a un documento PUBLISHED). La versión anterior pasa a SUPERSEDED
+                    en la misma transacción. Si no está bloqueada, corresponde editar in-place con PUT.
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Nueva versión creada"),
+            @ApiResponse(responseCode = "409", description = "La finalidad no está bloqueada"),
+            @ApiResponse(responseCode = "404", description = "Finalidad no encontrada")
+    })
+    public PurposeResponse newVersion(@PathVariable UUID id,
+                                       @RequestBody @Valid UpdatePurposeRequest req) {
+        return purposeService.newVersion(id, req);
+    }
+
+    @GetMapping("/family/{purposeFamilyId}")
+    @Operation(summary = "Listar el historial de versiones de una familia de finalidades [DPO, ADMIN]")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Versiones de la familia, orden descendente")
+    })
+    public List<PurposeResponse> getFamily(@PathVariable UUID purposeFamilyId) {
+        return purposeService.getFamily(purposeFamilyId);
+    }
+
+    @GetMapping("/active/{purposeFamilyId}")
+    @Operation(summary = "Obtener la versión ACTIVE de una familia de finalidades [DPO, ADMIN]")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Versión activa de la familia"),
+            @ApiResponse(responseCode = "422", description = "No hay versión ACTIVE para esa familia")
+    })
+    public PurposeResponse getActiveByFamily(@PathVariable UUID purposeFamilyId) {
+        return purposeService.getActiveByFamily(purposeFamilyId);
+    }
 }

@@ -70,6 +70,8 @@ Los sistemas externos (CRM, ERP, aplicación del cliente) deben enviar un **JWT 
 
 **El JWKS del cliente** es una URL pública que expone las claves públicas de su IdP. El Orquestador la consulta automáticamente para verificar firmas criptográficas sin compartir secretos.
 
+**Claim obligatorio `leydata_domain`:** el JWT del sistema cliente debe incluir un claim `leydata_domain` con el UUID del dominio LeyData al que ese sistema está autorizado (ej. el dominio "Comercial" si el CRM es de ventas). LeyData lo configura al dar de alta la integración — el sistema cliente no lo elige ni lo declara en el body de sus requests, viene firmado en el token. `POST /consent/capture` lo usa para resolver a qué template/documento corresponde un `templateKey` dentro de ese dominio.
+
 ### Outbound — El Orquestador habla con LeyData
 
 Cuando el Orquestador necesita consultar o escribir en LeyData (por cache miss, capture o revoke), obtiene automáticamente un token de servicio de Keycloak usando el flujo `client_credentials`.
@@ -178,8 +180,7 @@ Content-Type: application/json
 ```json
 {
   "subjectId": "u-8f3a2c",
-  "templateId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-  "documentId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "templateKey": "ONBOARDING_CLIENTE",
   "purposes": [
     { "purposeId": "550e8400-e29b-41d4-a716-446655440000", "accepted": true },
     { "purposeId": "661f9511-f30c-52e5-b827-557766551111", "accepted": false }
@@ -197,8 +198,9 @@ Content-Type: application/json
 ```
 
 **Notas:**
-- `templateId` debe corresponder a un Template en estado `ACTIVE` en LeyData
-- `documentId` debe corresponder a un Documento de Privacidad publicado
+- `templateKey` es el identificador de **negocio** acordado al integrarse (ej. `ONBOARDING_CLIENTE`), no un UUID interno de LeyData. El sistema cliente nunca necesita conocer `templateId` ni `documentId` directamente.
+- El Orquestador resuelve `templateKey` contra el **dominio** que el JWT del sistema cliente autoriza (claim `leydata_domain`, configurado por LeyData al dar de alta la integración) y obtiene el `documentId` del documento de privacidad `PUBLISHED` vigente de ese template. Si el template no tiene versión `ACTIVE` en ese dominio, o no tiene un documento publicado, la petición falla antes de llegar a LeyData.
+- `documentId` puede enviarse opcionalmente como override explícito si la integración ya lo conoce — no es necesario en el flujo estándar.
 - Si el titular ya tenía un consentimiento `ACTIVE` para el mismo template, se revoca automáticamente y se crea uno nuevo (reconsent)
 - La IP real del dispositivo del titular queda sellada en el hash SHA-256 del registro — no puede ser alterada posteriormente
 
@@ -259,6 +261,11 @@ Todo el tráfico hacia `/api/**` se reenvía de forma transparente al backend Le
   - Authentication flow: **Service accounts roles** únicamente
   - Copiar el Client Secret generado → variable `KC_ORCHESTRATOR_CLIENT_SECRET`
 - [ ] Asignar rol `SYSTEM` al service account del cliente (o el rol que LeyData exija)
+
+### Por cada sistema cliente nuevo (CRM, ERP) que se integra
+
+- [ ] En el IdP del cliente: agregar protocol mapper que incluya el claim `leydata_domain` en los tokens emitidos para ese client, con el UUID del dominio LeyData correspondiente
+- [ ] Confirmar con LeyData el `templateKey` de negocio que ese sistema va a usar en `POST /consent/capture` — debe existir como template `ACTIVE` en ese dominio
 
 ### En el servidor de producción
 

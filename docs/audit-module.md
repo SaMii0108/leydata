@@ -1,20 +1,25 @@
 # Módulo: Auditoría (`audit/`)
 
 **Paquete:** `com.leydata.backend.audit`  
-**Endpoints base:** `/api/audit/logs/**`  
+**Endpoints base:** `/api/audit/**`  
 **Acceso:** Solo `ADMIN`
 
 ---
 
 ## Responsabilidad
 
-Log de auditoría **inmutable** de todas las operaciones sensibles del sistema. Cada entrada es una fila en `system_audit_log` protegida por triggers de PostgreSQL que impiden UPDATE y DELETE — ningún código de aplicación puede alterar el historial.
+El módulo audit tiene dos responsabilidades independientes:
 
-La tabla implementa una **cadena de hashes SHA-256** (ledger): cada registro incluye el hash del registro anterior. Si alguien modifica una fila directamente en la BD, la cadena se rompe y es detectable.
+1. **Log de auditoría operacional (`system_audit_log`)** — registro inmutable de todas las operaciones sensibles del sistema, protegido por triggers de PostgreSQL.
+2. **Integridad de entidades de negocio (`entity_integrity_log`)** — verificación y trazabilidad de hashes SHA-256 sobre AGREEMENT, TEMPLATE, DOCUMENT y PURPOSE.
 
 ---
 
-## Cuándo se escribe en el audit log
+## 1. Log de auditoría (`system_audit_log`)
+
+Cada entrada es una fila en `system_audit_log` protegida por triggers que impiden UPDATE y DELETE. La tabla implementa una **cadena de hashes SHA-256** (ledger): cada registro incluye el hash del anterior. Si alguien modifica una fila directamente, la cadena se rompe y es detectable.
+
+### Cuándo se escribe
 
 `AuditService.log()` es llamado por los servicios de negocio en operaciones críticas:
 
@@ -27,35 +32,86 @@ La tabla implementa una **cadena de hashes SHA-256** (ledger): cada registro inc
 | Revocar consentimiento | `REVOCAR_AGREEMENT` |
 | Reconsentimiento (cierre automático) | `REVOCAR_AGREEMENT_POR_RECONSENTIMIENTO` |
 
-Cada entrada incluye:
-- `tableName` — tabla afectada
-- `recordId` — UUID del registro afectado
-- `action` — qué operación se realizó
-- `oldData` / `newData` — estado antes y después (JSON)
-- `actorId` — `keycloak_id` del usuario que ejecutó la acción (o `SYSTEM` / `ORCHESTRATOR`)
-- `actorRole` — rol en el momento de la acción
-- `requestId` — header `X-Request-ID` si está presente (para correlación con WAF/NGINX)
-- `hashSha256` / `previousHashSha256` — cadena de integridad
+Cada entrada incluye `tableName`, `recordId`, `action`, `oldData`/`newData`, `actorId`, `actorRole`, `requestId`, `hashSha256`/`previousHashSha256`.
 
----
+### Protección contra race conditions
 
-## Protección contra race conditions
+`AuditService.log()` adquiere un **advisory lock** de PostgreSQL (`pg_advisory_xact_lock(7719)`) antes de leer el `previousHash`. Esto serializa todas las escrituras al ledger — solo un thread puede ejecutar el par lectura-escritura a la vez.
 
-`AuditService.log()` adquiere un **advisory lock** de PostgreSQL (`pg_advisory_xact_lock(7719)`) antes de leer el `previousHash`. Esto serializa todas las escrituras al ledger a nivel de base de datos — solo un thread puede ejecutar el par lectura-escritura a la vez. El lock se libera automáticamente al hacer commit.
-
-Sin este lock, dos threads podrían leer el mismo `previousHash` y generar entradas con el mismo `previousHash`, rompiendo la cadena sin que ninguna fila sea inválida individualmente.
-
----
-
-## Endpoints
+### Endpoints
 
 ```
-GET  /api/audit/logs           — Listar entradas (con filtros: tableName, actorId, action)
+GET  /api/audit/logs           — Listar entradas (filtros: tableName, actorId, action)
 GET  /api/audit/logs/{id}      — Obtener entrada por ID
 GET  /api/audit/logs/verify    — Verificar integridad de la cadena completa
 ```
 
-El endpoint `/verify` recorre todas las entradas ordenadas por `createdAt` y verifica que cada `hashSha256` coincide con el hash calculado de esa fila, y que `previousHashSha256` apunta al hash de la fila anterior.
+---
+
+## 2. Integridad de entidades (`entity_integrity_log`)
+
+Verificación centralizada de hashes SHA-256 sobre las 4 entidades de negocio críticas: **AGREEMENT**, **TEMPLATE**, **DOCUMENT**, **PURPOSE**.
+
+### Qué hace cada componente
+
+| Clase | Rol |
+|---|---|
+| `IntegrityVerifier` | Servicio central — despacha a `recalculateHash()` de cada entidad por switch, escribe en `entity_integrity_log`. Usa `"GENESIS"` como hash previo inicial. |
+| `IntegrityScheduler` | `@Scheduled(cron = "0 0 3 * * *")` — corre verificación masiva diaria sobre AGREEMENT, TEMPLATE, DOCUMENT y PURPOSE. Reemplaza el anterior `AgreementIntegrityScheduler`. |
+| `AgreementTraceService` | Solo lectura — traza la cadena completa de un agreement: template activo, documento publicado, purposes con drift check (`ap.getPurposeHash()` vs `purpose.getHashSha256()` actual). Devuelve `overallIntegrity: OK | MISMATCH | PARTIAL`. |
+| `EntityIntegrityLog` | Entidad JPA mapeada a `entity_integrity_log`. Protegida por trigger de inmutabilidad (V5). |
+
+### Endpoints
+
+```
+POST /api/audit/integrity/verify
+     body: { "entityType": "AGREEMENT|TEMPLATE|DOCUMENT|PURPOSE",
+             "entityId": "<uuid>",
+             "checkType": "MANUAL|ON_DEMAND|SCHEDULED" }
+     → Recalcula el hash, compara con el almacenado, registra en entity_integrity_log
+
+GET  /api/audit/integrity/log?entityType=<tipo>&entityId=<uuid>
+     → Historial de verificaciones de una entidad específica, orden desc
+
+GET  /api/audit/integrity/failed?entityType=<tipo-opcional>
+     → Verificaciones con isValid=false. Sin filtro: todas las entidades.
+
+GET  /api/audit/trace/agreement/{id}
+     → Traza completa: template (hash actual), documento (hash actual), cada purpose
+       (hash al consentir vs. hash actual). Campo overallIntegrity: OK | MISMATCH | PARTIAL
+```
+
+### `entity_integrity_log` — campos clave
+
+| Campo | Descripción |
+|---|---|
+| `entityType` | `AGREEMENT`, `TEMPLATE`, `DOCUMENT`, `PURPOSE` |
+| `entityId` | UUID de la entidad verificada |
+| `storedHash` | Hash guardado en la entidad al momento de la verificación |
+| `recalculatedHash` | Hash recalculado en el momento de la verificación |
+| `isValid` | `true` si coinciden |
+| `checkType` | `MANUAL`, `ON_DEMAND`, `SCHEDULED` |
+| `hashSha256` | Hash de esta fila del log |
+| `previousHashSha256Id` | FK al hash de la fila anterior (cadena) |
+
+### Migraciones Flyway (V5–V7)
+
+Estas migraciones se aplican **manualmente** después del primer arranque (Hibernate crea las tablas, luego se corren los scripts):
+
+```bash
+psql -U admin -d leydata_db -h localhost -p 5433 \
+  -f backend/src/main/resources/db/migration/V5__entity_integrity_log_trigger.sql
+psql -U admin -d leydata_db -h localhost -p 5433 \
+  -f backend/src/main/resources/db/migration/V6__purposes_versioning_backfill.sql
+psql -U admin -d leydata_db -h localhost -p 5433 \
+  -f backend/src/main/resources/db/migration/V7__purposes_code_not_unique.sql
+```
+
+| Script | Qué hace |
+|---|---|
+| `V5` | Trigger de inmutabilidad sobre `entity_integrity_log` (impide UPDATE/DELETE) |
+| `V6` | Backfill idempotente: `purpose_family_id = id`, `version = 1`, `status = 'ACTIVE'` para purposes existentes |
+| `V7` | Elimina la constraint `UNIQUE` sobre `purposes.code` (el versionado permite el mismo código en versiones distintas de la misma familia) |
 
 ---
 
@@ -63,14 +119,21 @@ El endpoint `/verify` recorre todas las entradas ordenadas por `createdAt` y ver
 
 | Archivo | Rol |
 |---|---|
-| `audit/web/AuditController.java` | Endpoints de consulta y verificación |
-| `audit/application/service/AuditService.java` | Escritura al ledger con advisory lock y hash chain |
-| `audit/application/dto/AuditContext.java` | Builder para construir cada entrada antes de persistir |
-| `audit/infrastructure/persistence/SystemAuditLogRepository.java` | JPA + método `acquireAuditChainLock()` |
-| `entity/SystemAuditLog.java` | Entidad JPA — protegida por triggers en PostgreSQL |
+| `audit/web/AuditController.java` | Endpoints de auditoría e integridad |
+| `audit/application/service/AuditService.java` | Escritura al ledger operacional con advisory lock y hash chain |
+| `audit/application/service/IntegrityVerifier.java` | Verificación y registro en entity_integrity_log |
+| `audit/application/service/IntegrityScheduler.java` | Scheduler diario (3am) — cubre las 4 entidades |
+| `audit/application/service/AgreementTraceService.java` | Traza la cadena completa de un agreement |
+| `audit/application/dto/AgreementTraceResponse.java` | Respuesta con DocumentLink, TemplateLink, PurposeLink, overallIntegrity |
+| `audit/application/dto/EntityIntegrityLogResponse.java` | Respuesta de verificación individual |
+| `audit/application/dto/VerifyIntegrityRequest.java` | Request de verificación (entityType, entityId, checkType) |
+| `audit/infrastructure/persistence/EntityIntegrityLogRepository.java` | Repositorio de entity_integrity_log |
+| `audit/infrastructure/persistence/SystemAuditLogRepository.java` | Repositorio del ledger operacional |
+| `entity/EntityIntegrityLog.java` | Entidad JPA — protegida por trigger V5 |
+| `entity/SystemAuditLog.java` | Entidad JPA — protegida por triggers de auditoría |
 
 ---
 
-## Nota sobre el trigger de PostgreSQL
+## Nota sobre triggers de PostgreSQL
 
-La tabla `system_audit_log` tiene triggers que impiden UPDATE y DELETE. No intentar modificar filas directamente en psql — el trigger lanzará una excepción. Para correcciones, agregar una nueva entrada de `CORRECCION` con el `oldData`/`newData` correspondiente.
+Ambas tablas (`system_audit_log` y `entity_integrity_log`) tienen triggers que impiden UPDATE y DELETE. No intentar modificar filas directamente en psql — el trigger lanzará una excepción.

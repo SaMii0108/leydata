@@ -25,6 +25,8 @@ PUBLISHED  →  ARCHIVED
 
 Solo el DPO puede mover un documento entre estados. Un documento `PUBLISHED` no puede ser modificado — cualquier cambio requiere crear una nueva versión (`DRAFT`) y pasar por el workflow completo.
 
+**Un solo `PUBLISHED` por template:** si el documento tiene `templateId` asignado (vínculo opcional a `Templates`), `publish()` archiva automáticamente cualquier otro documento `PUBLISHED` con el mismo `templateId` antes de publicar la nueva versión — mismo patrón que `TemplateService.activate()` usa para desactivar la versión anterior de un `TEMPLATE_KEY`. Esto garantiza que "el documento vigente de este template" sea siempre una búsqueda sin ambigüedad, lo cual usa `AgreementService.create()` para resolver `documentId` automáticamente cuando no viene en el request (ver [`docs/agreements-module.md`](agreements-module.md)) y el endpoint B2B `GET /api/templates/resolve` del Orquestador (ver [`docs/orchestrator-module.md`](orchestrator-module.md)).
+
 ---
 
 ## Categorías de documento (`DocumentCategory`)

@@ -23,7 +23,9 @@ public class CreateAgreementRequest {
     @NotNull(message = "El templateId es obligatorio")
     private UUID templateId;
 
-    @NotNull(message = "El documentId es obligatorio")
+    // Opcional: si no se envía, se resuelve automáticamente el documento PUBLISHED
+    // vinculado al template (ver AgreementService.create()). Se mantiene como override
+    // explícito por retrocompatibilidad con integraciones que ya lo envían.
     private UUID documentId;
 
     @NotEmpty(message = "Debe incluir al menos una decisión de purpose")

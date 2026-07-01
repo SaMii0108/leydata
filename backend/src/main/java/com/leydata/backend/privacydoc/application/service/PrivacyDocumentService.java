@@ -364,6 +364,27 @@ public class PrivacyDocumentService {
                 "Todas las finalidades vinculadas deben estar en estado APPROVED para publicar el documento.");
         }
 
+        // Regla: a lo sumo un documento PUBLISHED por template. Si ya existe uno, se archiva
+        // automáticamente — mismo patrón que TemplateService.activate() con isActive.
+        if (doc.getTemplateId() != null) {
+            documentRepo.findByTemplateIdAndStatusAndIsActiveTrue(doc.getTemplateId(), DocumentStatus.PUBLISHED)
+                    .filter(previous -> !previous.getId().equals(doc.getId()))
+                    .ifPresent(previous -> {
+                        previous.setStatus(DocumentStatus.ARCHIVED);
+                        documentRepo.save(previous);
+
+                        auditService.log(AuditContext.builder()
+                                .tableName("privacy_documents")
+                                .recordId(previous.getId())
+                                .action("DOCUMENT_ARCHIVED_POR_NUEVA_VERSION")
+                                .oldData(Map.of("status", "PUBLISHED"))
+                                .newData(Map.of("status", "ARCHIVED"))
+                                .actorId(publishedBy)
+                                .actorRole(securityContextHelper.getActorRole())
+                                .build());
+                    });
+        }
+
         // Generar PDF en memoria y almacenar bytes + hash
         doc.setPublishAt(LocalDateTime.now());
         PdfGeneratorService.PdfResult result = pdfGenerator.generate(doc);
@@ -494,6 +515,16 @@ public class PrivacyDocumentService {
                         ? "Integridad verificada: el PDF almacenado coincide con el hash registrado"
                         : "⚠ ALERTA: el hash del PDF no coincide — posible corrupción o alteración")
                 .build();
+    }
+
+    /** Recalcula el hash del PDF sin chequeo de permisos — usado por IntegrityVerifier. */
+    @Transactional(readOnly = true)
+    public String recalculateHash(UUID id) {
+        PrivacyDocuments doc = findOrThrow(id);
+        if (doc.getPdfContent() == null || doc.getPdfContent().length == 0) {
+            return null;
+        }
+        return pdfGenerator.computeCurrentHash(doc.getPdfContent());
     }
 
     @Transactional(readOnly = true)

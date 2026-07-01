@@ -599,6 +599,39 @@
             "url": "{{baseUrl}}/api/purposes/<uuid-aqui>/deactivate",
             "description": "Soft-delete de la finalidad. Requiere DPO o ADMIN."
           }
+        },
+        {
+          "name": "Nueva Versión de Finalidad",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/purposes/<uuid-purpose>/new-version",
+            "description": "Crea una nueva versión de una finalidad bloqueada (locked=true). La versión anterior pasa a SUPERSEDED. Todas las versiones comparten purposeFamilyId. 409 CONFLICT si la finalidad no está bloqueada. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Historial de Versiones (Familia)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/purposes/family/<uuid-purpose-family>",
+            "description": "Lista todas las versiones de una familia de finalidades en orden descendente. purposeFamilyId = id de la primera versión creada. Requiere DPO o ADMIN."
+          }
+        },
+        {
+          "name": "Versión Activa (Familia)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/purposes/active/<uuid-purpose-family>",
+            "description": "Obtiene la versión ACTIVE de una familia de finalidades. Solo puede existir una versión ACTIVE por familia a la vez. Requiere DPO o ADMIN."
+          }
         }
       ]
     },
@@ -1151,6 +1184,75 @@
             "url": "{{baseUrl}}/api/audit/logs/verify",
             "description": "Verifica la integridad de la cadena de logs. Requiere ADMIN."
           }
+        },
+        {
+          "name": "Verificar Integridad Entidad",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entityType\": \"AGREEMENT\",\n  \"entityId\": \"<uuid-entidad>\",\n  \"checkType\": \"MANUAL\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/audit/integrity/verify",
+            "description": "Recalcula el hash SHA-256 de una entidad y lo compara con el almacenado. Registra en entity_integrity_log. entityType: AGREEMENT | TEMPLATE | DOCUMENT | PURPOSE. checkType: MANUAL | ON_DEMAND | SCHEDULED. Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Historial de Integridad Entidad",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit/integrity/log?entityType=AGREEMENT&entityId=<uuid-entidad>",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit", "integrity", "log"],
+              "query": [
+                { "key": "entityType", "value": "AGREEMENT" },
+                { "key": "entityId", "value": "<uuid-entidad>" }
+              ]
+            },
+            "description": "Historial de verificaciones de integridad de una entidad, en orden descendente. entityType: AGREEMENT | TEMPLATE | DOCUMENT | PURPOSE. Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Verificaciones Fallidas",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit/integrity/failed",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit", "integrity", "failed"],
+              "query": [
+                { "key": "entityType", "value": "AGREEMENT", "disabled": true }
+              ]
+            },
+            "description": "Lista verificaciones con isValid = false. Sin filtro: todas las entidades. Con ?entityType=AGREEMENT solo agreements. Requiere ADMIN."
+          }
+        },
+        {
+          "name": "Traza Completa Agreement",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit/trace/agreement/<uuid-agreement>",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit", "trace", "agreement", "<uuid-agreement>"]
+            },
+            "description": "Traza completa del agreement: template (hash actual), documento (hash actual), cada purpose (purposeHash al consentir vs. hash actual). Campo overallIntegrity: OK | MISMATCH | PARTIAL. Requiere ADMIN."
+          }
         }
       ]
     },
@@ -1234,6 +1336,11 @@
               ],
               "query": [
                 {
+                  "key": "domainId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
                   "key": "templateKey",
                   "value": "",
                   "disabled": true
@@ -1265,7 +1372,7 @@
                 }
               ]
             },
-            "description": "Lista templates con filtros opcionales. Params: templateKey, isActive, createdBy, approvedBy, createdAfter, createdBefore. Requiere DPO o ADMIN.",
+            "description": "Lista templates con filtros opcionales. Params: domainId, templateKey, isActive, createdBy, approvedBy, createdAfter, createdBefore. Requiere DPO o ADMIN.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1293,7 +1400,7 @@
                 "templates"
               ]
             },
-            "description": "Crea template en DRAFT. templateKey identifica la familia de versiones. Requiere DPO o ADMIN.",
+            "description": "Crea template en DRAFT. domainId es obligatorio (TEMPLATE_KEY es único por dominio, no global). templateKey identifica la familia de versiones dentro de ese dominio. Requiere DPO o ADMIN.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1306,7 +1413,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"templateKey\": \"bienvenida-clientes\",\n  \"name\": \"Template de bienvenida para clientes\",\n  \"title\": \"Gestión de tus datos personales\",\n  \"description\": \"Detalle de cómo tratamos tus datos al registrarte\",\n  \"version\": 1,\n  \"changeReason\": \"Versión inicial\"\n}",
+              "raw": "{\n  \"domainId\": \"<uuid-dominio>\",\n  \"templateKey\": \"bienvenida-clientes\",\n  \"name\": \"Template de bienvenida para clientes\",\n  \"title\": \"Gestión de tus datos personales\",\n  \"description\": \"Detalle de cómo tratamos tus datos al registrarte\",\n  \"version\": 1,\n  \"changeReason\": \"Versión inicial\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1380,7 +1487,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/templates/family/<templateKey>",
+              "raw": "{{baseUrl}}/api/templates/family/<templateKey>?domainId=<uuid-dominio>",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1389,9 +1496,15 @@
                 "templates",
                 "family",
                 "<templateKey>"
+              ],
+              "query": [
+                {
+                  "key": "domainId",
+                  "value": "<uuid-dominio>"
+                }
               ]
             },
-            "description": "Devuelve todas las versiones de un templateKey en orden ascendente. Requiere DPO o ADMIN.",
+            "description": "Devuelve todas las versiones de un templateKey en orden ascendente, dentro del dominio indicado. domainId es obligatorio. Requiere DPO o ADMIN.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1410,7 +1523,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/templates/active/<templateKey>",
+              "raw": "{{baseUrl}}/api/templates/active/<templateKey>?domainId=<uuid-dominio>",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1419,9 +1532,54 @@
                 "templates",
                 "active",
                 "<templateKey>"
+              ],
+              "query": [
+                {
+                  "key": "domainId",
+                  "value": "<uuid-dominio>"
+                }
               ]
             },
-            "description": "Devuelve la versión ACTIVE del templateKey. 404 si no hay ninguna activa. Requiere DPO o ADMIN.",
+            "description": "Devuelve la versión ACTIVE del templateKey dentro del dominio indicado. domainId es obligatorio. 404 si no hay ninguna activa. Requiere DPO o ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Resolver Template (B2B — uso interno Orquestador)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/templates/resolve?domainId=<uuid-dominio>&templateKey=<templateKey>",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "resolve"
+              ],
+              "query": [
+                {
+                  "key": "domainId",
+                  "value": "<uuid-dominio>"
+                },
+                {
+                  "key": "templateKey",
+                  "value": "<templateKey>"
+                }
+              ]
+            },
+            "description": "Resuelve el templateId ACTIVE y el documentId publicado vigente para un templateKey + domainId. Lo llama el Orquestador con su identidad de servicio M2M — solo requiere autenticación, no rol DPO/ADMIN. Útil para probar la resolución manualmente con cualquier token válido.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1469,6 +1627,11 @@
           "request": {
             "method": "POST",
             "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"forceReconsent\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/templates/<uuid-template>/activate",
               "host": [
@@ -1481,7 +1644,7 @@
                 "activate"
               ]
             },
-            "description": "Activa template APPROVED. Sella SHA-256 y desactiva versión anterior del mismo templateKey. Transición: APPROVED → ACTIVE. Requiere DPO o ADMIN.",
+            "description": "Activa template APPROVED. Sella SHA-256 y desactiva versión anterior del mismo templateKey. Transición: APPROVED → ACTIVE. Body opcional: forceReconsent=true fuerza reconsent en agreements existentes con versión anterior — el orquestador detectará REQUIRES_RECONSENT en el próximo check. Requiere DPO o ADMIN.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1684,7 +1847,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "agreements"]
             },
-            "description": "Registra un nuevo acuerdo de consentimiento. Si ya existe ACTIVE para (dataSubjectId, templateId), lo revoca y crea uno nuevo (reconsent). Genera hash SHA-256 encadenado.",
+            "description": "Registra un nuevo acuerdo de consentimiento. documentId es opcional — si no se envía, se resuelve automáticamente el documento PUBLISHED vinculado al templateId. Si ya existe ACTIVE para (dataSubjectId, templateId), lo revoca y crea uno nuevo (reconsent). Genera hash SHA-256 encadenado.",
             "auth": {
               "type": "bearer",
               "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
@@ -1752,58 +1915,288 @@
           }
         },
         {
-          "name": "Verificar Integridad",
+          "name": "Revocar Agreement",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjectId\": \"<uuid-titular>\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/<uuid-agreement>/revoke",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "<uuid-agreement>", "revoke"]
+            },
+            "description": "Revoca manualmente un agreement activo. Cambia status a REVOKED y todas sus AgreementsPurposes a REVOKED. Invalida caché Redis del orquestador vía evento AFTER_COMMIT. 409 si ya está revocado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Lifecycle Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/lifecycle-check?subjectIdentifier=RUT:12345678-9&domainId={{domainId}}&templateKey=ONBOARDING_CLIENTE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "lifecycle-check"],
+              "query": [
+                { "key": "subjectIdentifier", "value": "RUT:12345678-9" },
+                { "key": "domainId", "value": "{{domainId}}" },
+                { "key": "templateKey", "value": "ONBOARDING_CLIENTE" }
+              ]
+            },
+            "description": "Evalúa el estado del ciclo de vida del consentimiento. Estados: ALLOWED (activo), EXPIRED (vencido por retención), REQUIRES_RECONSENT (template actualizado con forceReconsent=true), PENDING (sin consentimiento). Usado internamente por el Orquestador en el flujo CHECK.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Subject Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/subject-summary?subjectIdentifier=RUT:12345678-9&domainId={{domainId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "subject-summary"],
+              "query": [
+                { "key": "subjectIdentifier", "value": "RUT:12345678-9" },
+                { "key": "domainId", "value": "{{domainId}}" }
+              ]
+            },
+            "description": "Devuelve todas las finalidades del titular en el dominio con su estado accepted/revocado. Usado para el portal de preferencias del titular (Caso 3a) y para revocación granular (Caso 3b).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Pending Deletions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agreements/pending-deletions?domainId={{domainId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agreements", "pending-deletions"],
+              "query": [
+                { "key": "domainId", "value": "{{domainId}}" }
+              ]
+            },
+            "description": "Lista finalidades vencidas (expiresAt < now) cuyos datos no han sido eliminados. Cumplimiento de plazos de retención Ley 21.719. El campo anonymizeAfter indica si se debe anonimizar en lugar de eliminar.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Confirm Deletion",
           "request": {
             "method": "POST",
             "header": [],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"checkType\": \"MANUAL\"\n}",
+              "raw": "{\n  \"subjectIdentifier\": \"RUT:12345678-9\",\n  \"purposeId\": \"<uuid-finalidad>\",\n  \"deletedAt\": \"2026-06-30T10:00:00\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/agreements/<uuid-agreement>/verify-integrity",
+              "raw": "{{baseUrl}}/api/agreements/confirm-deletion",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "agreements", "<uuid-agreement>", "verify-integrity"]
+              "path": ["api", "agreements", "confirm-deletion"]
             },
-            "description": "Recalcula SHA-256 y compara con el hash almacenado. checkType: MANUAL | SCHEDULED | TRIGGERED. Registra el resultado en el ledger.",
+            "description": "Confirma que el sistema cliente eliminó los datos del titular para una finalidad vencida. Registra evidencia en system_audit_log (entityType=DELETION_CONFIRMATION) para cumplimiento Ley 21.719. Responde 204 No Content.",
             "auth": {
               "type": "bearer",
               "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "Orquestador B2B",
+      "item": [
+        {
+          "name": "Obtener Token Sistema Externo (empresa-cliente)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.environment.set('externalToken', json.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "client_credentials" },
+                { "key": "client_id", "value": "crm-sistema" },
+                { "key": "client_secret", "value": "{{kcOrchestratorClientSecret}}" }
+              ]
+            },
+            "url": "{{keycloakUrl}}/realms/empresa-cliente/protocol/openid-connect/token",
+            "description": "Obtiene un token M2M del realm empresa-cliente para el sistema CRM. Guarda el token en {{externalToken}}. Requiere el claim leydata_domain configurado como protocol mapper en el client crm-sistema de Keycloak."
+          }
         },
         {
-          "name": "Historial de Integridad",
+          "name": "Verificar Consentimiento (CHECK)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/agreements/<uuid-agreement>/integrity-log",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "agreements", "<uuid-agreement>", "integrity-log"]
+              "raw": "{{orchestratorUrl}}/consent/check?subjectId=RUT:12345678-9&purposeId=<uuid-finalidad>",
+              "host": ["{{orchestratorUrl}}"],
+              "path": ["consent", "check"],
+              "query": [
+                { "key": "subjectId", "value": "RUT:12345678-9" },
+                { "key": "purposeId", "value": "<uuid-finalidad>" }
+              ]
             },
-            "description": "Historial de verificaciones de integridad del agreement. Cada entrada muestra hash almacenado, recalculado e isValid.",
+            "description": "Caso 0. Verifica si el titular tiene consentimiento activo para una finalidad. Cache Redis primero (TTL 15 min); si miss, evalúa lifecycle en el backend. Estados: ALLOWED, EXPIRED, REQUIRES_RECONSENT, PENDING.",
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+              "bearer": [{ "key": "token", "value": "{{externalToken}}", "type": "string" }]
             }
           }
         },
         {
-          "name": "Verificaciones Fallidas",
+          "name": "Contenido Template (Textos Legales)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/agreements/integrity-log/failed",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "agreements", "integrity-log", "failed"]
+              "raw": "{{orchestratorUrl}}/consent/template-content?templateKey=ONBOARDING_CLIENTE",
+              "host": ["{{orchestratorUrl}}"],
+              "path": ["consent", "template-content"],
+              "query": [
+                { "key": "templateKey", "value": "ONBOARDING_CLIENTE" }
+              ]
             },
-            "description": "Lista todas las verificaciones de integridad fallidas (isValid = false) de todos los agreements. Para auditoría.",
+            "description": "Caso 1. Obtiene textos legales del template activo para el dominio del CRM. Usar antes de mostrar el formulario de consentimiento al titular. domainId se extrae del claim leydata_domain del JWT.",
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+              "bearer": [{ "key": "token", "value": "{{externalToken}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Capturar Consentimiento",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjectIdentifier\": \"RUT:12345678-9\",\n  \"templateKey\": \"ONBOARDING_CLIENTE\",\n  \"purposes\": [\n    { \"purposeId\": \"<uuid-finalidad>\", \"accepted\": true }\n  ],\n  \"captureChannel\": \"WEB\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{orchestratorUrl}}/consent/capture",
+            "description": "Caso 2. Registra el consentimiento del titular. El Orquestador resuelve templateKey → templateId+documentId y llama POST /api/agreements en LeyData. Pre-calienta Redis con ALLOWED por cada purpose aceptada.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{externalToken}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Estado del Titular (Portal)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orchestratorUrl}}/consent/subject/RUT:12345678-9",
+              "host": ["{{orchestratorUrl}}"],
+              "path": ["consent", "subject", "RUT:12345678-9"]
+            },
+            "description": "Caso 3a. Devuelve el estado de todas las finalidades del titular en el dominio del CRM. Usado para renderizar el portal de preferencias con switches por finalidad.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{externalToken}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Revocar Finalidad Específica",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjectId\": \"RUT:12345678-9\",\n  \"purposeId\": \"<uuid-finalidad-a-revocar>\",\n  \"templateKey\": \"ONBOARDING_CLIENTE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{orchestratorUrl}}/consent/revoke-purpose",
+            "description": "Caso 3b. Revoca una finalidad individual sin afectar las demás. Usa re-consent (nuevo agreement) en lugar de modificar el existente para preservar el hash SHA-256. El agreement anterior queda archivado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{externalToken}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Revocar Todo el Consentimiento",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agreementId\": \"<uuid-agreement>\",\n  \"subjectIdentifier\": \"RUT:12345678-9\",\n  \"reason\": \"TITULAR_SOLICITUD\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{orchestratorUrl}}/consent/revoke",
+            "description": "Caso 4. Revoca el agreement completo (todas las finalidades). Equivale a retirar todo el consentimiento del titular.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{externalToken}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Datos Pendientes de Eliminación",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{orchestratorUrl}}/consent/pending-deletions",
+            "description": "Caso 6. Lista finalidades vencidas cuyos datos aún no fueron eliminados. Obligación de retención Ley 21.719. anonymizeAfter=true indica que la política exige anonimizar en lugar de eliminar definitivamente.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{externalToken}}", "type": "string" }]
+            }
+          }
+        },
+        {
+          "name": "Confirmar Eliminación de Datos",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjectId\": \"RUT:12345678-9\",\n  \"purposeId\": \"<uuid-finalidad>\",\n  \"deletedAt\": \"2026-06-30T10:00:00\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{orchestratorUrl}}/consent/confirm-deletion",
+            "description": "Caso 7. Confirma que el CRM eliminó los datos del titular para una finalidad vencida. Registra evidencia en system_audit_log para cumplimiento ante la APDP (Ley 21.719). Responde 204 No Content.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{externalToken}}", "type": "string" }]
             }
           }
         }

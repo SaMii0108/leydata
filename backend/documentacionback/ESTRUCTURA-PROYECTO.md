@@ -40,7 +40,8 @@ backend/src/main/java/com/leydata/backend/
 │   ├── TemplatePurposes.java
 │   ├── Agreements.java
 │   ├── AgreementsPurposes.java
-│   ├── AgreementIntegrityLog.java
+│   ├── AgreementIntegrityLog.java       ← legacy (referenciada por agreement/)
+│   ├── EntityIntegrityLog.java          ← nueva (feature/trazabilidad) — mapeada a entity_integrity_log
 │   ├── AgreementMetadata.java
 │   ├── DataSubjects.java
 │   ├── DataCategories.java
@@ -143,7 +144,8 @@ backend/src/main/java/com/leydata/backend/
 ├── purposes/                            ← módulo: finalidades de tratamiento de datos
 │   ├── domain/
 │   │   └── exception/
-│   │       └── PurposeNotFoundException.java
+│   │       ├── PurposeNotFoundException.java
+│   │       └── PurposeNotLockedException.java  ← HTTP 409 — lanzada por newVersion() si locked=false
 │   ├── application/
 │   │   ├── dto/
 │   │   │   ├── CreatePurposeRequest.java
@@ -178,16 +180,23 @@ backend/src/main/java/com/leydata/backend/
 │   └── web/
 │       └── PurposeDataCategoryController.java
 │
-├── audit/                               ← módulo: log de auditoría inmutable
+├── audit/                               ← módulo: log de auditoría + integridad de entidades
 │   ├── application/
 │   │   ├── dto/
 │   │   │   ├── AuditContext.java
-│   │   │   └── AuditLogResponseDto.java
+│   │   │   ├── AuditLogResponseDto.java
+│   │   │   ├── VerifyIntegrityRequest.java      ← request de verificación (entityType, entityId, checkType)
+│   │   │   ├── EntityIntegrityLogResponse.java  ← respuesta de verificación individual
+│   │   │   └── AgreementTraceResponse.java      ← traza completa: DocumentLink, TemplateLink, PurposeLink, overallIntegrity
 │   │   └── service/
-│   │       └── AuditService.java
+│   │       ├── AuditService.java
+│   │       ├── IntegrityVerifier.java            ← despacha a recalculateHash() por entidad; escribe entity_integrity_log
+│   │       ├── IntegrityScheduler.java           ← @Scheduled(cron="0 0 3 * * *"); cubre AGREEMENT, TEMPLATE, DOCUMENT, PURPOSE
+│   │       └── AgreementTraceService.java        ← traza completa de un agreement; drift check de purposes
 │   ├── infrastructure/
 │   │   └── persistence/
-│   │       └── SystemAuditLogRepository.java
+│   │       ├── SystemAuditLogRepository.java
+│   │       └── EntityIntegrityLogRepository.java ← repositorio de entity_integrity_log
 │   └── web/
 │       └── AuditController.java
 │
@@ -244,6 +253,7 @@ backend/src/main/java/com/leydata/backend/
 │   │   │   ├── CreateTemplateRequest.java
 │   │   │   ├── TemplateResponse.java
 │   │   │   ├── TemplateVerifyResponse.java
+│   │   │   ├── TemplateResolutionResponse.java  ← resolución B2B (templateKey+domainId → templateId+documentId)
 │   │   │   ├── AddTemplatePurposeRequest.java
 │   │   │   ├── UpdateTemplatePurposeRequest.java
 │   │   │   └── TemplatePurposeResponse.java
@@ -272,9 +282,7 @@ backend/src/main/java/com/leydata/backend/
 │   │   │   ├── AgreementMetadataRequest.java
 │   │   │   ├── AgreementResponse.java
 │   │   │   ├── AgreementPurposeResponse.java
-│   │   │   ├── AgreementMetadataResponse.java
-│   │   │   ├── AgreementIntegrityLogResponse.java
-│   │   │   └── VerifyIntegrityRequest.java
+│   │   │   └── AgreementMetadataResponse.java
 │   │   └── service/
 │   │       ├── AgreementService.java
 │   │       └── AgreementRevocationCacheListener.java ← @TransactionalEventListener(AFTER_COMMIT): invalida Redis
@@ -282,8 +290,7 @@ backend/src/main/java/com/leydata/backend/
 │   │   └── persistence/
 │   │       ├── AgreementsRepository.java
 │   │       ├── AgreementsPurposesRepository.java
-│   │       ├── AgreementMetadataRepository.java
-│   │       └── AgreementIntegrityLogRepository.java
+│   │       └── AgreementMetadataRepository.java
 │   └── web/
 │       └── AgreementController.java
 │
@@ -456,9 +463,9 @@ En el modelo Keycloak-first no se siembran roles en la BD local (Keycloak los ge
 | Solicitudes de propósito | `purpose/` | `/api/purpose-requests/**` | JEFE_DOMINIO (crear) · DPO/ADMIN (revisar) |
 | Bases de licitud | `legalbasis/` | `/api/legal-basis/**` | DPO · ADMIN · JEFE_DOMINIO (solo lectura) |
 | Categorías de datos | `datacategory/` | `/api/data-categories/**` | DPO · ADMIN (escritura) · JEFE_DOMINIO (lectura) |
-| Finalidades | `purposes/` | `/api/purposes/**` | DPO · ADMIN (escritura) · JEFE_DOMINIO (lectura) |
+| Finalidades | `purposes/` | `/api/purposes/**` — incluye versionado: `POST /{id}/new-version`, `GET /family/{familyId}`, `GET /active/{familyId}` | DPO · ADMIN (escritura) · JEFE_DOMINIO (lectura) |
 | Categorías por finalidad | `purposedatacategory/` | `/api/purposes/{id}/data-categories/**` | DPO · ADMIN (escritura) · JEFE_DOMINIO (lectura) |
-| Auditoría | `audit/` | `/api/audit/logs/**` | ADMIN |
+| Auditoría | `audit/` | `/api/audit/logs/**` · `/api/audit/integrity/**` · `/api/audit/trace/**` | ADMIN |
 | Documentos de privacidad | `privacydoc/` | `/api/privacy-documents/**` | DPO (escritura) · cualquier autenticado (lectura) |
 | Notificaciones in-app | `notification/` | `/api/notifications/**` | Cualquier autenticado |
 | Templates de consentimiento | `template/` | `/api/templates/**` | DPO · ADMIN |

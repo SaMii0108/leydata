@@ -31,6 +31,8 @@ La tabla `users` local almacena únicamente el `keycloak_id` y metadatos de nego
 ### `POST /api/users` — Crear usuario
 Crea el usuario simultáneamente en Keycloak y en la BD local. Si Keycloak falla, no se crea en BD. Si la BD falla después de Keycloak, se hace rollback eliminando el usuario de Keycloak (compensación manual en `KeycloakAdminService.deleteUser()`).
 
+**Regla:** un `JEFE_DOMINIO` solo puede tener **un** dominio asignado a la vez. `domainIds` sigue siendo un array por compatibilidad con el contrato existente, pero `UserService` rechaza con 400 si se envían 2 o más. Asignar un nuevo dominio a un jefe que ya administra otro requiere primero liberarlo del anterior (`domainIds: []`) o reemplazar la asignación completa.
+
 ```json
 // Request
 {

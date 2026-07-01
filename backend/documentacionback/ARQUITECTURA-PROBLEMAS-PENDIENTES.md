@@ -1,7 +1,7 @@
 # LeyData — Problemas Arquitectónicos y Deuda Técnica Pendiente
 
 **Fecha de análisis:** 2026-06-27  
-**Última actualización:** 2026-06-29  
+**Última actualización:** 2026-06-30  
 **Branch:** feature/orchestrator-module  
 **Contexto:** Evaluación pre-producción. La Ley 21.719 entra en vigor en diciembre de 2026.
 
@@ -162,6 +162,24 @@ Ver guía completa: [`orchestrator/INTEGRATION.md`](../../orchestrator/INTEGRATI
 
 ---
 
+### ✅ ~~`POST /consent/capture` exigía que el CRM ya conociera `templateId`/`documentId` internos~~ — RESUELTO
+
+**Problema original:** el diseño previsto era que el sistema cliente solo necesitara conocer un identificador de negocio del template (ej. `ONBOARDING_CLIENTE`); en cambio, `CaptureConsentRequest` exigía `templateId` (UUID interno) y `documentId` directamente — el Orquestador actuaba como simple "pasamanos" en vez de resolver esos IDs por su cuenta. Identificado y corregido en la rama `feature/orchestrator-module`, junto con el aislamiento por dominio de `Templates` (ver sección de Templates en [`docs/templates-module.md`](../../docs/templates-module.md)).
+
+**Fix aplicado:**
+- `Templates.domainId` (FK a `Domains`, con unicidad compuesta `domain_id + template_key + version`) — un mismo `templateKey` de negocio ya no colisiona entre dominios distintos.
+- Nuevo endpoint interno `GET /api/templates/resolve?domainId=&templateKey=` (`TemplateController`, `@PreAuthorize("isAuthenticated()")` — no requiere rol DPO/ADMIN, lo llama el Orquestador con su propia identidad de servicio M2M).
+- `PrivacyDocumentService.publish()` ahora archiva automáticamente cualquier documento `PUBLISHED` previo con el mismo `templateId` — garantiza que "el documento vigente de un template" sea una búsqueda sin ambigüedad (`PrivacyDocumentsRepository.findByTemplateIdAndStatusAndIsActiveTrue`).
+- `CaptureConsentRequest` del Orquestador cambió `templateId` (UUID) por `templateKey` (String, identificador de negocio); `documentId` pasó a opcional.
+- `ConsentController.extractDomainId()` lee el claim `leydata_domain` del JWT del sistema cliente (configurado por protocol mapper en su IdP, por client) y lo pasa explícito a `ConsentService.capture()` — **el backend nunca ve este claim**, porque el Orquestador llama al backend con su propia identidad de servicio (`client_registration_id: leydata-system`), no con el JWT del cliente. La resolución de dominio ocurre íntegramente dentro del Orquestador.
+- `AgreementService.create()` resuelve `documentId` automáticamente cuando no viene en el request, vía el mismo método de `PrivacyDocumentsRepository`.
+
+**Decisión de diseño descartada:** se evaluó agregar `documentId` como FK directa en `Templates` (Template → Document), pero `PrivacyDocuments.templateId` ya existía en sentido inverso (Document → Template) desde antes de esta iteración — agregar la regla de unicidad sobre el campo existente fue un cambio más chico y evitó una relación bidireccional redundante.
+
+Ver flujo actualizado: [`orchestrator/INTEGRATION.md`](../../orchestrator/INTEGRATION.md), [`docs/orchestrator-module.md`](../../docs/orchestrator-module.md), [`docs/agreements-module.md`](../../docs/agreements-module.md).
+
+---
+
 ### ✅ ~~Falta el ciclo de captura de consentimiento~~ — RESUELTO
 
 **Fix aplicado:** Módulo `agreement/` implementado con ciclo completo.
@@ -171,9 +189,12 @@ Ver guía completa: [`orchestrator/INTEGRATION.md`](../../orchestrator/INTEGRATI
 - `GET /api/agreements/active?dataSubjectId=&templateId=` — consulta para el orquestador (200 si existe, 404 si no)
 - `GET /api/agreements` — listado con filtros opcionales
 - `GET /api/agreements/{id}` — detalle completo con purposes
-- `POST /api/agreements/{id}/verify-integrity` — verificación SHA-256 bajo demanda
-- `GET /api/agreements/{id}/integrity-log` — historial de verificaciones
-- `GET /api/agreements/integrity-log/failed` — verificaciones fallidas para auditoría
+
+**Verificación de integridad** — centralizada en el módulo `audit/` (branch feature/trazabilidad):
+- `POST /api/audit/integrity/verify` — verificación SHA-256 bajo demanda para AGREEMENT, TEMPLATE, DOCUMENT o PURPOSE
+- `GET  /api/audit/integrity/log?entityType=&entityId=` — historial de verificaciones
+- `GET  /api/audit/integrity/failed?entityType=` — verificaciones fallidas para auditoría
+- `GET  /api/audit/trace/agreement/{id}` — traza completa: template + documento + purposes con drift check
 
 **Integridad:** cada agreement calcula un SHA-256 encadenado al agreement anterior (ledger análogo al de `system_audit_log`).
 
@@ -261,6 +282,7 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 | ~~Usuarios de prueba JEFE_DOMINIO y DPO no existían en el script~~ | ✅ Resuelto — `setup-keycloak.sh` ahora crea `jefe@test.cl` (JEFE_DOMINIO) y `dpo@leydata.cl` (DPO). | `scripts/setup-keycloak.sh` |
 | `AuditService` es un god node (26 edges en el grafo) | Considerar separar en `AuditWriter` (persistencia) y `AuditHashChain` (integridad) para facilitar testing unitario y futura migración a un servicio separado. | `AuditService.java` |
 | `ddl-auto=update` en producción | Hibernate gestiona el esquema automáticamente — válido para desarrollo, peligroso en producción (no hay rollback, no hay historial, riesgo con múltiples instancias). Antes del go-live migrar a **Flyway**: (1) exportar esquema actual como `V1__baseline.sql`, (2) cambiar a `ddl-auto=validate`, (3) todo cambio futuro en scripts `V2__...sql`. | `application.properties` |
+| `DomainsPage.tsx` permite asignar un jefe de dominio que ya lidera otro dominio sin advertirlo | El backend (`UserService.assignUserDomains()`/`createUser()`) ahora rechaza con 400 si a un usuario `JEFE_DOMINIO` se le intenta asignar más de un dominio (regla: un jefe de dominio = un dominio). El flujo "Asignar responsable" de `DomainsPage.tsx` (función `handleAssignSave`, ~línea 140-181) sigue armando el payload `domainIds` por **agregación** (`[...currentDomainIds, assignDomain.id]`) en vez de **reemplazo** — si un admin intenta asignar a un jefe que ya administra otro dominio, el request falla con un 400 poco claro en vez de mostrar la advertencia adecuada o reemplazar la asignación. Pendiente: (1) cambiar la llamada a `updateUser(newJefeId, { domainIds: [assignDomain.id] }, ...)` para que reemplace en vez de agregar, (2) en el `<select>` de "Responsable asignado" (~línea 394-407), marcar visualmente a los jefes que ya administran otro dominio para que el admin entienda que reasignarlos los mueve de dominio. | `frontend/src/pages/DomainsPage.tsx` |
 
 ---
 
@@ -274,7 +296,8 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 - [x] Implementar ciclo de revocación de consentimiento (`PATCH /api/agreements/{id}/revoke` — `AgreementService.revoke()`, audit log, IP real desde Orquestador)
 - [x] Crear endpoint de consulta de consentimiento B2B (`GET /consent/check` en el Orquestador, con caché Redis y JWT externo)
 - [x] Implementar `AgreementRevokedEvent` para invalidación activa de Redis (`AgreementRevocationCacheListener` con `@TransactionalEventListener(phase = AFTER_COMMIT)`)
-- [ ] Migrar gestión de esquema de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)
+- [x] Migraciones Flyway V5–V7 agregadas (feature/trazabilidad): trigger de inmutabilidad para `entity_integrity_log`, backfill de versionado de purposes, drop de UNIQUE en `purposes.code` — **aplicar manualmente** con psql (ver `docs/audit-module.md`)
+- [ ] Migrar gestión de esquema completo de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)
 - [ ] Correr corrida completa de pruebas de endpoints post todos los fixes
 
 ### Infraestructura

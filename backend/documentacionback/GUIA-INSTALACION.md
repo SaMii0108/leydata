@@ -72,23 +72,25 @@ DB_USER=admin
 DB_PASS=admin
 DB_NAME=leydata_db
 KC_BACKEND_SECRET=
-KC_ORCHESTRATOR_CLIENT_SECRET=
-EXTERNAL_JWKS_URI=http://localhost:8180/realms/empresa-cliente/protocol/openid-connect/certs
 ```
 
-Las primeras tres variables son fijas para el entorno de desarrollo local y no necesitan cambiarse. `KC_BACKEND_SECRET` se rellena en el paso 5 y `KC_ORCHESTRATOR_CLIENT_SECRET` en el paso 5b. `EXTERNAL_JWKS_URI` ya tiene el valor correcto para desarrollo local (realm `empresa-cliente`). Dejar los secrets vacíos por ahora.
+Las primeras tres variables son fijas para el entorno de desarrollo local y no necesitan cambiarse. `KC_BACKEND_SECRET` se rellena en el paso 5. Dejar vacío por ahora.
+
+> **¿Y el secret del Orquestador?** `KC_ORCHESTRATOR_CLIENT_SECRET` **no va en el `.env`**. Va en `docker-compose.override.yml` o se exporta como variable de entorno antes de `docker-compose up`. El `.env` es solo para el backend y la base de datos. Ver paso 6.
 
 ---
 
 ## 4. Infraestructura Docker
 
-Desde la raíz del proyecto:
+Desde la raíz del proyecto, levantar **solo la infraestructura base** (sin el Orquestador, que requiere un secret que aún no tenés):
 
 ```bash
-docker-compose up -d
+docker-compose up -d db db-replica pgbouncer keycloak-db keycloak redis
 ```
 
 Docker Compose lee el `.env` automáticamente para las credenciales de la base de datos. No es necesario pasar variables adicionales a este comando.
+
+> El Orquestador se levanta **después** del paso 6 (cuando ya tenés el secret). Intentar `docker-compose up -d` completo antes de ese paso levanta el Orquestador con `KC_ORCHESTRATOR_CLIENT_SECRET=dev-secret-placeholder`, que no funciona contra Keycloak real.
 
 Verificar que los contenedores estén corriendo:
 
@@ -258,19 +260,45 @@ El script también imprime el comando `curl` para obtener un token de prueba, qu
 
 ### El Orquestador necesita un client secret M2M
 
-El Orquestador usa `client_credentials` (M2M) para llamar a LeyData. Esto requiere un cliente confidencial en el realm `leydata` con un secret. El cliente `leydata-orchestrator` lo crea el script `setup-keycloak.sh` del paso 5.
+El Orquestador usa el flujo `client_credentials` para obtener tokens Bearer antes de cada llamada al Backend LeyData. Para eso necesita un cliente confidencial `leydata-orchestrator` en el realm `leydata`.
 
-Después de ejecutar `setup-keycloak.sh`, obtener el secret del cliente `leydata-orchestrator` desde la consola de administración de Keycloak:
+**El script `setup-keycloak.sh` no crea este cliente.** Hay que crearlo manualmente una sola vez con los siguientes comandos:
 
-```
-Keycloak Admin (http://localhost:8180) → Clients → leydata-orchestrator → Credentials → Client secret
+```bash
+# Obtener token de admin de Keycloak
+MASTER_TOKEN=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
+  -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# Crear el cliente (confidential, solo client_credentials)
+curl -s -X POST http://localhost:8180/admin/realms/leydata/clients \
+  -H "Authorization: Bearer $MASTER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientId": "leydata-orchestrator",
+    "enabled": true,
+    "publicClient": false,
+    "serviceAccountsEnabled": true,
+    "standardFlowEnabled": false,
+    "directAccessGrantsEnabled": false
+  }'
+
+# Obtener el UUID interno del cliente recién creado
+CLIENT_UUID=$(curl -s "http://localhost:8180/admin/realms/leydata/clients?clientId=leydata-orchestrator" \
+  -H "Authorization: Bearer $MASTER_TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+
+# Exportar el secret directamente en la sesión actual (para el paso 8)
+export KC_ORCHESTRATOR_CLIENT_SECRET=$(curl -s \
+  "http://localhost:8180/admin/realms/leydata/clients/$CLIENT_UUID/client-secret" \
+  -H "Authorization: Bearer $MASTER_TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
+
+echo "KC_ORCHESTRATOR_CLIENT_SECRET=$KC_ORCHESTRATOR_CLIENT_SECRET"
+echo "↑ Guardalo — se necesita cada vez que se levanta el contenedor del Orquestador."
 ```
 
-Copiar el valor y pegarlo en el `.env`:
-
-```
-KC_ORCHESTRATOR_CLIENT_SECRET=<secret copiado>
-```
+> **¿Dónde va el secret?** No va en el `.env`. Se exporta como variable de entorno en la misma terminal donde se ejecuta `docker-compose up` (paso 8). El `docker-compose.override.yml` ya tiene `${KC_ORCHESTRATOR_CLIENT_SECRET:-dev-secret-placeholder}` y Docker Compose lee la variable del sistema automáticamente.
 
 ---
 
@@ -364,75 +392,161 @@ Al arrancar, el backend ejecuta automáticamente `CatalogSeeder`, que siembra la
 
 **No se crea ningún usuario local.** Los usuarios de la BD local se crean exclusivamente vía `POST /api/users` (que los registra en Keycloak y en la BD simultáneamente). El único usuario que existe después de un reset limpio es `admin@leydata.cl` en Keycloak — creado por el script del paso 5.
 
+### Migraciones manuales (feature/trazabilidad) — V5, V6, V7
+
+Las migraciones V5–V7 se aplican **una sola vez después del primer arranque**. Hibernate crea las tablas vía `ddl-auto`, y luego hay que ejecutar estos tres scripts:
+
+```bash
+psql -U admin -d leydata_db -h localhost -p 5433 \
+  -f backend/src/main/resources/db/migration/V5__entity_integrity_log_trigger.sql
+
+psql -U admin -d leydata_db -h localhost -p 5433 \
+  -f backend/src/main/resources/db/migration/V6__purposes_versioning_backfill.sql
+
+psql -U admin -d leydata_db -h localhost -p 5433 \
+  -f backend/src/main/resources/db/migration/V7__purposes_code_not_unique.sql
+```
+
+| Script | Qué hace |
+|---|---|
+| `V5` | Trigger de inmutabilidad sobre `entity_integrity_log` (impide UPDATE/DELETE) |
+| `V6` | Backfill idempotente de campos de versionado en `purposes` (`purpose_family_id = id`, `version = 1`, `status = 'ACTIVE'`) |
+| `V7` | Elimina la constraint `UNIQUE` sobre `purposes.code` — el versionado permite el mismo código en versiones distintas |
+
+Estos scripts son idempotentes y no tienen efecto si se corren más de una vez.
+
 ---
 
 ## 8. Levantar el Orquestador
 
-El Orquestador es un servicio Spring Boot + Spring Cloud Gateway + WebFlux en el directorio `orchestrator/`. Corre en el puerto **8081**.
+El Orquestador es un servicio Spring WebFlux en el directorio `orchestrator/`. Corre en el puerto **8081** y **siempre se ejecuta como contenedor Docker** — no se corre con `mvn` directamente.
 
 ### Prerrequisitos
 
-- El backend está corriendo en `localhost:8080`
-- Redis está corriendo en `localhost:6379`
-- `KC_ORCHESTRATOR_CLIENT_SECRET` está configurado en el `.env`
+- El backend está corriendo en `localhost:8080` (paso 7)
+- Redis y Keycloak están corriendo (verificar con `docker ps`)
 - El realm `empresa-cliente` existe (paso 6)
+- `KC_ORCHESTRATOR_CLIENT_SECRET` fue exportado en la sesión actual (paso 6)
 
-### WSL / Linux
+### ⚠️ Si estás en WSL — actualizar la URL del backend
 
-```bash
-cd orchestrator
-KC_ORCHESTRATOR_CLIENT_SECRET=<secret> \
-EXTERNAL_JWKS_URI=http://localhost:8180/realms/empresa-cliente/protocol/openid-connect/certs \
-mvn spring-boot:run
-```
-
-O exportando desde el `.env`:
+El Orquestador corre dentro de Docker y necesita alcanzar el backend que corre en WSL (fuera de Docker). Editar `docker-compose.override.yml` antes de continuar:
 
 ```bash
-export $(grep -v '^#' .env | xargs)
-cd orchestrator && mvn spring-boot:run
+# Obtener la IP actual de WSL
+ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1
+# Ejemplo: 172.30.171.177
 ```
 
-### Windows PowerShell
-
-```powershell
-# Cargar variables del .env
-Get-Content .env | Where-Object { $_ -notmatch '^#' -and $_ -match '=' } | ForEach-Object {
-    $key, $value = $_ -split '=', 2
-    [System.Environment]::SetEnvironmentVariable($key.Trim(), $value.Trim(), 'Process')
-}
-cd orchestrator
-.\mvnw.cmd spring-boot:run
+En `docker-compose.override.yml`, reemplazar:
+```yaml
+LEYDATA_BACKEND_URL: http://host.docker.internal:8080
+```
+por:
+```yaml
+LEYDATA_BACKEND_URL: http://172.30.171.177:8080   # ← tu IP de WSL
 ```
 
-O setear manualmente:
+> En Mac y Windows nativo (Docker Desktop sin WSL) `host.docker.internal` funciona directamente — no hay que cambiar nada.
 
-```powershell
-$env:KC_ORCHESTRATOR_CLIENT_SECRET="<secret>"
-$env:EXTERNAL_JWKS_URI="http://localhost:8180/realms/empresa-cliente/protocol/openid-connect/certs"
-cd orchestrator
-.\mvnw.cmd spring-boot:run
+> La IP de WSL **cambia con cada reinicio**. Si el Orquestador dice "Connection refused" al backend, la IP cambió — actualizar y volver a levantar el contenedor.
+
+### Construir y levantar el contenedor
+
+```bash
+# Desde la raíz del proyecto (donde está docker-compose.yml)
+# Asegurarse de que KC_ORCHESTRATOR_CLIENT_SECRET está exportado (ver paso 6)
+echo $KC_ORCHESTRATOR_CLIENT_SECRET   # debe mostrar el secret, no vacío
+
+# Construir la imagen y levantar el contenedor
+docker-compose up -d --build orchestrator
+
+# Ver logs en tiempo real para confirmar que levantó
+docker logs leydata-orchestrator -f
 ```
 
-> **WSL — LEYDATA_BACKEND_URL:** El Orquestador corre como contenedor Docker y necesita alcanzar el backend que corre en WSL. El valor por defecto en `docker-compose.override.yml` es `http://host.docker.internal:8080`, que funciona en Mac y Windows nativo. En WSL, `host.docker.internal` apunta a Windows (no a WSL). Obtener la IP de WSL con `ip addr show eth0 | grep 'inet '` y actualizar `LEYDATA_BACKEND_URL` en `docker-compose.override.yml` antes de levantar el Orquestador como contenedor.
-
-### Variables de entorno del Orquestador
-
-| Variable | Valor por defecto | Descripción |
-|---|---|---|
-| `KC_ORCHESTRATOR_CLIENT_ID` | `leydata-orchestrator` | Client ID M2M en realm leydata |
-| `KC_ORCHESTRATOR_CLIENT_SECRET` | (requerido) | Secret del cliente M2M |
-| `KC_TOKEN_URI` | `http://localhost:8180/realms/leydata/...` | Token endpoint del realm leydata |
-| `LEYDATA_BACKEND_URL` | `http://localhost:8080` | URL del backend LeyData |
-| `EXTERNAL_JWKS_URI` | (requerido) | JWKS del IdP externo para validar tokens entrantes |
-| `REDIS_HOST` | `localhost` | Host de Redis |
-| `REDIS_PORT` | `6379` | Puerto de Redis |
-
-El Orquestador está listo cuando aparece:
+El Orquestador está listo cuando aparece en los logs:
 
 ```
 Started OrchestratorApplication in X.XXX seconds
 ```
+
+### Si solo querés reinciar sin reconstruir (cambios de config, no de código)
+
+```bash
+docker-compose up -d orchestrator
+```
+
+### Si cambiaste código en `orchestrator/src/`
+
+Hay que reconstruir la imagen:
+
+```bash
+docker-compose up -d --build orchestrator
+```
+
+### Variables de entorno (configuradas en `docker-compose.override.yml`)
+
+| Variable | Valor en desarrollo | Descripción |
+|---|---|---|
+| `KC_ORCHESTRATOR_CLIENT_ID` | `leydata-orchestrator` | Client ID M2M en realm leydata |
+| `KC_ORCHESTRATOR_CLIENT_SECRET` | del sistema (`$KC_ORCHESTRATOR_CLIENT_SECRET`) | Secret del cliente M2M — se exporta antes del up |
+| `KC_TOKEN_URI` | `http://keycloak:8080/realms/leydata/...` | Token endpoint interno de Keycloak |
+| `LEYDATA_BACKEND_URL` | `http://host.docker.internal:8080` (ajustar en WSL) | URL del backend LeyData |
+| `EXTERNAL_JWKS_URI` | `http://keycloak:8080/realms/empresa-cliente/...` | JWKS del IdP externo para validar tokens entrantes |
+| `REDIS_HOST` | `redis` | Host de Redis (nombre del contenedor en la red Docker) |
+
+### Agregar el claim `leydata_domain` al cliente de prueba
+
+El endpoint `POST /consent/capture` requiere que el JWT incluya el claim `leydata_domain` con el UUID del dominio LeyData autorizado para ese sistema cliente. Sin este claim el Orquestador responde `422`.
+
+Primero obtener un UUID de dominio real:
+
+```bash
+ADMIN_TOKEN=$(curl -s http://localhost:8180/realms/leydata/protocol/openid-connect/token \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'grant_type=password&client_id=leydata-frontend&username=admin@leydata.cl&password=Admin1234!' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s http://localhost:8080/api/domains/all \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); [print(x['id'], '-', x['name']) for x in d['domains']]"
+```
+
+Luego agregar el protocol mapper al cliente `crm-sistema` del realm `empresa-cliente`:
+
+```bash
+MASTER_TOKEN=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
+  -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+CRM_UUID=$(curl -s "http://localhost:8180/admin/realms/empresa-cliente/clients?clientId=crm-sistema" \
+  -H "Authorization: Bearer $MASTER_TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+
+DOMAIN_ID="<pegar-uuid-del-dominio-obtenido-arriba>"
+
+curl -s -X POST \
+  "http://localhost:8180/admin/realms/empresa-cliente/clients/$CRM_UUID/protocol-mappers/models" \
+  -H "Authorization: Bearer $MASTER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"name\": \"leydata-domain-mapper\",
+    \"protocol\": \"openid-connect\",
+    \"protocolMapper\": \"oidc-hardcoded-claim-mapper\",
+    \"config\": {
+      \"claim.name\": \"leydata_domain\",
+      \"claim.value\": \"$DOMAIN_ID\",
+      \"jsonType.label\": \"String\",
+      \"id.token.claim\": \"true\",
+      \"access.token.claim\": \"true\",
+      \"userinfo.token.claim\": \"false\"
+    }
+  }"
+echo "Mapper agregado"
+```
+
+> Obtener un nuevo token de `operador@empresa.cl` después de agregar el mapper — los tokens anteriores no incluirán el claim.
 
 ### Probar el flujo completo B2B
 
@@ -443,10 +557,24 @@ TOKEN=$(curl -s -X POST "http://localhost:8180/realms/empresa-cliente/protocol/o
   -d "grant_type=password&client_id=crm-sistema&username=operador@empresa.cl&password=operador123" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# 2. Verificar consentimiento
-curl -X GET "http://localhost:8081/consent/check?subjectId=abc123&purposeId=<uuid>" \
-  -H "Authorization: Bearer $TOKEN"
+# 2. Verificar estado de consentimiento
+curl -s "http://localhost:8081/consent/check?subjectId=abc123&purposeId=<uuid-purpose>" \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+# 3. Capturar consentimiento (templateKey = identificador de negocio, no UUID)
+curl -s -X POST "http://localhost:8081/consent/capture" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subjectId": "abc123",
+    "templateKey": "ONBOARDING_CLIENTE",
+    "purposes": [
+      { "purposeId": "<uuid-purpose>", "accepted": true }
+    ]
+  }' | python3 -m json.tool
 ```
+
+> **Prerequisito para `/consent/capture`:** el `templateKey` debe existir como template `ACTIVE` en el dominio del JWT, y ese template debe tener un documento de privacidad `PUBLISHED` asociado. Ver [guia-orquestador-dev.md](../docs/guia-orquestador-dev.md) para el flujo de creación completo.
 
 ---
 
@@ -551,11 +679,21 @@ En cualquiera de esos casos, detener el backend, ejecutar `./mvnw clean spring-b
 
 ### Levantar el entorno completo
 
+El orquestador necesita `KC_ORCHESTRATOR_CLIENT_SECRET` exportado **antes** de `docker-compose up`. Si no lo tenés en tu sesión actual, obtenerlo de Keycloak (ver paso 6):
+
 ```bash
-# Desde la raíz del proyecto
+# 1. Exportar el secret del cliente M2M (si no está en la sesión)
+export KC_ORCHESTRATOR_CLIENT_SECRET="<secret-obtenido-en-paso-6>"
+
+# 2. Levantar infraestructura + orquestador
 docker-compose up -d
-cd backend && export $(cat ../.env | xargs) && ./mvnw spring-boot:run
+
+# 3. Levantar el backend (fuera de Docker)
+cd backend
+DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<valor-del-script> ./mvnw spring-boot:run
 ```
+
+> **WSL:** si la IP de WSL cambió desde la última vez (ej. después de reiniciar), actualizar `LEYDATA_BACKEND_URL` en `docker-compose.override.yml` antes del `docker-compose up`. Ver sección 8.
 
 ### Detener los contenedores sin perder datos
 

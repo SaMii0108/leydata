@@ -93,7 +93,7 @@ class TemplateServiceTest {
         Templates source = draftTemplate(sourceId, "CONSENT_X", 2);
         source.setIsActive(true);
         when(templatesRepo.findById(sourceId)).thenReturn(Optional.of(source));
-        when(templatesRepo.findByTemplateKeyOrderByVersionDesc("CONSENT_X"))
+        when(templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(any(), any()))
                 .thenReturn(List.of(source));
 
         TemplateResponse response = service.newVersion(sourceId);
@@ -114,10 +114,10 @@ class TemplateServiceTest {
 
     @Test
     void getActive_lanzaBusinessValidationException_siNoHayVersionActiva() {
-        when(templatesRepo.findByTemplateKeyAndIsActiveTrue("CONSENT_X"))
+        when(templatesRepo.findByDomainIdAndTemplateKeyAndIsActiveTrue(any(), any()))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getActive("CONSENT_X"))
+        assertThatThrownBy(() -> service.getActive(null, "CONSENT_X"))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
@@ -125,10 +125,10 @@ class TemplateServiceTest {
     void getActive_devuelveLaVersionActiva() {
         Templates active = draftTemplate(UUID.randomUUID(), "CONSENT_X", 2);
         active.setIsActive(true);
-        when(templatesRepo.findByTemplateKeyAndIsActiveTrue("CONSENT_X"))
+        when(templatesRepo.findByDomainIdAndTemplateKeyAndIsActiveTrue(any(), any()))
                 .thenReturn(Optional.of(active));
 
-        TemplateResponse response = service.getActive("CONSENT_X");
+        TemplateResponse response = service.getActive(null, "CONSENT_X");
 
         assertThat(response.getStatus()).isEqualTo("ACTIVE");
     }
@@ -188,10 +188,10 @@ class TemplateServiceTest {
         previous.setHashSha256("hash-anterior");
 
         when(templatesRepo.findById(id)).thenReturn(Optional.of(template));
-        when(templatesRepo.findByTemplateKeyOrderByVersionDesc("CONSENT_X"))
+        when(templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(any(), any()))
                 .thenReturn(List.of(previous, template));
         when(templatePurposesRepo.existsByTemplate_IdAndIsVisibleTrue(id)).thenReturn(true);
-        when(templatesRepo.findByTemplateKeyAndIsActiveTrue("CONSENT_X"))
+        when(templatesRepo.findByDomainIdAndTemplateKeyAndIsActiveTrue(any(), any()))
                 .thenReturn(Optional.of(previous));
         when(templatePurposesRepo.findByTemplate_IdOrderByOrderPosition(id))
                 .thenReturn(List.of());
@@ -225,7 +225,7 @@ class TemplateServiceTest {
         Templates newer = draftTemplate(UUID.randomUUID(), "CONSENT_X", 2);
 
         when(templatesRepo.findById(id)).thenReturn(Optional.of(template));
-        when(templatesRepo.findByTemplateKeyOrderByVersionDesc("CONSENT_X"))
+        when(templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(any(), any()))
                 .thenReturn(List.of(template, newer));
 
         assertThatThrownBy(() -> service.activate(id))
@@ -238,7 +238,7 @@ class TemplateServiceTest {
         Templates template = draftTemplate(id, "CONSENT_X", 1);
 
         when(templatesRepo.findById(id)).thenReturn(Optional.of(template));
-        when(templatesRepo.findByTemplateKeyOrderByVersionDesc("CONSENT_X"))
+        when(templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(any(), any()))
                 .thenReturn(List.of(template));
 
         assertThatThrownBy(() -> service.activate(id))
@@ -252,7 +252,7 @@ class TemplateServiceTest {
         template.setApprovedBy(UUID.randomUUID().toString());
 
         when(templatesRepo.findById(id)).thenReturn(Optional.of(template));
-        when(templatesRepo.findByTemplateKeyOrderByVersionDesc("CONSENT_X"))
+        when(templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(any(), any()))
                 .thenReturn(List.of(template));
         when(templatePurposesRepo.existsByTemplate_IdAndIsVisibleTrue(id)).thenReturn(false);
 

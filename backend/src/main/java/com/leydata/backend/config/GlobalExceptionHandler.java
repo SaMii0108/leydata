@@ -1,5 +1,6 @@
 package com.leydata.backend.config;
 
+import com.leydata.backend.agreement.domain.exception.AgreementNotFoundException;
 import com.leydata.backend.datacategory.domain.exception.DataCategoryNotFoundException;
 import com.leydata.backend.orgdomain.domain.exception.DomainNotFoundException;
 import com.leydata.backend.purposedatacategory.domain.exception.PurposeDataCategoryNotFoundException;
@@ -8,6 +9,7 @@ import com.leydata.backend.privacydoc.domain.exception.BusinessValidationExcepti
 import com.leydata.backend.privacydoc.domain.exception.DocumentNotFoundException;
 import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionException;
 import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
+import com.leydata.backend.purposes.domain.exception.PurposeNotLockedException;
 import com.leydata.backend.template.domain.exception.TemplateNotFoundException;
 import com.leydata.backend.user.domain.exception.UserAlreadyExistsException;
 import com.leydata.backend.user.domain.exception.UserNotFoundException;
@@ -25,6 +27,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -122,6 +125,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
+    // ── MÓDULO AGREEMENTS ────────────────────────────────────────────────────────
+
+    @ExceptionHandler(AgreementNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleAgreementNotFound(AgreementNotFoundException ex) {
+        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
     // ── MÓDULO DATA CATEGORIES ───────────────────────────────────────────────────
 
     @ExceptionHandler(DataCategoryNotFoundException.class)
@@ -137,6 +148,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handlePurposeNotFound(PurposeNotFoundException ex) {
         Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(PurposeNotLockedException.class)
+    public ResponseEntity<Map<String, Object>> handlePurposeNotLocked(PurposeNotLockedException ex) {
+        Map<String, Object> body = buildErrorResponse("PURPOSE_NOT_LOCKED", ex.getMessage(), HttpStatus.CONFLICT);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
     // ── MÓDULO TEMPLATES ─────────────────────────────────────────────────────────
@@ -229,6 +246,15 @@ public class GlobalExceptionHandler {
         Map<String, Object> body = buildErrorResponse("FORBIDDEN",
                 "Acceso no permitido a este recurso", HttpStatus.FORBIDDEN);
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.warn("Violación de integridad de datos: {}", ex.getMostSpecificCause().getMessage());
+        Map<String, Object> body = buildErrorResponse("CONFLICT",
+                "Ya existe un registro con los mismos datos únicos (clave duplicada o restricción violada)",
+                HttpStatus.CONFLICT);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
     // ── GENÉRICAS ────────────────────────────────────────────────────────────────

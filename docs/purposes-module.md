@@ -22,11 +22,16 @@ Una **finalidad** (`Purposes`) describe para qué se va a usar un dato personal 
 ### Endpoints
 
 ```
-POST   /api/purposes              — Crear finalidad
-GET    /api/purposes              — Listar todas las finalidades
-GET    /api/purposes/{id}         — Obtener finalidad por ID
-PUT    /api/purposes/{id}         — Actualizar finalidad
-DELETE /api/purposes/{id}         — Eliminar finalidad (soft-delete)
+POST   /api/purposes                              — Crear finalidad
+GET    /api/purposes                              — Listar todas las finalidades
+GET    /api/purposes/{id}                         — Obtener finalidad por ID
+PUT    /api/purposes/{id}                         — Actualizar finalidad (bloqueado si locked=true)
+DELETE /api/purposes/{id}                         — Eliminar finalidad (soft-delete)
+
+# Versionado (feature/trazabilidad)
+POST   /api/purposes/{id}/new-version             — Crear nueva versión de una finalidad bloqueada
+GET    /api/purposes/family/{purposeFamilyId}     — Historial de versiones de una familia (desc)
+GET    /api/purposes/active/{purposeFamilyId}     — Versión ACTIVE de una familia
 ```
 
 ### Campos clave de una Finalidad
@@ -43,6 +48,21 @@ DELETE /api/purposes/{id}         — Eliminar finalidad (soft-delete)
 | `hashSha256` | Hash del estado de la finalidad — se sella en `agreements_purposes` al consentir |
 
 El `hashSha256` de la finalidad se copia al acuerdo de consentimiento en el momento de captura. Esto garantiza que, ante un cambio posterior en la finalidad, el historial refleje exactamente qué texto vio el titular cuando consintió.
+
+### Versionado de finalidades
+
+Cuando una finalidad está **locked** (incluida en un template con agreements, o en un documento PUBLISHED), no puede editarse in-place. El DPO puede crear una nueva versión:
+
+- `POST /api/purposes/{id}/new-version` — crea una copia con `version+1` y estado `ACTIVE`; la versión anterior pasa a `SUPERSEDED` en la misma transacción. Solo aplica si `locked=true` — si no está bloqueada, usar `PUT /{id}`.
+- Todas las versiones de una finalidad comparten el mismo `purposeFamilyId` (UUID auto-asignado al crear la primera versión — `id = purposeFamilyId`).
+- El campo `code` ya no es único globalmente — múltiples versiones de la misma familia pueden tener el mismo código. La unicidad se mantiene a nivel de aplicación: no puede existir más de una versión `ACTIVE` por `purposeFamilyId`.
+- `AgreementsPurposes` guarda un snapshot del `hashSha256` de la purpose al momento del consentimiento (`purposeHash`). `AgreementTraceService` compara este snapshot contra el hash actual de la purpose para detectar drift posterior al consentimiento.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `purposeFamilyId` | UUID | Agrupa todas las versiones de una misma finalidad |
+| `version` | Integer | Número de versión dentro de la familia (empieza en 1) |
+| `status` | String | `ACTIVE` o `SUPERSEDED` |
 
 ---
 
@@ -86,7 +106,9 @@ PATCH  /api/purpose-requests/{id}/review        — Aprobar o rechazar (DPO · A
 
 | Archivo | Rol |
 |---|---|
-| `purposes/web/PurposeController.java` | CRUD de finalidades |
-| `purposes/application/service/PurposeService.java` | Lógica + hash SHA-256 |
+| `purposes/web/PurposeController.java` | CRUD de finalidades + endpoints de versionado |
+| `purposes/application/service/PurposeService.java` | Lógica + hash SHA-256 + `newVersion()`, `getFamily()`, `getActiveByFamily()`, `isLocked()` |
+| `purposes/domain/exception/PurposeNotLockedException.java` | Excepción HTTP 409 — se lanza al intentar `new-version` sobre una finalidad no bloqueada |
+| `purposes/infrastructure/persistence/PurposesRepository.java` | Incluye `findByPurposeFamilyIdOrderByVersionDesc`, `findByPurposeFamilyIdAndStatus` |
 | `purposerequest/web/PurposeRequestController.java` | Workflow de solicitudes |
 | `purposerequest/application/service/PurposeRequestService.java` | Transiciones de estado |

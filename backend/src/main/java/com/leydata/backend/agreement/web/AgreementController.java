@@ -1,9 +1,6 @@
 package com.leydata.backend.agreement.web;
 
-import com.leydata.backend.agreement.application.dto.AgreementIntegrityLogResponse;
-import com.leydata.backend.agreement.application.dto.AgreementResponse;
-import com.leydata.backend.agreement.application.dto.CreateAgreementRequest;
-import com.leydata.backend.agreement.application.dto.VerifyIntegrityRequest;
+import com.leydata.backend.agreement.application.dto.*;
 import com.leydata.backend.agreement.application.service.AgreementService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -58,28 +55,6 @@ public class AgreementController {
         return service.list(dataSubjectId, templateId, status);
     }
 
-    @PostMapping("/{id}/verify-integrity")
-    @Operation(summary = "Verificar integridad de un agreement bajo demanda")
-    public AgreementIntegrityLogResponse verifyIntegrity(
-            @PathVariable UUID id,
-            @RequestBody(required = false) VerifyIntegrityRequest req) {
-        String checkType = (req != null && req.getCheckType() != null) ? req.getCheckType() : "MANUAL";
-        // createdBy queda null hasta que se defina el modelo de autenticación de este módulo
-        return service.verifyIntegrity(id, checkType, null);
-    }
-
-    @GetMapping("/{id}/integrity-log")
-    @Operation(summary = "Historial de verificaciones de integridad del agreement")
-    public List<AgreementIntegrityLogResponse> getIntegrityLog(@PathVariable UUID id) {
-        return service.getIntegrityLog(id);
-    }
-
-    @GetMapping("/integrity-log/failed")
-    @Operation(summary = "Listar verificaciones de integridad fallidas (IS_VALID = false) para investigación")
-    public List<AgreementIntegrityLogResponse> listFailedVerifications() {
-        return service.listFailedVerifications();
-    }
-
     @PatchMapping("/{id}/revoke")
     @Operation(summary = "Revocar un agreement — cambia estado a REVOKED y sus purposes asociados",
                description = "Llamado por el Orquestador. La IP real del titular viene en X-Internal-Real-IP si la petición viene de la red interna.")
@@ -89,6 +64,41 @@ public class AgreementController {
             HttpServletRequest request) {
         String realIp = resolveRealIp(request);
         return service.revoke(id, req.subjectId(), realIp);
+    }
+
+    @GetMapping("/lifecycle-check")
+    @Operation(summary = "Estado del ciclo de vida del consentimiento para un titular y template " +
+            "[uso interno B2B — llamado por el Orquestador]",
+               description = "Devuelve ALLOWED | EXPIRED | REQUIRES_RECONSENT | PENDING")
+    public ConsentLifecycleResponse lifecycleCheck(
+            @RequestParam String subjectIdentifier,
+            @RequestParam UUID domainId,
+            @RequestParam String templateKey) {
+        return service.getLifecycleStatus(subjectIdentifier, domainId, templateKey);
+    }
+
+    @GetMapping("/subject-summary")
+    @Operation(summary = "Estado de todas las purposes de un titular en un dominio [uso interno B2B]",
+               description = "Devuelve los switches para el portal del titular")
+    public List<SubjectSummaryResponse> subjectSummary(
+            @RequestParam String subjectIdentifier,
+            @RequestParam UUID domainId) {
+        return service.getSubjectSummary(subjectIdentifier, domainId);
+    }
+
+    @GetMapping("/pending-deletions")
+    @Operation(summary = "Purposes vencidas pendientes de eliminación de datos en el CRM [uso interno B2B]",
+               description = "El CRM consulta esto periódicamente para cumplir el deber de supresión de la Ley 21.719")
+    public List<PendingDeletionItem> pendingDeletions(@RequestParam UUID domainId) {
+        return service.getPendingDeletions(domainId);
+    }
+
+    @PostMapping("/confirm-deletion")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "El CRM confirma que eliminó los datos de una purpose vencida [uso interno B2B]",
+               description = "Registra evidencia de eliminación en el log de auditoría para fiscalizaciones")
+    public void confirmDeletion(@Valid @RequestBody ConfirmDeletionRequest req) {
+        service.confirmDeletion(req);
     }
 
     private String resolveRealIp(HttpServletRequest request) {

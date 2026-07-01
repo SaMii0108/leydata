@@ -1,0 +1,32 @@
+meta {
+  name: Confirm Deletion (Confirmar Eliminación)
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/agreements/confirm-deletion
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "subjectIdentifier": "RUT:12345678-9",
+    "purposeId": "<uuid-finalidad>",
+    "deletedAt": "2026-06-30T10:00:00"
+  }
+}
+
+docs {
+  Confirma que el sistema cliente eliminó o anonimizó los datos del titular para una finalidad vencida.
+  Usado internamente por el Orquestador en el Caso 7 (POST /consent/confirm-deletion).
+  Registra evidencia de cumplimiento en system_audit_log (entityType=DELETION_CONFIRMATION)
+  para respaldo ante la Agencia de Protección de Datos Personales (Ley 21.719).
+  Respuesta: 204 No Content.
+  Accesible por cualquier rol autenticado.
+}

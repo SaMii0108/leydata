@@ -538,12 +538,15 @@ Cada Finalidad define **una sola acción específica** (ej. "Enviar promociones"
 
 | Método | URL | Rol mínimo | Descripción |
 |--------|-----|-----------|-------------|
-| POST | `/api/purposes` | DPO | Crear finalidad |
+| POST | `/api/purposes` | DPO | Crear finalidad (v1, status=ACTIVE, purposeFamilyId=id) |
 | GET | `/api/purposes` | JEFE_DOMINIO | Listar activas (jefe ve solo su dominio) |
 | GET | `/api/purposes/{id}` | JEFE_DOMINIO | Ver una finalidad |
 | GET | `/api/purposes/domain/{domainId}` | JEFE_DOMINIO | Listar por dominio |
-| PUT | `/api/purposes/{id}` | DPO | Editar (bloqueado si PUBLISHED) |
+| PUT | `/api/purposes/{id}` | DPO | Editar in-place (bloqueado si locked=true) |
 | DELETE | `/api/purposes/{id}` | DPO | Desactivar (soft delete) |
+| POST | `/api/purposes/{id}/new-version` | DPO | Nueva versión de finalidad bloqueada (anterior → SUPERSEDED) |
+| GET | `/api/purposes/family/{purposeFamilyId}` | DPO · ADMIN | Historial de versiones de una familia |
+| GET | `/api/purposes/active/{purposeFamilyId}` | DPO · ADMIN | Versión ACTIVE de una familia |
 
 ---
 
@@ -1292,6 +1295,78 @@ Recorre toda la cadena de hashes y verifica que ningún registro fue alterado. E
 
 ---
 
+### `POST /api/audit/integrity/verify`
+
+Recalcula el hash SHA-256 de una entidad de negocio (AGREEMENT, TEMPLATE, DOCUMENT o PURPOSE), lo compara con el almacenado, y registra el resultado en `entity_integrity_log`.
+
+```json
+// Request
+{
+  "entityType": "AGREEMENT",
+  "entityId": "uuid-del-agreement",
+  "checkType": "MANUAL"
+}
+
+// Response 200
+{
+  "entityType": "AGREEMENT",
+  "entityId": "uuid-del-agreement",
+  "storedHash": "a3f9b2c1...",
+  "recalculatedHash": "a3f9b2c1...",
+  "isValid": true,
+  "checkType": "MANUAL",
+  "createdAt": "2026-06-28T10:05:00Z"
+}
+```
+
+**Caso negativo — hash no coincide (posible alteración)**
+```json
+// Response 200 (informa, no lanza excepción)
+{ "isValid": false, "storedHash": "a3f9b2c1...", "recalculatedHash": "zz991234...", "errorDetail": "El hash recalculado no coincide con el almacenado" }
+```
+
+---
+
+### `GET /api/audit/integrity/log`
+
+Historial de verificaciones de integridad de una entidad específica, en orden descendente.
+
+```
+GET /api/audit/integrity/log?entityType=AGREEMENT&entityId=uuid
+```
+
+---
+
+### `GET /api/audit/integrity/failed`
+
+Lista todas las verificaciones con `isValid = false`. Sin filtro devuelve todas las entidades; con filtro solo la entidad indicada.
+
+```
+GET /api/audit/integrity/failed
+GET /api/audit/integrity/failed?entityType=AGREEMENT
+```
+
+---
+
+### `GET /api/audit/trace/agreement/{id}`
+
+Traza la cadena completa de un agreement: template activo, documento publicado, y cada purpose con snapshot de hash al consentir vs. hash actual (drift check). Devuelve `overallIntegrity: OK | MISMATCH | PARTIAL`.
+
+```json
+// Response 200
+{
+  "agreementId": "uuid",
+  "overallIntegrity": "OK",
+  "template": { "id": "uuid", "hashSha256": "...", "valid": true },
+  "document": { "id": "uuid", "hashSha256": "...", "valid": true },
+  "purposes": [
+    { "purposeId": "uuid", "purposeHash": "hash-al-consentir", "currentHash": "hash-actual", "drift": false }
+  ]
+}
+```
+
+---
+
 ## 11. Notificaciones
 
 ### ¿Qué hace este módulo?
@@ -1370,9 +1445,12 @@ Solo los roles `DPO` y `ADMIN` pueden operar este módulo.
 **`POST /api/templates`**  
 **Acceso:** DPO, ADMIN
 
+`domainId` es obligatorio — `TEMPLATE_KEY` ya no es único globalmente, sino por dominio (ver [`docs/templates-module.md`](../../docs/templates-module.md)).
+
 ```json
 // Request
 {
+  "domainId": "8e7c1a90-1234-4abc-9def-0123456789ab",
   "templateKey": "bienvenida-clientes",
   "name": "Template de bienvenida para clientes",
   "title": "Gestión de tus datos",
@@ -1384,6 +1462,7 @@ Solo los roles `DPO` y `ADMIN` pueden operar este módulo.
 // Response 201
 {
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "domainId": "8e7c1a90-1234-4abc-9def-0123456789ab",
   "templateKey": "bienvenida-clientes",
   "name": "Template de bienvenida para clientes",
   "title": "Gestión de tus datos",
@@ -1603,6 +1682,8 @@ Cada agreement genera un hash SHA-256 que encadena al hash del agreement anterio
 
 El orquestador o el frontend registra la decisión del titular tras presentarle el template.
 
+**`documentId` es opcional.** Si no se envía, `AgreementService.create()` lo resuelve automáticamente buscando el documento `PUBLISHED` activo vinculado a `templateId` — falla con `BusinessValidationException` si el template no tiene uno. Sigue siendo válido enviarlo explícito como en el ejemplo de abajo.
+
 **Caso positivo — primer consentimiento**
 ```json
 // Request
@@ -1711,47 +1792,14 @@ Devuelve el agreement con su detalle completo de purposes.
 
 ---
 
-### `POST /api/agreements/{id}/verify-integrity`
+### Integridad de agreements
 
-Recalcula el SHA-256 del agreement y lo compara con el almacenado. Registra el resultado en el ledger de integridad.
+Los endpoints de verificación de integridad de agreements fueron movidos al módulo de auditoría (feature/trazabilidad). Ver **Sección 10 — Auditoría**:
 
-```json
-// Request (opcional — por defecto checkType = "MANUAL")
-{ "checkType": "MANUAL" }
-
-// Response 200
-{
-  "agreementId": "uuid-agreement",
-  "storedHash": "a3f9b2c1...",
-  "recalculatedHash": "a3f9b2c1...",
-  "isValid": true,
-  "checkType": "MANUAL",
-  "createdAt": "2026-06-28T10:05:00Z"
-}
-```
-
-**Caso negativo — hash no coincide (posible alteración)**
-```json
-// Response 200 (informa, no lanza excepción)
-{
-  "isValid": false,
-  "storedHash": "a3f9b2c1...",
-  "recalculatedHash": "zz991234...",
-  "errorDetail": "El hash recalculado no coincide con el almacenado"
-}
-```
-
----
-
-### `GET /api/agreements/{id}/integrity-log`
-
-Historial de todas las verificaciones de integridad del agreement. Permite auditar cuándo se verificó y si fue válido cada vez.
-
----
-
-### `GET /api/agreements/integrity-log/failed`
-
-Lista todas las verificaciones fallidas (`isValid = false`) de todos los agreements del sistema. Endpoint para el equipo de auditoría — permite detectar registros de consentimiento que pudieron haber sido alterados.
+- `POST /api/audit/integrity/verify` — verificar integridad de cualquier entidad (incluye AGREEMENT)
+- `GET  /api/audit/integrity/log?entityType=AGREEMENT&entityId={id}` — historial de verificaciones
+- `GET  /api/audit/integrity/failed?entityType=AGREEMENT` — verificaciones fallidas
+- `GET  /api/audit/trace/agreement/{id}` — traza completa: template + documento + purposes con drift check
 
 ---
 
@@ -1855,14 +1903,13 @@ Authorization: Bearer <external-jwt>
 
 ### `POST /consent/capture`
 
-Registra el consentimiento de un titular a través del Orquestador.
+Registra el consentimiento de un titular a través del Orquestador. El sistema cliente **no envía UUIDs internos** — solo el `templateKey` de negocio acordado al integrarse (ej. `ONBOARDING_CLIENTE`).
 
 ```json
 // Request
 {
   "subjectId": "abc123",
-  "templateId": "uuid-template-activo",
-  "documentId": "uuid-documento-publicado",
+  "templateKey": "ONBOARDING_CLIENTE",
   "purposes": [
     { "purposeId": "uuid-finalidad", "accepted": true }
   ]
@@ -1875,6 +1922,12 @@ Registra el consentimiento de un titular a través del Orquestador.
   "status": "ALLOWED"
 }
 ```
+
+**Resolución de `templateId`/`documentId` (antes de llamar al backend):**
+1. El Orquestador extrae `domainId` del claim `leydata_domain` del JWT del sistema cliente — no viaja en el body.
+2. Llama `GET /api/templates/resolve?domainId=&templateKey=` en el backend → obtiene el `templateId` ACTIVE de ese dominio y el `documentId` del documento `PUBLISHED` vigente vinculado a ese template.
+3. Si el template no existe en ese dominio, no está ACTIVE, o no tiene documento publicado, la petición falla antes de tocar `/api/agreements`.
+4. `documentId` puede sobreescribirse enviándolo explícito en el request — opcional, solo para integraciones que ya lo conocían antes de este cambio.
 
 **Post-condición:** Redis pre-calentado con `ALLOWED` por cada purpose aceptada. Los campos `legalBasisCode` y `validUntil` se toman del acuerdo real devuelto por LeyData (no se inventan).
 

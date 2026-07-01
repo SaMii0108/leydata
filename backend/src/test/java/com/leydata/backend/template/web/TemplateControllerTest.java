@@ -121,7 +121,7 @@ class TemplateControllerTest {
     @Test
     void list_devuelve200ConListaDeTemplates() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.list(any(), any(), any(), any(), any(), any()))
+        when(service.list(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(draftResponse(id)));
 
         mockMvc.perform(get("/api/templates"))
@@ -131,7 +131,7 @@ class TemplateControllerTest {
 
     @Test
     void getHistory_devuelve200ConVersionesOrdenadas() throws Exception {
-        when(service.getHistory("CONSENT_X")).thenReturn(List.of(draftResponse(UUID.randomUUID())));
+        when(service.getHistory(any(), eq("CONSENT_X"))).thenReturn(List.of(draftResponse(UUID.randomUUID())));
 
         mockMvc.perform(get("/api/templates/family/{templateKey}", "CONSENT_X"))
                 .andExpect(status().isOk());
@@ -140,7 +140,7 @@ class TemplateControllerTest {
     @Test
     void getActive_devuelve200ConVersionActiva() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.getActive("CONSENT_X")).thenReturn(draftResponse(id));
+        when(service.getActive(any(), eq("CONSENT_X"))).thenReturn(draftResponse(id));
 
         mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X"))
                 .andExpect(status().isOk());
@@ -148,7 +148,7 @@ class TemplateControllerTest {
 
     @Test
     void getActive_devuelve422_siNoHayVersionActiva() throws Exception {
-        when(service.getActive("CONSENT_X"))
+        when(service.getActive(any(), eq("CONSENT_X")))
                 .thenThrow(new BusinessValidationException("No hay una versión activa para el template CONSENT_X"));
 
         mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X"))

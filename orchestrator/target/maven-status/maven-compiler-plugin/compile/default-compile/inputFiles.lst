@@ -1,5 +1,6 @@
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/OrchestratorApplication.java
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/config/ConsentCacheProperties.java
+/home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/config/GlobalExceptionHandler.java
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/config/OAuth2ClientConfig.java
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/config/SecurityConfig.java
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/config/WebClientConfig.java
@@ -10,4 +11,11 @@
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/CaptureConsentRequest.java
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/ConsentCheckResponse.java
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/ConsentStatusResponse.java
+/home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/LifecycleCheckBackendResponse.java
+/home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/OrchestratorConfirmDeletionRequest.java
+/home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/PendingDeletionBackendItem.java
 /home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/RevokeConsentRequest.java
+/home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/RevokePurposeRequest.java
+/home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/SubjectSummaryBackendResponse.java
+/home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/TemplateContentResponse.java
+/home/lucho/leydata/orchestrator/src/main/java/com/leydata/orchestrator/consent/dto/TemplateResolutionResponse.java
