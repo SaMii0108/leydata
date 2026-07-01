@@ -1,5 +1,28 @@
 package com.leydata.backend.template.web;
 
+import java.util.List;
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.leydata.backend.config.GlobalExceptionHandler;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.template.application.dto.AddTemplatePurposeRequest;
@@ -10,29 +33,8 @@ import com.leydata.backend.template.application.dto.UpdateTemplatePurposeRequest
 import com.leydata.backend.template.application.service.TemplateService;
 import com.leydata.backend.template.domain.exception.TemplateNotFoundException;
 import com.leydata.backend.userstatus.infrastructure.persistence.UserStatusRepository;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+
 import tools.jackson.databind.ObjectMapper;
-
-import java.util.List;
-import java.util.UUID;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TemplateController.class)
 @org.springframework.context.annotation.Import(GlobalExceptionHandler.class)
@@ -177,7 +179,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve200ConTemplateActivado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id, false)).thenReturn(draftResponse(id));
+        when(service.activate(eq(id), anyBoolean())).thenReturn(draftResponse(id));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))
                 .andExpect(status().isOk());
@@ -186,7 +188,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve422_siTemplateNoAprobado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id, false)).thenThrow(new BusinessValidationException(
+        when(service.activate(eq(id), anyBoolean())).thenThrow(new BusinessValidationException(
                 "El template debe estar aprobado antes de activarse"));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))
