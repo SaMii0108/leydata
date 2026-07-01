@@ -20,8 +20,9 @@
 services:
   orchestrator:
     environment:
-      # Cambiar según plataforma (ver instrucciones arriba)
-      LEYDATA_BACKEND_URL: http://host.docker.internal:8080
+      # Cambiar según plataforma (ver instrucciones arriba).
+      # WSL: exportar LEYDATA_BACKEND_URL=http://<ip-wsl>:8080 antes de docker-compose up
+      LEYDATA_BACKEND_URL: ${LEYDATA_BACKEND_URL:-http://host.docker.internal:8080}
       REDIS_HOST: redis
       # Outbound M2M — cuenta de servicio del Orquestador en el realm leydata
       KC_TOKEN_URI: http://keycloak:8080/realms/leydata/protocol/openid-connect/token

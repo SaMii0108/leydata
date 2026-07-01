@@ -80,7 +80,7 @@ public class Templates {
     @Column(name = "activation_date")
     private OffsetDateTime activationDate;
 
-    @Column(name = "force_reconsent", nullable = false)
+    @Column(name = "force_reconsent", nullable = false, columnDefinition = "boolean default false")
     private Boolean forceReconsent = false;
 
     @Column(name = "hash_sha256", unique = true)
