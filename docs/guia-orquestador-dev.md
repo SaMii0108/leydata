@@ -61,10 +61,13 @@ El **backend** corre fuera de Docker — en tu terminal, con `./mvnw spring-boot
   - Mac: `brew install openjdk@21`
   - Windows (PowerShell): descargar desde [adoptium.net](https://adoptium.net) e instalar en Windows.
   - Windows + WSL: `sudo apt install openjdk-21-jdk` dentro de WSL Ubuntu.
-- **Python 3** (para parsear JSON en los scripts).
+  - Si ya tenés una versión más nueva instalada (por ejemplo Java 25), no hace falta desinstalarla: Maven compila igual con `<java.version>21</java.version>` del `pom.xml` sobre un JDK más nuevo. Solo instalá el 21 si ves errores de compilación por versión.
+- **Python 3** (para parsear JSON en los comandos `curl | python3 -m json.tool` de esta guía).
   - Mac / WSL Ubuntu: preinstalado.
-  - Windows (PowerShell): descargar desde [python.org](https://www.python.org/downloads/) o `winget install Python.Python.3`.
-- **Git Bash** (solo Windows con PowerShell, para correr los scripts `.sh`): se instala junto con [Git for Windows](https://git-scm.com/download/win).
+  - **Windows (PowerShell): no hace falta.** Si vas a trabajar 100% en PowerShell, usá los scripts `.ps1` (ver A.4/A.6) y `ConvertFrom-Json`/`Invoke-RestMethod` en vez de `python3 -m json.tool` — esta guía incluye el bloque PowerShell equivalente en cada paso. Solo instalá Python si además querés correr los bloques bash de Git Bash tal cual están escritos.
+- **Git Bash** (opcional en Windows, solo si preferís correr los bloques bash de esta guía en vez de sus equivalentes PowerShell): se instala junto con [Git for Windows](https://git-scm.com/download/win).
+
+> **Windows 100% PowerShell (sin Git Bash ni Python):** es un camino totalmente soportado. Cada paso de esta guía que use `curl`/`python3` tiene abajo un bloque **"PowerShell"** equivalente — seguí siempre ese bloque y salteate los de bash.
 
 ---
 
@@ -111,8 +114,11 @@ curl -s http://localhost:8180/realms/master | python3 -m json.tool | head -3
 
 **Windows (PowerShell):**
 ```powershell
-(Invoke-WebRequest http://localhost:8180/realms/master).Content | python3 -m json.tool | Select-Object -First 3
+(Invoke-WebRequest -Uri http://localhost:8180/realms/master -UseBasicParsing).Content | ConvertFrom-Json | Select-Object realm
+# Debe mostrar realm: master
 ```
+
+> Usá siempre `-UseBasicParsing` con `Invoke-WebRequest`: sin ese flag, PowerShell pregunta si querés permitir el análisis de scripts de la página (IE engine) y se queda esperando confirmación.
 
 ---
 
@@ -124,7 +130,13 @@ cd <ruta-al-proyecto>
 bash scripts/setup-keycloak.sh
 ```
 
-**Windows (PowerShell):** abrir Git Bash y correr el mismo comando de arriba — este script no tiene equivalente en PowerShell.
+**Windows (PowerShell):**
+```powershell
+cd <ruta-al-proyecto>
+.\scripts\setup-keycloak.ps1
+```
+
+> Si PowerShell bloquea la ejecución del script (`no se puede cargar... deshabilitada la ejecución de scripts`), corré una vez `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` en esa misma terminal y volvé a intentar.
 
 Al finalizar, el script imprime:
 ```
@@ -184,10 +196,48 @@ echo "=============================="
 echo "Anotalo — lo necesitás cada vez que levantás el Orquestador."
 ```
 
+**Windows (PowerShell):**
+```powershell
+$KC_URL = "http://localhost:8180"
+
+# Token de admin de Keycloak
+$tokenResp = Invoke-RestMethod -Method Post `
+  -Uri "$KC_URL/realms/master/protocol/openid-connect/token" `
+  -ContentType "application/x-www-form-urlencoded" `
+  -Body @{ grant_type = "password"; client_id = "admin-cli"; username = "admin"; password = "admin" }
+$MASTER_TOKEN = $tokenResp.access_token
+$headers = @{ Authorization = "Bearer $MASTER_TOKEN"; "Content-Type" = "application/json" }
+
+# Crear cliente
+$clientBody = @{
+    clientId                  = "leydata-orchestrator"
+    enabled                   = $true
+    publicClient              = $false
+    serviceAccountsEnabled    = $true
+    standardFlowEnabled       = $false
+    directAccessGrantsEnabled = $false
+} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "$KC_URL/admin/realms/leydata/clients" -Headers $headers -Body $clientBody | Out-Null
+
+# Obtener UUID del cliente recién creado
+$CLIENT_UUID = (Invoke-RestMethod -Method Get `
+  -Uri "$KC_URL/admin/realms/leydata/clients?clientId=leydata-orchestrator" -Headers $headers)[0].id
+
+# Obtener el secret generado por Keycloak
+$KC_ORCHESTRATOR_SECRET = (Invoke-RestMethod -Method Get `
+  -Uri "$KC_URL/admin/realms/leydata/clients/$CLIENT_UUID/client-secret" -Headers $headers).value
+
+Write-Host "=============================="
+Write-Host " KC_ORCHESTRATOR_SECRET: $KC_ORCHESTRATOR_SECRET"
+Write-Host "=============================="
+Write-Host "Anotalo — lo necesitás cada vez que levantás el Orquestador."
+```
+
 **Guardar ese valor** (en un gestor de passwords, en tus notas, donde prefieras). No va al `.env` — se pasa como variable de entorno al levantar el contenedor (paso A.8).
 
 Luego, asignar el rol `ADMIN` a la service account del Orquestador (sin esto, el backend devuelve 403):
 
+**Mac / Windows Git Bash / WSL Ubuntu:**
 ```bash
 SA_USER=$(curl -s "http://localhost:8180/admin/realms/leydata/clients/$CLIENT_UUID/service-account-user" \
   -H "Authorization: Bearer $MASTER_TOKEN" \
@@ -204,6 +254,21 @@ curl -s -X POST "http://localhost:8180/admin/realms/leydata/users/$SA_USER/role-
 echo "Rol ADMIN asignado."
 ```
 
+**Windows (PowerShell):**
+```powershell
+$SA_USER = (Invoke-RestMethod -Method Get `
+  -Uri "$KC_URL/admin/realms/leydata/clients/$CLIENT_UUID/service-account-user" -Headers $headers).id
+
+$ADMIN_ROLE = Invoke-RestMethod -Method Get `
+  -Uri "$KC_URL/admin/realms/leydata/roles/ADMIN" -Headers $headers
+
+Invoke-RestMethod -Method Post `
+  -Uri "$KC_URL/admin/realms/leydata/users/$SA_USER/role-mappings/realm" `
+  -Headers $headers -Body ("[" + ($ADMIN_ROLE | ConvertTo-Json -Depth 5) + "]") | Out-Null
+
+Write-Host "Rol ADMIN asignado."
+```
+
 ---
 
 ### A.6 — Configurar el realm de prueba `empresa-cliente`
@@ -216,7 +281,11 @@ cd <ruta-al-proyecto>
 bash scripts/setup-empresa-cliente-realm.sh
 ```
 
-**Windows (PowerShell):** abrir Git Bash y correr el mismo comando — este script no tiene equivalente en PowerShell.
+**Windows (PowerShell):**
+```powershell
+cd <ruta-al-proyecto>
+.\scripts\setup-empresa-cliente-realm.ps1
+```
 
 ---
 
@@ -259,9 +328,15 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/domains/all
 
 **PowerShell:**
 ```powershell
-(Invoke-WebRequest -Uri http://localhost:8080/api/domains/all -SkipHttpErrorCheck).StatusCode
+try {
+    Invoke-WebRequest -Uri http://localhost:8080/api/domains/all -UseBasicParsing
+} catch {
+    $_.Exception.Response.StatusCode.value__
+}
 # Debe ser 401
 ```
+
+> `-SkipHttpErrorCheck` solo existe en PowerShell 7+. Si estás en **Windows PowerShell 5.1** (la que trae Windows por defecto, `$PSVersionTable.PSVersion` empieza en 5), usá el bloque `try/catch` de arriba — con `-SkipHttpErrorCheck` PowerShell tira `ParameterBindingException`.
 
 ---
 
@@ -316,13 +391,19 @@ docker-compose up -d --build orchestrator
 
 ---
 
-Verificar que levantó:
+Verificar que levantó (funciona igual en PowerShell, Git Bash y Terminal de Mac):
 ```bash
 docker logs leydata-orchestrator --tail 20
 # Debe terminar con: Started OrchestratorApplication in X.XXX seconds
 
 curl -s http://localhost:8081/actuator/health
 # {"status":"UP"}
+```
+
+En PowerShell, si `curl` no está aliaseado (o preferís no depender de eso):
+```powershell
+docker logs leydata-orchestrator --tail 20
+(Invoke-WebRequest -Uri http://localhost:8081/actuator/health -UseBasicParsing).Content
 ```
 
 ---
@@ -332,6 +413,8 @@ curl -s http://localhost:8081/actuator/health
 El Orquestador extrae el UUID del dominio del claim `leydata_domain` dentro del JWT entrante. Sin este claim, `POST /consent/capture` falla.
 
 Primero obtener el UUID del dominio:
+
+**Mac / Windows Git Bash / WSL Ubuntu:**
 ```bash
 ADMIN_TOKEN=$(curl -s http://localhost:8180/realms/leydata/protocol/openid-connect/token \
   -H 'Content-Type: application/x-www-form-urlencoded' \
@@ -343,8 +426,22 @@ curl -s http://localhost:8080/api/domains/all \
   | python3 -c "import sys,json; d=json.load(sys.stdin); [print(x['id'], x['name']) for x in d['domains']]"
 ```
 
+**Windows (PowerShell):**
+```powershell
+$tokenResp = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8180/realms/leydata/protocol/openid-connect/token" `
+  -ContentType "application/x-www-form-urlencoded" `
+  -Body @{ grant_type = "password"; client_id = "leydata-frontend"; username = "admin@leydata.cl"; password = "Admin1234!" }
+$ADMIN_TOKEN = $tokenResp.access_token
+
+$domains = Invoke-RestMethod -Method Get -Uri "http://localhost:8080/api/domains/all" `
+  -Headers @{ Authorization = "Bearer $ADMIN_TOKEN" }
+$domains.domains | Select-Object id, name
+```
+
 Elegir el dominio que va a usar el sistema CRM de prueba y guardar su UUID. Luego agregar el mapper en Keycloak:
 
+**Mac / Windows Git Bash / WSL Ubuntu:**
 ```bash
 MASTER_TOKEN=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
   -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
@@ -373,6 +470,41 @@ curl -s -X POST "http://localhost:8180/admin/realms/empresa-cliente/clients/$CRM
     }
   }"
 echo "Mapper OK"
+```
+
+**Windows (PowerShell):**
+```powershell
+$masterResp = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8180/realms/master/protocol/openid-connect/token" `
+  -ContentType "application/x-www-form-urlencoded" `
+  -Body @{ grant_type = "password"; client_id = "admin-cli"; username = "admin"; password = "admin" }
+$MASTER_TOKEN = $masterResp.access_token
+$headers = @{ Authorization = "Bearer $MASTER_TOKEN"; "Content-Type" = "application/json" }
+
+$CRM_UUID = (Invoke-RestMethod -Method Get `
+  -Uri "http://localhost:8180/admin/realms/empresa-cliente/clients?clientId=crm-sistema" -Headers $headers)[0].id
+
+$DOMAIN_ID = "<UUID-del-paso-anterior>"
+
+$mapperBody = @{
+    name           = "leydata-domain-mapper"
+    protocol       = "openid-connect"
+    protocolMapper = "oidc-hardcoded-claim-mapper"
+    config         = @{
+        "claim.name"          = "leydata_domain"
+        "claim.value"         = $DOMAIN_ID
+        "jsonType.label"      = "String"
+        "id.token.claim"      = "true"
+        "access.token.claim"  = "true"
+        "userinfo.token.claim" = "false"
+    }
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8180/admin/realms/empresa-cliente/clients/$CRM_UUID/protocol-mappers/models" `
+  -Headers $headers -Body $mapperBody | Out-Null
+
+Write-Host "Mapper OK"
 ```
 
 ---
@@ -457,6 +589,12 @@ curl -s http://localhost:8081/actuator/health   # Orquestador
 # Ambos deben responder {"status":"UP"}
 ```
 
+**Windows (PowerShell), si no tenés `curl` real (el `curl` de PowerShell es un alias de `Invoke-WebRequest` con otra sintaxis):**
+```powershell
+(Invoke-WebRequest -Uri http://localhost:8080/actuator/health -UseBasicParsing).Content
+(Invoke-WebRequest -Uri http://localhost:8081/actuator/health -UseBasicParsing).Content
+```
+
 ---
 
 ## C. Probar los endpoints
@@ -480,6 +618,29 @@ EXTERNAL_TOKEN=$(curl -s -X POST \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 echo "Token OK: ${EXTERNAL_TOKEN:0:40}..."
 ```
+
+**Windows (PowerShell):**
+```powershell
+$tokenResp = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8180/realms/empresa-cliente/protocol/openid-connect/token" `
+  -ContentType "application/x-www-form-urlencoded" `
+  -Body @{ grant_type = "password"; client_id = "crm-sistema"; username = "operador@empresa.cl"; password = "operador123" }
+$EXTERNAL_TOKEN = $tokenResp.access_token
+Write-Host "Token OK: $($EXTERNAL_TOKEN.Substring(0,40))..."
+```
+
+> **De acá en adelante, todos los endpoints del Orquestador (`/consent/...`) se llaman igual en PowerShell:** reemplazá `curl ... | python3 -m json.tool` por `Invoke-RestMethod -Uri <url> -Method <verbo> -Headers @{ Authorization = "Bearer $EXTERNAL_TOKEN" } [-ContentType "application/json" -Body $json]`. `Invoke-RestMethod` ya deserializa el JSON de respuesta como objeto — no hace falta ningún parser externo. Por ejemplo, el `GET /consent/check` de abajo queda:
+> ```powershell
+> $PURPOSE_ID = "<uuid-finalidad>"
+> Invoke-RestMethod -Uri "http://localhost:8081/consent/check?subjectId=test-user-001&purposeId=$PURPOSE_ID" `
+>   -Headers @{ Authorization = "Bearer $EXTERNAL_TOKEN" }
+> ```
+> y un `POST` con body:
+> ```powershell
+> $body = @{ subjectId = "test-user-001"; templateKey = $TEMPLATE_KEY; purposes = @(@{ purposeId = $PURPOSE_ID; accepted = $true }) } | ConvertTo-Json -Depth 5
+> Invoke-RestMethod -Method Post -Uri "http://localhost:8081/consent/capture" `
+>   -Headers @{ Authorization = "Bearer $EXTERNAL_TOKEN" } -ContentType "application/json" -Body $body
+> ```
 
 #### Verificar consentimiento — GET /consent/check
 
