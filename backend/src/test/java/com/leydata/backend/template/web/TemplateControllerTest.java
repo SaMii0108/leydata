@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -177,7 +178,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve200ConTemplateActivado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id)).thenReturn(draftResponse(id));
+        when(service.activate(eq(id), anyBoolean())).thenReturn(draftResponse(id));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))
                 .andExpect(status().isOk());
@@ -186,7 +187,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve422_siTemplateNoAprobado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id)).thenThrow(new BusinessValidationException(
+        when(service.activate(eq(id), anyBoolean())).thenThrow(new BusinessValidationException(
                 "El template debe estar aprobado antes de activarse"));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))
