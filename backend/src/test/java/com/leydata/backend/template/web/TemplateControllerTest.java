@@ -71,6 +71,7 @@ class TemplateControllerTest {
     @Test
     void create_devuelve201ConTemplateCreado() throws Exception {
         CreateTemplateRequest req = new CreateTemplateRequest();
+        req.setDomainId(UUID.randomUUID());
         req.setTemplateKey("consent_x");
         req.setName("Consentimiento X");
 
@@ -110,14 +111,12 @@ class TemplateControllerTest {
     }
 
     @Test
-    void getById_devuelve500_porFaltaDeHandlerParaTemplateNotFoundException() throws Exception {
-        // NOTA: TemplateNotFoundException no está registrada en GlobalExceptionHandler,
-        // por lo que cae en el handler genérico de RuntimeException y responde 500 en vez de 404.
+    void getById_devuelve404_siNoExiste() throws Exception {
         UUID id = UUID.randomUUID();
         when(service.getById(id)).thenThrow(new TemplateNotFoundException(id));
 
         mockMvc.perform(get("/api/templates/{id}", id))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -135,7 +134,8 @@ class TemplateControllerTest {
     void getHistory_devuelve200ConVersionesOrdenadas() throws Exception {
         when(service.getHistory(any(), eq("CONSENT_X"))).thenReturn(List.of(draftResponse(UUID.randomUUID())));
 
-        mockMvc.perform(get("/api/templates/family/{templateKey}", "CONSENT_X"))
+        mockMvc.perform(get("/api/templates/family/{templateKey}", "CONSENT_X")
+                        .param("domainId", UUID.randomUUID().toString()))
                 .andExpect(status().isOk());
     }
 
@@ -144,7 +144,8 @@ class TemplateControllerTest {
         UUID id = UUID.randomUUID();
         when(service.getActive(any(), eq("CONSENT_X"))).thenReturn(draftResponse(id));
 
-        mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X"))
+        mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X")
+                        .param("domainId", UUID.randomUUID().toString()))
                 .andExpect(status().isOk());
     }
 
@@ -153,7 +154,8 @@ class TemplateControllerTest {
         when(service.getActive(any(), eq("CONSENT_X")))
                 .thenThrow(new BusinessValidationException("No hay una versión activa para el template CONSENT_X"));
 
-        mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X"))
+        mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X")
+                        .param("domainId", UUID.randomUUID().toString()))
                 .andExpect(status().isUnprocessableEntity());
     }
 

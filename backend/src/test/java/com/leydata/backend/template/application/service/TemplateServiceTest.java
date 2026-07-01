@@ -22,9 +22,11 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.leydata.backend.audit.application.service.AuditService;
+import com.leydata.backend.entity.Domains;
 import com.leydata.backend.entity.Purposes;
 import com.leydata.backend.entity.TemplatePurposes;
 import com.leydata.backend.entity.Templates;
+import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
@@ -42,6 +44,7 @@ class TemplateServiceTest {
     @Mock private TemplatesRepository templatesRepo;
     @Mock private TemplatePurposesRepository templatePurposesRepo;
     @Mock private PurposesRepository purposesRepo;
+    @Mock private DomainsRepository domainsRepo;
     @Mock private SecurityContextHelper securityContextHelper;
     @Mock private AuditService auditService;
 
@@ -74,7 +77,14 @@ class TemplateServiceTest {
 
     @Test
     void create_creaTemplateEnDraftConVersion1() {
+        UUID domainId = UUID.randomUUID();
+        Domains domain = new Domains();
+        domain.setId(domainId);
+        domain.setActive(true);
+        when(domainsRepo.findById(domainId)).thenReturn(Optional.of(domain));
+
         CreateTemplateRequest req = new CreateTemplateRequest();
+        req.setDomainId(domainId);
         req.setTemplateKey("consent_pagos");
         req.setName("Consentimiento pagos");
 
