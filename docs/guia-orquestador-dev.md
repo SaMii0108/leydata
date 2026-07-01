@@ -1,197 +1,160 @@
 # Guía de Levantamiento y Pruebas del Orquestador
 
-> Para desarrolladores que se incorporan al proyecto o necesitan levantar el stack completo desde cero.
+---
+
+## Plataformas soportadas
+
+| Plataforma | `host.docker.internal` | Qué terminal usar |
+|---|---|---|
+| **Mac** | ✅ funciona | Terminal / iTerm2 para todo. |
+| **Windows** | ✅ funciona | PowerShell para Docker y el backend (`mvnw.cmd`). Git Bash para los scripts `.sh` y comandos `curl`. |
+| **Windows + WSL** | ❌ no alcanza WSL | WSL Ubuntu para todo. Docker Desktop puede controlarse desde ahí también. |
+
+### Cómo leer esta guía según tu plataforma
+
+Los bloques de código están etiquetados así:
+
+- **"Mac / Windows Git Bash / WSL Ubuntu"** → comandos bash. En Windows correlos en **Git Bash** (no PowerShell). En Mac y WSL funcionan en la terminal nativa.
+- **"PowerShell"** → comando alternativo para Windows cuando bash no aplica (arrancar el backend, cargar el `.env`).
+- **"cualquier terminal"** → `docker-compose` funciona igual en PowerShell, Git Bash y Terminal de Mac.
+
+> **¿Cuándo usar Windows + WSL?** Solo si preferís que el backend corra dentro de WSL. Si estás empezando en Windows, usá Git Bash + PowerShell — es más simple y `host.docker.internal` funciona sin configuración extra.
+
+---
+
+## Qué corre dónde
+
+```
+[Orquestador :8081] (Docker)  ←→  [Redis :6379] (Docker)
+         ↓  llama al backend via M2M
+[Backend :8080] (JVM local, fuera de Docker)
+         ↓
+[Keycloak :8180] [PostgreSQL :5433] (Docker)
+```
+
+El **backend** corre fuera de Docker — en tu terminal, con `./mvnw spring-boot:run`. Los demás servicios son contenedores.
 
 ---
 
 ## Índice
 
-1. [Entender el stack antes de tocarlo](#1-entender-el-stack)
-2. [Archivos de configuración y dónde va cada variable](#2-archivos-de-configuración)
-3. [Paso a paso: levantar todo](#3-paso-a-paso)
-4. [Verificar que todo funciona](#4-verificación)
-5. [Probar los endpoints del Orquestador](#5-probar-endpoints)
-6. [Flujo completo de captura B2B (end-to-end)](#6-flujo-end-to-end)
-7. [Flujo de ciclo de vida: reconsent, expiración y eliminación](#7-flujo-ciclo-de-vida)
-8. [Troubleshooting frecuente](#8-troubleshooting)
+- [A. Primera vez — setup completo](#a-primera-vez--setup-completo)
+- [B. Arranque diario](#b-arranque-diario)
+- [C. Probar los endpoints](#c-probar-los-endpoints)
+- [D. Flujo end-to-end completo](#d-flujo-end-to-end-completo)
+- [E. Flujo de ciclo de vida](#e-flujo-de-ciclo-de-vida)
+- [F. Troubleshooting](#f-troubleshooting)
 
 ---
 
-## 1. Entender el stack
+## A. Primera vez — setup completo
 
-```
-Internet / Sistema cliente (CRM, ERP)
-         │
-         ▼  JWT externo (realm empresa-cliente)
-[Orquestador :8081]  ←→  [Redis :6379]
-         │
-         │  red interna Docker + JWT M2M (realm leydata)
-         ▼
-[Backend LeyData :8080]  ←→  [Keycloak :8180]
-                          ←→  [PostgreSQL :5433 / PgBouncer :5435]
-```
-
-**Lo más importante para entender:**
-
-- El **Backend** (puerto 8080) **no se ejecuta en Docker** durante el desarrollo local — corre directo en la JVM desde el IDE o con `./mvnw spring-boot:run`. Solo los servicios de infraestructura (DB, Keycloak, Redis, Orquestador) corren en Docker.
-- El **Orquestador** (puerto 8081) **sí corre en Docker**. Se construye con su propio Dockerfile. Para que alcance al backend que corre fuera de Docker, usa `host.docker.internal` (ver sección 2).
-- Hay **dos realms de Keycloak** con propósitos distintos:
-  - `leydata` → realm interno. Autentica usuarios del backend (DPO, Admin) y emite tokens M2M para el Orquestador.
-  - `empresa-cliente` → realm de simulación. Simula el IdP externo del cliente B2B que consume el Orquestador. Solo se usa en desarrollo para tener un JWT "externo" de prueba.
+> Seguir estos pasos en orden. Solo hace falta hacerlo una vez (o si borrás los volúmenes de Docker).
 
 ---
 
-## 2. Archivos de configuración
+### A.1 — Requisitos previos
 
-### El `.env` (raíz del proyecto)
+- **Docker Desktop** instalado y corriendo.
+  - Windows + WSL: activar backend WSL2 en Settings → General → "Use WSL2 based engine".
+- **Java 21** instalado en el entorno donde corre el backend.
+  - Mac: `brew install openjdk@21`
+  - Windows (PowerShell): descargar desde [adoptium.net](https://adoptium.net) e instalar en Windows.
+  - Windows + WSL: `sudo apt install openjdk-21-jdk` dentro de WSL Ubuntu.
+- **Python 3** (para parsear JSON en los scripts).
+  - Mac / WSL Ubuntu: preinstalado.
+  - Windows (PowerShell): descargar desde [python.org](https://www.python.org/downloads/) o `winget install Python.Python.3`.
+- **Git Bash** (solo Windows con PowerShell, para correr los scripts `.sh`): se instala junto con [Git for Windows](https://git-scm.com/download/win).
+
+---
+
+### A.2 — Clonar y crear el `.env`
+
+**Mac / Windows Git Bash / WSL Ubuntu:**
+```bash
+cd <ruta-al-proyecto>
+cp .env.example .env
+```
+
+**Windows (PowerShell):**
+```powershell
+cd <ruta-al-proyecto>
+Copy-Item .env.example .env
+```
+
+El `.env` inicial tiene estos valores (ya correctos para desarrollo local):
 
 ```
-# Solo estas tres variables son necesarias:
 DB_USER=admin
 DB_PASS=admin
 DB_NAME=leydata_db
-
-# Este se rellena DESPUÉS de ejecutar setup-keycloak.sh:
-KC_BACKEND_SECRET=<se genera en el paso 3.3>
+KC_BACKEND_SECRET=        ← dejar vacío por ahora, se completa en el paso A.4
 ```
-
-El `.env` **solo sirve para dos cosas**:
-1. Que Docker Compose sepa cómo crear la base de datos.
-2. Que el backend (JVM fuera de Docker) sepa con qué secret autenticarse como servicio contra Keycloak.
-
-> **No pongas aquí** el secret del orquestador ni URLs del backend.
 
 ---
 
-### El `docker-compose.override.yml`
+### A.3 — Levantar la infraestructura base
 
-Se aplica **automáticamente** sobre `docker-compose.yml` cuando corres `docker-compose up`. No hay que mencionarlo explícitamente en el comando.
-
-Contiene las variables de entorno del Orquestador para desarrollo local. La única que cambia según la plataforma es `LEYDATA_BACKEND_URL` — la URL con la que el contenedor del Orquestador alcanza al backend que corre fuera de Docker.
-
-#### ¿Qué valor usar en `LEYDATA_BACKEND_URL`?
-
-| Plataforma | Valor |
-|---|---|
-| Mac / Windows nativo (Docker Desktop) | `http://host.docker.internal:8080` (ya configurado por defecto) |
-| **WSL con Docker Desktop** | `http://<IP-de-WSL>:8080` — ver abajo |
-| Linux nativo (Docker Engine) | `http://172.17.0.1:8080` (gateway de `docker0`) |
-
-#### Si estás en WSL (este proyecto usa WSL)
-
-`host.docker.internal` dentro de un contenedor Docker apunta a la IP de Windows (`192.168.65.254`), **no a WSL**. Como el backend corre en WSL, hay que usar la IP de la interfaz `eth0` de WSL.
-
-**El problema:** esa IP **cambia con cada reinicio de WSL**.
-
-**La solución — un comando que lo actualiza automáticamente:**
-
+**Cualquier terminal (Mac / Windows / WSL Ubuntu):**
 ```bash
-# Ejecutar en WSL antes de levantar el Orquestador (o después de reiniciar WSL):
-WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1) && \
-  sed -i "s|LEYDATA_BACKEND_URL:.*|LEYDATA_BACKEND_URL: http://$WSL_IP:8080|" docker-compose.override.yml && \
-  echo "LEYDATA_BACKEND_URL actualizada a http://$WSL_IP:8080"
-```
-
-Ejecutar desde la raíz del proyecto. Modifica el archivo en el momento y confirma qué IP quedó configurada. Luego correr `docker-compose up -d orchestrator` normalmente.
-
-> Si el Orquestador lanza `Connection refused` al backend, la causa más probable es que WSL reinició y la IP cambió. Volver a correr el comando de arriba y recrear el contenedor:
-> ```bash
-> docker-compose up -d --force-recreate orchestrator
-> ```
-
----
-
-### El `KC_ORCHESTRATOR_CLIENT_SECRET`
-
-Este secret existe porque el Orquestador necesita autenticarse contra Keycloak para poder llamar al Backend LeyData en nombre propio (flujo M2M `client_credentials`). Keycloak genera ese secret cuando se crea el cliente `leydata-orchestrator`.
-
-**El flujo completo es:**
-
-```
-1. Tú creas el cliente leydata-orchestrator en Keycloak (paso 3.3)
-        ↓
-2. Keycloak genera un secret automáticamente
-        ↓
-3. Tú copias ese secret
-        ↓
-4. Docker Compose lo pasa al contenedor del Orquestador como variable de entorno
-        ↓
-5. El Orquestador lo usa para pedir tokens Bearer a Keycloak antes de cada llamada al Backend
-```
-
-**Dónde ponerlo:**
-
-El `docker-compose.override.yml` ya tiene esta línea:
-```yaml
-KC_ORCHESTRATOR_CLIENT_SECRET: ${KC_ORCHESTRATOR_CLIENT_SECRET:-dev-secret-placeholder}
-```
-
-Eso significa: "leer el valor de la variable de entorno del sistema; si no existe, usar `dev-secret-placeholder`". Por eso no hay que editar el archivo — solo exportar la variable antes de correr `docker-compose`:
-
-```bash
-# En la terminal donde vas a correr docker-compose:
-export KC_ORCHESTRATOR_CLIENT_SECRET=<secret-obtenido-en-paso-3.3>
-docker-compose up -d orchestrator
-```
-
-> Si cierras la terminal y vuelves a levantar el contenedor, tenés que exportar la variable de nuevo. Para no repetirlo, podés agregarlo al final de tu `.bashrc` / `.zshrc`, o escribirlo directamente en `docker-compose.override.yml` (sin commitear).
-
----
-
-## 3. Paso a paso
-
-### 3.1 — Levantar infraestructura Docker
-
-```bash
-# Desde la raíz del proyecto (donde está docker-compose.yml)
-cd /ruta/al/proyecto/leydata
-
-# Copiar el .env de ejemplo y ajustar si es necesario
-cp .env.example .env   # o créalo manualmente con los valores de la sección 2
-
-# Levantar toda la infraestructura EXCEPTO el orquestador (el backend no está listo aún)
+cd <ruta-al-proyecto>
 docker-compose up -d db db-replica pgbouncer keycloak-db keycloak redis
+```
 
-# Verificar que Keycloak levantó (puede tardar 30-60 segundos la primera vez)
-curl -s http://localhost:8180/realms/master | python3 -m json.tool | head -5
+Esperar que Keycloak levante (puede tardar 30-60 segundos la primera vez):
+
+**Mac / Windows Git Bash / WSL Ubuntu:**
+```bash
+curl -s http://localhost:8180/realms/master | python3 -m json.tool | head -3
+# Debe mostrar JSON con "realm": "master"
+```
+
+**Windows (PowerShell):**
+```powershell
+(Invoke-WebRequest http://localhost:8180/realms/master).Content | python3 -m json.tool | Select-Object -First 3
 ```
 
 ---
 
-### 3.2 — Configurar el realm `leydata` en Keycloak
+### A.4 — Configurar Keycloak y completar el `.env`
 
+**Mac / Windows Git Bash / WSL Ubuntu:**
 ```bash
-# Ejecutar UNA sola vez (o si borrás el volumen de Keycloak)
+cd <ruta-al-proyecto>
 bash scripts/setup-keycloak.sh
 ```
 
-Al finalizar, el script imprime:
+**Windows (PowerShell):** abrir Git Bash y correr el mismo comando de arriba — este script no tiene equivalente en PowerShell.
 
+Al finalizar, el script imprime:
 ```
 ======================================================
  Keycloak configurado correctamente.
- KC_BACKEND_SECRET: xv1azD1GtBEJpxZOAVovKBpBfrZ063eL
+ KC_BACKEND_SECRET: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ======================================================
 ```
 
-**Copiar ese valor** y pegarlo en el `.env`:
+**Abrir el `.env` y completar esa línea ahora:**
 ```
-KC_BACKEND_SECRET=xv1azD1GtBEJpxZOAVovKBpBfrZ063eL
+KC_BACKEND_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+
+> Este secret es el que el backend usa para autenticarse como cliente en Keycloak. Si el archivo queda vacío, el backend arranca pero falla al llamar a Keycloak.
 
 ---
 
-### 3.3 — Crear el cliente del Orquestador en Keycloak
+### A.5 — Crear el cliente del Orquestador en Keycloak
 
-El script anterior no crea el cliente `leydata-orchestrator`. Hay que hacerlo manualmente una sola vez:
+El Orquestador se autentica contra Keycloak con sus propias credenciales (flujo M2M `client_credentials`) para poder llamar al backend en nombre del sistema externo. Hay que crear ese cliente manualmente una sola vez.
 
+**Mac / Windows Git Bash / WSL Ubuntu:**
 ```bash
-# Obtener token de admin de Keycloak master
+# Token de admin de Keycloak
 MASTER_TOKEN=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
   -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# Crear cliente leydata-orchestrator (confidential, solo client_credentials)
+# Crear cliente
 curl -s -X POST http://localhost:8180/admin/realms/leydata/clients \
   -H "Authorization: Bearer $MASTER_TOKEN" \
   -H "Content-Type: application/json" \
@@ -204,54 +167,194 @@ curl -s -X POST http://localhost:8180/admin/realms/leydata/clients \
     "directAccessGrantsEnabled": false
   }'
 
-# Obtener el Client ID interno para buscar el secret
+# Obtener UUID del cliente recién creado
 CLIENT_UUID=$(curl -s "http://localhost:8180/admin/realms/leydata/clients?clientId=leydata-orchestrator" \
   -H "Authorization: Bearer $MASTER_TOKEN" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
 
-# Obtener el secret generado automáticamente y exportarlo para Docker Compose
-export KC_ORCHESTRATOR_CLIENT_SECRET=$(curl -s \
+# Obtener el secret generado por Keycloak
+KC_ORCHESTRATOR_SECRET=$(curl -s \
   "http://localhost:8180/admin/realms/leydata/clients/$CLIENT_UUID/client-secret" \
   -H "Authorization: Bearer $MASTER_TOKEN" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
 
-echo "Secret del orquestador: $KC_ORCHESTRATOR_CLIENT_SECRET"
-echo "↑ Guardalo — lo necesitás cada vez que levantás el contenedor del orquestador."
+echo "=============================="
+echo " KC_ORCHESTRATOR_SECRET: $KC_ORCHESTRATOR_SECRET"
+echo "=============================="
+echo "Anotalo — lo necesitás cada vez que levantás el Orquestador."
 ```
 
-El último comando exporta `KC_ORCHESTRATOR_CLIENT_SECRET` directamente en tu sesión de terminal. **En esa misma terminal** podés correr el `docker-compose up` del paso 3.7 y Docker Compose va a leer la variable automáticamente. Si abrís una terminal nueva, tenés que volver a exportarla (o guardarla en tu `.bashrc`).
+**Guardar ese valor** (en un gestor de passwords, en tus notas, donde prefieras). No va al `.env` — se pasa como variable de entorno al levantar el contenedor (paso A.8).
+
+Luego, asignar el rol `ADMIN` a la service account del Orquestador (sin esto, el backend devuelve 403):
+
+```bash
+SA_USER=$(curl -s "http://localhost:8180/admin/realms/leydata/clients/$CLIENT_UUID/service-account-user" \
+  -H "Authorization: Bearer $MASTER_TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+ADMIN_ROLE=$(curl -s "http://localhost:8180/admin/realms/leydata/roles/ADMIN" \
+  -H "Authorization: Bearer $MASTER_TOKEN")
+
+curl -s -X POST "http://localhost:8180/admin/realms/leydata/users/$SA_USER/role-mappings/realm" \
+  -H "Authorization: Bearer $MASTER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "[$ADMIN_ROLE]"
+
+echo "Rol ADMIN asignado."
+```
 
 ---
 
-### 3.4 — Configurar el realm de prueba `empresa-cliente`
+### A.6 — Configurar el realm de prueba `empresa-cliente`
 
+Este realm simula el IdP externo del cliente B2B. Se usa para obtener el JWT de un operador CRM en las pruebas.
+
+**Mac / Windows Git Bash / WSL Ubuntu:**
 ```bash
-# Crear el realm que simula el IdP del sistema cliente externo
+cd <ruta-al-proyecto>
 bash scripts/setup-empresa-cliente-realm.sh
 ```
 
-Al finalizar muestra el comando `curl` para obtener un token de prueba (lo vas a usar en las pruebas).
+**Windows (PowerShell):** abrir Git Bash y correr el mismo comando — este script no tiene equivalente en PowerShell.
 
 ---
 
-### 3.5 — Agregar el claim `leydata_domain` al cliente `crm-sistema`
+### A.7 — Levantar el backend
 
-El Orquestador extrae el UUID del dominio LeyData del claim `leydata_domain` del JWT entrante. Sin este claim, `POST /consent/capture` devuelve `422`.
+El backend necesita las variables del `.env` en su entorno. No las lee automáticamente — hay que cargarlas antes de correr Maven.
+
+**Mac / Windows Git Bash / WSL Ubuntu:**
+```bash
+cd <ruta-al-proyecto>/backend
+set -a && source ../.env && set +a
+./mvnw spring-boot:run
+```
+
+**Windows (PowerShell):**
+```powershell
+# Cargar variables del .env
+Get-Content .\.env | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
+    $k, $v = $_ -split '=', 2
+    [System.Environment]::SetEnvironmentVariable($k.Trim(), $v.Trim(), 'Process')
+}
+# Arrancar el backend
+cd <ruta-al-proyecto>\backend
+.\mvnw.cmd spring-boot:run
+```
+
+> **Si usás un IDE (VS Code, IntelliJ, etc.):** configurá la run configuration para que cargue el archivo `.env` de la raíz del proyecto como fuente de variables de entorno. El comando de arriba es la alternativa sin IDE.
+
+Esperar hasta ver en consola:
+```
+Started BackendApplication in X.XXX seconds
+```
+
+Verificar (debe responder 401, no connection refused):
+
+**Mac / Windows Git Bash / WSL Ubuntu:**
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/domains/all
+```
+
+**PowerShell:**
+```powershell
+(Invoke-WebRequest -Uri http://localhost:8080/api/domains/all -SkipHttpErrorCheck).StatusCode
+# Debe ser 401
+```
+
+---
+
+### A.8 — Levantar el Orquestador
+
+El Orquestador corre en Docker y necesita alcanzar al backend. La URL correcta depende de la plataforma.
+
+#### Mac y Windows (PowerShell)
+
+En Mac y Windows con PowerShell, `host.docker.internal` resuelve correctamente al host desde dentro de los contenedores — el backend es alcanzable sin configuración adicional.
+
+**Mac / Git Bash:**
+```bash
+cd <ruta-al-proyecto>
+KC_ORCHESTRATOR_CLIENT_SECRET=<secret-del-paso-A.5> \
+docker-compose up -d --build orchestrator
+```
+
+**Windows (PowerShell):**
+```powershell
+cd <ruta-al-proyecto>
+$env:KC_ORCHESTRATOR_CLIENT_SECRET = "<secret-del-paso-A.5>"
+docker-compose up -d --build orchestrator
+```
+
+#### Windows + WSL
+
+En Docker Desktop + WSL2, `host.docker.internal` resuelve al gateway de Docker Desktop, **no a la VM de WSL** donde corre el backend. Hay que pasar la IP real de WSL.
+
+> La IP de WSL **cambia con cada reinicio de Windows**. Siempre detectarla antes de levantar el Orquestador.
+
+**WSL Ubuntu:**
+```bash
+cd <ruta-al-proyecto>
+WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+echo "IP de WSL: $WSL_IP"
+
+KC_ORCHESTRATOR_CLIENT_SECRET=<secret-del-paso-A.5> \
+LEYDATA_BACKEND_URL=http://$WSL_IP:8080 \
+docker-compose up -d --build orchestrator
+```
+
+**PowerShell (alternativa para el docker-compose):**
+```powershell
+$WSL_IP = (wsl -d Ubuntu -- ip addr show eth0 | Select-String 'inet ').ToString().Trim().Split()[1].Split('/')[0]
+Write-Host "IP de WSL: $WSL_IP"
+
+$env:KC_ORCHESTRATOR_CLIENT_SECRET = "<secret-del-paso-A.5>"
+$env:LEYDATA_BACKEND_URL = "http://${WSL_IP}:8080"
+docker-compose up -d --build orchestrator
+```
+
+---
+
+Verificar que levantó:
+```bash
+docker logs leydata-orchestrator --tail 20
+# Debe terminar con: Started OrchestratorApplication in X.XXX seconds
+
+curl -s http://localhost:8081/actuator/health
+# {"status":"UP"}
+```
+
+---
+
+### A.9 — Configurar el claim `leydata_domain` en Keycloak
+
+El Orquestador extrae el UUID del dominio del claim `leydata_domain` dentro del JWT entrante. Sin este claim, `POST /consent/capture` falla.
+
+Primero obtener el UUID del dominio:
+```bash
+ADMIN_TOKEN=$(curl -s http://localhost:8180/realms/leydata/protocol/openid-connect/token \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'grant_type=password&client_id=leydata-frontend&username=admin@leydata.cl&password=Admin1234!' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s http://localhost:8080/api/domains/all \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); [print(x['id'], x['name']) for x in d['domains']]"
+```
+
+Elegir el dominio que va a usar el sistema CRM de prueba y guardar su UUID. Luego agregar el mapper en Keycloak:
 
 ```bash
 MASTER_TOKEN=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
   -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# Obtener el UUID interno del cliente crm-sistema
 CRM_UUID=$(curl -s "http://localhost:8180/admin/realms/empresa-cliente/clients?clientId=crm-sistema" \
   -H "Authorization: Bearer $MASTER_TOKEN" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
 
-# Agregar protocol mapper que hardcodea el domainId en el token
-# Reemplazar <UUID-DOMINIO> con el UUID real del dominio en LeyData
-# (GET http://localhost:8080/api/domains/all con token de admin para obtenerlo)
-DOMAIN_ID="<UUID-DOMINIO>"
+DOMAIN_ID="<UUID-del-paso-anterior>"
 
 curl -s -X POST "http://localhost:8180/admin/realms/empresa-cliente/clients/$CRM_UUID/protocol-mappers/models" \
   -H "Authorization: Bearer $MASTER_TOKEN" \
@@ -269,111 +372,105 @@ curl -s -X POST "http://localhost:8180/admin/realms/empresa-cliente/clients/$CRM
       \"userinfo.token.claim\": \"false\"
     }
   }"
-echo "Mapper agregado OK"
-```
-
-**Cómo obtener el UUID del dominio:**
-
-```bash
-# Primero levantar el backend (paso 3.6), luego:
-ADMIN_TOKEN=$(curl -s http://localhost:8180/realms/leydata/protocol/openid-connect/token \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  -d 'grant_type=password&client_id=leydata-frontend&username=admin@leydata.cl&password=Admin1234!' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-
-curl -s http://localhost:8080/api/domains/all \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); [print(x['id'], x['name']) for x in d['domains']]"
+echo "Mapper OK"
 ```
 
 ---
 
-### 3.6 — Levantar el Backend LeyData
+**Setup completo.** Pasá a la sección C para probar los endpoints, o B para ver cómo arrancar cada día.
 
-El backend corre **fuera de Docker**, directo en la JVM. Desde la carpeta `backend/`:
+---
+
+## B. Arranque diario
+
+> Una vez hecho el setup de la sección A, esto es lo que corrés cada vez que reiniciás la máquina.
+
+### Mac
 
 ```bash
+# Terminal 1 — infraestructura y orquestador
+cd <ruta-al-proyecto>
+docker-compose up -d db db-replica pgbouncer keycloak-db keycloak redis orchestrator
+
+# Terminal 2 — backend (con variables del .env cargadas)
+cd <ruta-al-proyecto>/backend
+set -a && source ../.env && set +a
+./mvnw spring-boot:run
+```
+
+### Windows (PowerShell)
+
+```powershell
+# Terminal 1 (PowerShell) — infraestructura
+cd <ruta-al-proyecto>
+docker-compose up -d db db-replica pgbouncer keycloak-db keycloak redis
+
+# Terminal 1 — Orquestador (host.docker.internal funciona en Windows)
+$env:KC_ORCHESTRATOR_CLIENT_SECRET = "<tu-secret>"
+docker-compose up -d --force-recreate orchestrator
+
+# Terminal 2 (PowerShell) — backend con variables del .env
+cd <ruta-al-proyecto>
+Get-Content .\.env | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
+    $k, $v = $_ -split '=', 2
+    [System.Environment]::SetEnvironmentVariable($k.Trim(), $v.Trim(), 'Process')
+}
 cd backend
-
-# En WSL / Linux:
-DB_USER=admin DB_PASS=admin DB_NAME=leydata_db \
-  KC_BACKEND_SECRET=<el-secret-del-paso-3.2> \
-  ./mvnw spring-boot:run
+.\mvnw.cmd spring-boot:run
 ```
 
-Esperar hasta ver en consola:
-```
-Started BackendApplication in X.XXX seconds
-```
+### Windows + WSL
 
-**Verificar:**
+> La IP de WSL cambia con cada reinicio. El Orquestador hay que recrearlo con la IP nueva.
+
+**WSL Ubuntu:**
 ```bash
-# Debe responder 401 (no 404 ni connection refused):
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/domains/all
+# Terminal 1 — infraestructura base
+cd <ruta-al-proyecto>
+docker-compose up -d db db-replica pgbouncer keycloak-db keycloak redis
+
+# Terminal 1 — Orquestador con IP de WSL
+WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+KC_ORCHESTRATOR_CLIENT_SECRET=<tu-secret> \
+LEYDATA_BACKEND_URL=http://$WSL_IP:8080 \
+docker-compose up -d --force-recreate orchestrator
+
+# Terminal 2 — backend con variables del .env
+cd <ruta-al-proyecto>/backend
+set -a && source ../.env && set +a
+./mvnw spring-boot:run
+```
+
+**PowerShell (solo para el paso del Orquestador, si preferís PowerShell para Docker):**
+```powershell
+$WSL_IP = (wsl -d Ubuntu -- ip addr show eth0 | Select-String 'inet ').ToString().Trim().Split()[1].Split('/')[0]
+$env:KC_ORCHESTRATOR_CLIENT_SECRET = "<tu-secret>"
+$env:LEYDATA_BACKEND_URL = "http://${WSL_IP}:8080"
+docker-compose up -d --force-recreate orchestrator
+```
+
+### Verificación rápida
+
+```bash
+curl -s http://localhost:8080/actuator/health   # Backend
+curl -s http://localhost:8081/actuator/health   # Orquestador
+# Ambos deben responder {"status":"UP"}
 ```
 
 ---
 
-### 3.7 — Construir y levantar el Orquestador
+## C. Probar los endpoints
 
-```bash
-cd /ruta/al/proyecto/leydata
-
-# Exportar el secret del orquestador (del paso 3.3)
-export KC_ORCHESTRATOR_CLIENT_SECRET=<secret-del-orquestador>
-
-# Si estás en WSL, actualizar la IP del backend en docker-compose.override.yml primero (ver sección 2)
-
-# Construir la imagen y levantar el contenedor
-docker-compose up -d --build orchestrator
-
-# Ver los logs del orquestador
-docker logs leydata-orchestrator -f
-```
-
-Esperar hasta ver:
-```
-Started OrchestratorApplication in X.XXX seconds
-```
-
----
-
-## 4. Verificación
-
-```bash
-# 1. Health del Orquestador
-curl -s http://localhost:8081/actuator/health
-# Respuesta esperada: {"status":"UP"}
-
-# 2. El backend es alcanzable por el orquestador
-docker exec leydata-orchestrator wget -qO- http://<ip-backend>:8080/actuator/health 2>/dev/null || \
-  echo "Si falla aquí, revisar LEYDATA_BACKEND_URL en docker-compose.override.yml"
-
-# 3. El Orquestador puede obtener token M2M de Keycloak (ver en logs que no hay errores de 401)
-docker logs leydata-orchestrator 2>&1 | grep -i "error\|exception\|401" | tail -10
-
-# 4. El JWKS externo es alcanzable desde el contenedor
-docker exec leydata-orchestrator wget -qO- \
-  http://keycloak:8080/realms/empresa-cliente/protocol/openid-connect/certs | python3 -m json.tool | head -5
-```
-
----
-
-## 5. Probar endpoints
-
-### Opción A: Bruno (colección incluida en el repo)
+### Opción A: Bruno
 
 1. Abrir Bruno y cargar la carpeta `bruno/` del proyecto.
 2. Seleccionar el environment `local`.
-3. Editar las variables del environment:
-   - `domainId`: UUID de un dominio activo (obtener con `GET /api/domains/all`)
-4. Ejecutar en orden:
-   - `bruno/Orquestador/01 Obtener Token Sistema Externo.bru` → copiar el `access_token` en la variable secreta `externalToken`.
-   - Luego los demás requests de la carpeta `Orquestador/`.
+3. Editar `domainId` en el environment con el UUID de un dominio activo.
+4. Ejecutar los requests de `bruno/Orquestador/` en orden.
 
 ### Opción B: curl
 
-#### Paso 1 — Obtener token del sistema externo
+**Mac / Windows Git Bash / WSL Ubuntu.** Obtener primero el token externo:
 
 ```bash
 EXTERNAL_TOKEN=$(curl -s -X POST \
@@ -381,128 +478,80 @@ EXTERNAL_TOKEN=$(curl -s -X POST \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   -d 'grant_type=password&client_id=crm-sistema&username=operador@empresa.cl&password=operador123' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-
-echo "Token OK: ${EXTERNAL_TOKEN:0:30}..."
+echo "Token OK: ${EXTERNAL_TOKEN:0:40}..."
 ```
 
-> Si falla aquí: verificar que corriste `setup-empresa-cliente-realm.sh`.
-
-#### Paso 2 — Verificar consentimiento (GET /consent/check)
+#### Verificar consentimiento — GET /consent/check
 
 ```bash
-PURPOSE_ID="<uuid-de-una-finalidad>"  # cualquier UUID de purpose existente
-
+PURPOSE_ID="<uuid-finalidad>"
 curl -s "http://localhost:8081/consent/check?subjectId=test-user-001&purposeId=$PURPOSE_ID" \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
+# { "status": "PENDING" } si no hay consentimiento previo
 ```
 
-Respuesta esperada si no hay consentimiento previo:
-```json
-{"subjectId": "test-user-001", "purposeId": "...", "status": "PENDING"}
-```
+#### Capturar consentimiento — POST /consent/capture
 
-#### Paso 3 — Capturar consentimiento (POST /consent/capture)
-
-Prerequisitos antes de poder capturar:
-- Debe existir un template con status `ACTIVE` en el dominio del JWT (`leydata_domain`)
-- Ese template debe tener un documento de privacidad `PUBLISHED` asociado
+> Prerequisito: debe existir un template `ACTIVE` en el dominio del JWT y un documento de privacidad `PUBLISHED` asociado.
 
 ```bash
-TEMPLATE_KEY="TEST_ONBOARDING"   # el templateKey del template ACTIVE en ese dominio
-PURPOSE_ID="<uuid-finalidad-del-template>"
-
+TEMPLATE_KEY="MI_TEMPLATE"
 curl -s -X POST http://localhost:8081/consent/capture \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
     \"subjectId\": \"test-user-001\",
     \"templateKey\": \"$TEMPLATE_KEY\",
-    \"purposes\": [
-      { \"purposeId\": \"$PURPOSE_ID\", \"accepted\": true }
-    ]
+    \"purposes\": [{\"purposeId\": \"$PURPOSE_ID\", \"accepted\": true}]
   }" | python3 -m json.tool
+# { "status": "ALLOWED", "agreementId": "..." }
 ```
 
-Respuesta esperada:
-```json
-{
-  "subjectId": "test-user-001",
-  "agreementId": "<uuid>",
-  "status": "ALLOWED"
-}
-```
-
-#### Paso 4 — Verificar que el consentimiento quedó en caché (Redis)
+#### Textos legales del template — GET /consent/template-content
 
 ```bash
-# La misma consulta de antes ahora debe responder "ALLOWED" desde Redis
-curl -s "http://localhost:8081/consent/check?subjectId=test-user-001&purposeId=$PURPOSE_ID" \
+curl -s "http://localhost:8081/consent/template-content?templateKey=$TEMPLATE_KEY" \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
 ```
 
-#### Paso 5 — Obtener textos legales del template (GET /consent/template-content)
+#### Estado del titular — GET /consent/subject/{subjectId}
 
 ```bash
-# Obtener los textos legales que se mostrarán al titular antes de firmar
-curl -s "http://localhost:8081/consent/template-content?templateKey=MI_TEMPLATE" \
-  -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
-
-# Respuesta: { templateId, templateKey, title, content, version, purposes: [...] }
-```
-
-#### Paso 6 — Ver estado completo del titular (GET /consent/subject/{subjectId})
-
-```bash
-# Portal de preferencias: todas las finalidades del titular en el dominio
 curl -s "http://localhost:8081/consent/subject/test-user-001" \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
-
-# Respuesta: lista de agreements con estado (accepted, status) por cada purpose
 ```
 
-#### Paso 7 — Revocar una finalidad específica (POST /consent/revoke-purpose)
+#### Revocar una finalidad — POST /consent/revoke-purpose
 
 ```bash
-# Revocación granular: solo una finalidad, las demás siguen activas
-# Internamente hace re-consent (nuevo agreement) para preservar el hash SHA-256
 curl -s -X POST http://localhost:8081/consent/revoke-purpose \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"subjectId\": \"test-user-001\",
-    \"purposeId\": \"$PURPOSE_ID\",
-    \"templateKey\": \"MI_TEMPLATE\"
-  }" | python3 -m json.tool
+  -d "{\"subjectId\": \"test-user-001\", \"purposeId\": \"$PURPOSE_ID\", \"templateKey\": \"$TEMPLATE_KEY\"}" \
+  | python3 -m json.tool
 ```
 
-#### Paso 8 — Revocar todo el consentimiento (POST /consent/revoke)
+#### Revocar todo el acuerdo — POST /consent/revoke
 
 ```bash
-AGREEMENT_ID="<agreementId-del-paso-3>"
-
+AGREEMENT_ID="<agreementId>"
 curl -s -X POST http://localhost:8081/consent/revoke \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"subjectId\": \"test-user-001\",
-    \"agreementId\": \"$AGREEMENT_ID\"
-  }" | python3 -m json.tool
+  -d "{\"subjectId\": \"test-user-001\", \"agreementId\": \"$AGREEMENT_ID\"}" \
+  | python3 -m json.tool
 ```
 
-#### Paso 9 — Consultar datos pendientes de eliminación (GET /consent/pending-deletions)
+#### Eliminaciones pendientes — GET /consent/pending-deletions
 
 ```bash
-# Lista finalidades vencidas cuyos datos aún no fueron eliminados
 curl -s "http://localhost:8081/consent/pending-deletions" \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
-
-# Respuesta: [ { subjectIdentifier, purposeId, purposeCode, expiredAt, anonymizeAfter }, ... ]
 ```
 
-#### Paso 10 — Confirmar eliminación de datos (POST /consent/confirm-deletion)
+#### Confirmar eliminación — POST /consent/confirm-deletion
 
 ```bash
-# El CRM confirma que eliminó los datos — queda registrado en el audit log
 curl -s -X POST http://localhost:8081/consent/confirm-deletion \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" \
   -H "Content-Type: application/json" \
@@ -511,253 +560,165 @@ curl -s -X POST http://localhost:8081/consent/confirm-deletion \
     \"purposeId\": \"$PURPOSE_ID\",
     \"deletedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%S)\"
   }"
-# Respuesta: 204 No Content
+# 204 No Content
 ```
 
 ---
 
-## 6. Flujo end-to-end completo
+## D. Flujo end-to-end completo
 
-Para hacer una prueba de punta a punta desde cero (template nuevo → consentimiento → revocación), seguir estos pasos. Todos los requests al backend se hacen con token de DPO o ADMIN.
+Crea datos desde cero y prueba todos los casos. **Mac / Windows Git Bash / WSL Ubuntu:**
 
 ```bash
-# Token de DPO (para gestionar templates y documentos)
 DPO_TOKEN=$(curl -s http://localhost:8180/realms/leydata/protocol/openid-connect/token \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   -d 'grant_type=password&client_id=leydata-frontend&username=dpo@leydata.cl&password=Test1234!' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 DOMAIN_ID="<uuid-dominio>"
-PURPOSE_ID="<uuid-finalidad-existente>"
+PURPOSE_ID="<uuid-finalidad>"
 ```
 
-**1. Crear template:**
+**1. Crear y activar template:**
 ```bash
 TEMPLATE=$(curl -s -X POST http://localhost:8080/api/templates \
-  -H "Authorization: Bearer $DPO_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d "{\"domainId\":\"$DOMAIN_ID\",\"templateKey\":\"MI_TEMPLATE\",\"name\":\"Mi Template\",\"description\":\"Test\",\"purposeIds\":[]}")
+  -H "Authorization: Bearer $DPO_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"domainId\":\"$DOMAIN_ID\",\"templateKey\":\"MI_TEMPLATE\",\"name\":\"Mi Template\"}")
 TEMPLATE_ID=$(echo $TEMPLATE | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-```
 
-**2. Vincular finalidad, aprobar y activar:**
-```bash
 curl -s -X POST "http://localhost:8080/api/templates/$TEMPLATE_ID/purposes" \
   -H "Authorization: Bearer $DPO_TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"purposeId\":\"$PURPOSE_ID\",\"visible\":true,\"orderPosition\":1}"
+  -d "{\"purposeId\":\"$PURPOSE_ID\",\"orderPosition\":1}"
 
-curl -s -X POST "http://localhost:8080/api/templates/$TEMPLATE_ID/approve" -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
+curl -s -X POST "http://localhost:8080/api/templates/$TEMPLATE_ID/approve" \
+  -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
+
 curl -s -X POST "http://localhost:8080/api/templates/$TEMPLATE_ID/activate" \
-  -H "Authorization: Bearer $DPO_TOKEN" | python3 -c "import sys,json; print('Template status:', json.load(sys.stdin)['status'])"
+  -H "Authorization: Bearer $DPO_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"forceReconsent": false}' \
+  | python3 -c "import sys,json; print('Template status:', json.load(sys.stdin)['status'])"
 ```
 
-**3. Crear y publicar documento de privacidad:**
+**2. Crear y publicar documento de privacidad:**
 ```bash
 DOC=$(curl -s -X POST http://localhost:8080/api/privacy-documents \
   -H "Authorization: Bearer $DPO_TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Aviso de privacidad\",\"category\":\"POLITICA_PRIVACIDAD\",\"content\":\"...\",\"templateId\":\"$TEMPLATE_ID\"}")
+  -d "{\"name\":\"Aviso\",\"category\":\"POLITICA_PRIVACIDAD\",\"content\":\"Contenido...\",\"templateId\":\"$TEMPLATE_ID\"}")
 DOC_ID=$(echo $DOC | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
-curl -s -X POST "http://localhost:8080/api/privacy-documents/$DOC_ID/purposes/$PURPOSE_ID" -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
-curl -s -X POST "http://localhost:8080/api/privacy-documents/$DOC_ID/submit" -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
-curl -s -X POST "http://localhost:8080/api/privacy-documents/$DOC_ID/approve" -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
+curl -s -X POST "http://localhost:8080/api/privacy-documents/$DOC_ID/purposes/$PURPOSE_ID" \
+  -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
+curl -s -X POST "http://localhost:8080/api/privacy-documents/$DOC_ID/submit" \
+  -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
+curl -s -X POST "http://localhost:8080/api/privacy-documents/$DOC_ID/approve" \
+  -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
 curl -s -X POST "http://localhost:8080/api/privacy-documents/$DOC_ID/publish" \
-  -H "Authorization: Bearer $DPO_TOKEN" | python3 -c "import sys,json; print('Doc status:', json.load(sys.stdin)['status'])"
+  -H "Authorization: Bearer $DPO_TOKEN" \
+  | python3 -c "import sys,json; print('Doc status:', json.load(sys.stdin)['status'])"
 ```
 
-**4. Verificar que resolve ya devuelve el documentId:**
+**3. Capturar desde el Orquestador:**
 ```bash
-curl -s "http://localhost:8080/api/templates/resolve?domainId=$DOMAIN_ID&templateKey=MI_TEMPLATE" \
-  -H "Authorization: Bearer $DPO_TOKEN" | python3 -m json.tool
-# documentId ya no debe ser null
-```
+EXTERNAL_TOKEN=$(curl -s -X POST \
+  http://localhost:8180/realms/empresa-cliente/protocol/openid-connect/token \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'grant_type=password&client_id=crm-sistema&username=operador@empresa.cl&password=operador123' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-**5. Capturar desde el Orquestador:**
-```bash
-EXTERNAL_TOKEN=$(...)  # ver paso 1 de la sección 5
 curl -s -X POST http://localhost:8081/consent/capture \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" -H 'Content-Type: application/json' \
   -d "{\"subjectId\":\"test-001\",\"templateKey\":\"MI_TEMPLATE\",\"purposes\":[{\"purposeId\":\"$PURPOSE_ID\",\"accepted\":true}]}" \
   | python3 -m json.tool
 ```
 
+> También podés correr el script que hace todo esto automatizado:
+> ```bash
+> bash scripts/test-flujo-captura-completo.sh
+> ```
+
 ---
 
-## 7. Flujo de ciclo de vida
+## E. Flujo de ciclo de vida
 
-El ciclo de vida del consentimiento se evalúa **de forma lazy** en cada CHECK cuando hay cache miss en Redis. No hay batch jobs. Los cuatro estados posibles son:
-
-| Estado | Qué significa | Acción esperada del CRM |
+| Estado | Qué significa | Acción del CRM |
 |---|---|---|
-| `ALLOWED` | Consentimiento activo y vigente | Permitir acceso a los datos |
-| `EXPIRED` | Vencido según política de retención | Bloquear acceso, iniciar flujo de eliminación |
-| `REQUIRES_RECONSENT` | El DPO activó nueva versión del template con `forceReconsent=true` | Mostrar nuevo formulario al titular antes del próximo acceso |
-| `PENDING` | No existe consentimiento registrado | Mostrar formulario inicial de captura |
+| `ALLOWED` | Consentimiento activo | Permitir acceso |
+| `EXPIRED` | Vencido | Bloquear, iniciar eliminación |
+| `REQUIRES_RECONSENT` | Nueva versión del template con `forceReconsent=true` | Mostrar nuevo formulario |
+| `PENDING` | Sin consentimiento | Mostrar formulario inicial |
 
-### Probar el estado REQUIRES_RECONSENT
+### Probar REQUIRES_RECONSENT
 
 ```bash
-# 1. Crear una nueva versión del template con forceReconsent=true
 NEW_TEMPLATE=$(curl -s -X POST "http://localhost:8080/api/templates/$TEMPLATE_ID/new-version" \
+  -H "Authorization: Bearer $DPO_TOKEN" -H 'Content-Type: application/json' -d '{}')
+NEW_ID=$(echo $NEW_TEMPLATE | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+curl -s -X POST "http://localhost:8080/api/templates/$NEW_ID/approve" -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
+curl -s -X POST "http://localhost:8080/api/templates/$NEW_ID/activate" \
   -H "Authorization: Bearer $DPO_TOKEN" -H 'Content-Type: application/json' \
-  -d '{}')
-NEW_TEMPLATE_ID=$(echo $NEW_TEMPLATE | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+  -d '{"forceReconsent": true}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('v'+str(d['version']), d['status'])"
 
-# Aprobar y activar la nueva versión con forceReconsent=true
-curl -s -X POST "http://localhost:8080/api/templates/$NEW_TEMPLATE_ID/approve" \
-  -H "Authorization: Bearer $DPO_TOKEN" > /dev/null
-
-curl -s -X POST "http://localhost:8080/api/templates/$NEW_TEMPLATE_ID/activate" \
-  -H "Authorization: Bearer $DPO_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"forceReconsent": true}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('version:', d['version'], '| forceReconsent:', d['forceReconsent'])"
-
-# 2. Invalidar la caché del agreement anterior en Redis (TTL caduca sola en 15 min, o forzar)
-docker exec leydata-redis redis-cli DEL "consent:test-user-001:$PURPOSE_ID"
-
-# 3. El próximo CHECK debe devolver REQUIRES_RECONSENT
-curl -s "http://localhost:8081/consent/check?subjectId=test-user-001&purposeId=$PURPOSE_ID" \
-  -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
-# { "status": "REQUIRES_RECONSENT", ... }
-```
-
-### Probar el estado EXPIRED
-
-El estado EXPIRED depende de que la finalidad tenga una política de retención configurada (`DataRetentionPolicies`). La lógica calcula `expiresAt = fechaCaptura + retentionPeriod` en el momento de crear el agreement.
-
-Para probar sin esperar que venza naturalmente, se puede modificar directamente en la BD:
-
-```bash
-# Conectar a la base de datos
-psql -U admin -d leydata_db -h localhost -p 5433
-
--- Forzar expiración de un agreement_purpose para pruebas
-UPDATE agreements_purposes
-  SET expires_at = NOW() - INTERVAL '1 day'
-  WHERE agreement_id = '<uuid-agreement>' AND purpose_id = '<uuid-purpose>';
-```
-
-Luego:
-```bash
-# Invalidar caché y verificar
 docker exec leydata-redis redis-cli DEL "consent:test-user-001:$PURPOSE_ID"
 
 curl -s "http://localhost:8081/consent/check?subjectId=test-user-001&purposeId=$PURPOSE_ID" \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
-# { "status": "EXPIRED", ... }
+# { "status": "REQUIRES_RECONSENT" }
+```
 
-# Consultar datos pendientes de eliminación
-curl -s "http://localhost:8081/consent/pending-deletions" \
+### Probar EXPIRED
+
+```bash
+psql -U admin -d leydata_db -h localhost -p 5433 -c "
+  UPDATE agreements_purposes SET expires_at = NOW() - INTERVAL '1 day'
+  WHERE agreement_id = '<uuid>' AND purpose_id = '$PURPOSE_ID';"
+
+docker exec leydata-redis redis-cli DEL "consent:test-user-001:$PURPOSE_ID"
+
+curl -s "http://localhost:8081/consent/check?subjectId=test-user-001&purposeId=$PURPOSE_ID" \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
-
-# Confirmar eliminación
-curl -s -X POST http://localhost:8081/consent/confirm-deletion \
-  -H "Authorization: Bearer $EXTERNAL_TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"subjectId\":\"test-user-001\",\"purposeId\":\"$PURPOSE_ID\",\"deletedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%S)\"}"
+# { "status": "EXPIRED" }
 ```
 
 ---
 
-## 8. Troubleshooting
+## F. Troubleshooting
 
-### Orquestador devuelve `422 Unprocessable Entity` en `/consent/capture`
+### El Orquestador no alcanza el backend (`Connection refused`)
 
-**Causa A:** El JWT no tiene el claim `leydata_domain`.
-```
-"El JWT del sistema cliente no incluye el claim 'leydata_domain'..."
-```
-→ Verificar que corriste el paso 3.5 (protocol mapper en `crm-sistema`). El token debe renovarse después de agregar el mapper (el token viejo no tendrá el claim).
+**Mac / Windows (PowerShell):** el backend no está corriendo. Levantarlo con `./mvnw spring-boot:run` (Mac) o `.\mvnw.cmd spring-boot:run` (PowerShell).
 
-**Causa B:** No existe una versión `ACTIVE` del `templateKey` en el dominio del JWT.
-```
-"No hay una versión activa para el template X en este dominio"
-```
-→ Verificar que el template existe, está `ACTIVE`, y que el `domainId` del JWT coincide con el del template.
+**Windows + WSL:** la IP de WSL cambió al reiniciar. Recrear el Orquestador con la IP nueva (ver [B. Arranque diario](#b-arranque-diario)).
 
-**Causa C:** El template existe y está activo, pero no tiene un documento `PUBLISHED` asociado.
-```
-"El template X no tiene un documento publicado asociado"
-```
-→ Crear y publicar un documento con `templateId` apuntando a ese template (seguir el paso 3 del flujo end-to-end).
-
----
-
-### El CHECK devuelve `REQUIRES_RECONSENT` inesperadamente
-
-El DPO activó una nueva versión del template con `forceReconsent=true`. El CRM debe mostrar el formulario de consentimiento actualizado al titular antes de permitir el acceso.
-
+Verificar qué URL tiene el contenedor ahora:
 ```bash
-# Ver la versión actual del template activo
-curl -s "http://localhost:8080/api/templates/active/MI_TEMPLATE" \
-  -H "Authorization: Bearer $DPO_TOKEN" \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print('version:', d['version'], '| forceReconsent:', d['forceReconsent'])"
-
-# Ver la versión del agreement del titular
-curl -s "http://localhost:8080/api/agreements/lifecycle-check?subjectIdentifier=test-user-001&domainId=$DOMAIN_ID&templateKey=MI_TEMPLATE" \
-  -H "Authorization: Bearer $DPO_TOKEN" | python3 -m json.tool
-# agreementTemplateVersion < currentTemplateVersion → confirma REQUIRES_RECONSENT
-```
-
-La solución es que el titular firme el nuevo consentimiento vía `POST /consent/capture`.
-
----
-
-### El CHECK devuelve `EXPIRED` aunque el titular consintió recientemente
-
-El acuerdo tiene `expiresAt` en el pasado. Esto ocurre cuando la finalidad tiene una política de retención corta en `DataRetentionPolicies`.
-
-```bash
-# Ver cuándo vence la finalidad en el acuerdo
-psql -U admin -d leydata_db -h localhost -p 5433 \
-  -c "SELECT ap.expires_at, p.name, p.code FROM agreements_purposes ap
-      JOIN purposes p ON p.id = ap.purpose_id
-      WHERE ap.expires_at IS NOT NULL AND ap.expires_at < NOW()
-      ORDER BY ap.expires_at DESC LIMIT 5;"
-```
-
-Si la retención es demasiado corta para las pruebas, actualizar la política en `data_retention_policies` y crear un nuevo agreement. El cálculo de `expiresAt` ocurre al crear el agreement, no retroactivamente.
-
----
-
-### `POST /consent/revoke-purpose` devuelve 400
-
-El titular no tiene ningún agreement ACTIVE con el `templateKey` indicado. Verificar con:
-
-```bash
-curl -s "http://localhost:8081/consent/subject/test-user-001" \
-  -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
-```
-
-Si la lista está vacía, el titular no tiene consentimiento activo — no hay nada que revocar granularmente.
-
----
-
-### `Connection refused` al levantar el Orquestador
-
-El Orquestador no puede conectarse al backend. Causa más común en WSL: la IP cambió al reiniciar.
-
-```bash
-# 1. ¿El backend está corriendo?
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/domains/all
-# Debe responder 401, no "connection refused"
-
-# 2. Ver qué URL tiene configurada el contenedor ahora mismo:
 docker exec leydata-orchestrator env | grep LEYDATA_BACKEND_URL
-
-# 3. Si la IP no coincide con la de WSL, actualizarla y recrear el contenedor:
-WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1) && \
-  sed -i "s|LEYDATA_BACKEND_URL:.*|LEYDATA_BACKEND_URL: http://$WSL_IP:8080|" docker-compose.override.yml && \
-  echo "IP actualizada: $WSL_IP" && \
-  docker-compose up -d --force-recreate orchestrator
 ```
 
 ---
 
-### El backend responde `500` al crear usuarios
+### El Orquestador responde 403 al llamar al backend
 
-La causa más común es que el `KC_BACKEND_SECRET` en el `.env` es incorrecto o quedó desactualizado.
+La service account de `leydata-orchestrator` no tiene el rol `ADMIN` en Keycloak. Repetir la parte de asignación de roles del paso A.5.
+
+---
+
+### `POST /consent/capture` devuelve error
+
+| Síntoma | Causa | Fix |
+|---|---|---|
+| 403 del backend | Service account sin rol ADMIN | Paso A.5 — asignar rol ADMIN |
+| 422 / 500 | JWT sin claim `leydata_domain` | Paso A.9 — agregar mapper en Keycloak |
+| 422 / 500 | No existe template ACTIVE en el dominio | Crear y activar un template |
+| 422 / 500 | Template sin documento PUBLISHED | Crear y publicar documento asociado |
+
+---
+
+### El backend arranca pero falla al llamar a Keycloak
+
+El `KC_BACKEND_SECRET` en el `.env` es incorrecto. Obtener el valor actual de Keycloak:
 
 ```bash
-# Obtener el secret actual de Keycloak:
 MASTER=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
   -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
@@ -769,50 +730,29 @@ curl -s "http://localhost:8180/admin/realms/leydata/clients/$CLIENT_UUID/client-
   -H "Authorization: Bearer $MASTER" | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])"
 ```
 
-Actualizar `KC_BACKEND_SECRET` en el `.env` con ese valor y reiniciar el backend.
+Actualizar `KC_BACKEND_SECRET` en el `.env` y reiniciar el backend.
 
 ---
 
-### El token de admin `admin@leydata.cl` no funciona
+### Reiniciar desde cero
 
 ```bash
-# Resetear la contraseña via Keycloak admin API:
-MASTER=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
-  -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-
-USER_ID=$(curl -s "http://localhost:8180/admin/realms/leydata/users?search=admin@leydata.cl" \
-  -H "Authorization: Bearer $MASTER" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
-
-curl -s -X PUT "http://localhost:8180/admin/realms/leydata/users/$USER_ID/reset-password" \
-  -H "Authorization: Bearer $MASTER" -H 'Content-Type: application/json' \
-  -d '{"type":"password","temporary":false,"value":"Admin1234!"}'
-echo "Contraseña reseteada a Admin1234!"
-```
-
----
-
-### Reiniciar desde cero (borrar todos los datos)
-
-```bash
-# ⚠️ Esto borra la base de datos y la configuración de Keycloak
+# ⚠️ Borra base de datos y configuración de Keycloak
 docker-compose down -v
-
-# Volver a levantar desde el paso 3.1
 docker-compose up -d db db-replica pgbouncer keycloak-db keycloak redis
 ```
 
-Después de esto hay que volver a correr `setup-keycloak.sh`, `setup-empresa-cliente-realm.sh`, y recrear el cliente del orquestador (paso 3.3).
+Luego volver desde el paso A.4.
 
 ---
 
-## Resumen de credenciales por defecto (entorno local)
+## Credenciales por defecto
 
 | Servicio | Usuario | Contraseña | Notas |
 |---|---|---|---|
-| Keycloak admin | `admin` | `admin` | Solo para `realms/master` |
+| Keycloak admin | `admin` | `admin` | `realms/master` vía admin-cli |
 | LeyData admin | `admin@leydata.cl` | `Admin1234!` | realm `leydata`, client `leydata-frontend` |
-| LeyData DPO | `dpo@leydata.cl` | `Test1234!` | realm `leydata`, client `leydata-frontend` |
-| LeyData Jefe de dominio | `jefe@test.cl` | `Test1234!` | realm `leydata`, client `leydata-frontend` |
+| LeyData DPO | `dpo@leydata.cl` | `Test1234!` | realm `leydata` |
+| LeyData Jefe dominio | `jefe@test.cl` | `Test1234!` | realm `leydata` |
 | CRM externo (pruebas) | `operador@empresa.cl` | `operador123` | realm `empresa-cliente`, client `crm-sistema` |
 | PostgreSQL | `admin` | `admin` | host `localhost`, puerto `5433` |
