@@ -10,6 +10,8 @@ import com.leydata.backend.privacydoc.domain.enums.DocumentCategory;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
+import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
+import com.leydata.backend.purposedatacategory.infrastructure.persistence.RetentionPolicyRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.repository.DataSubjectsRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
@@ -47,8 +49,12 @@ class AgreementServiceTest {
     @Mock private PrivacyDocumentsRepository privacyDocumentsRepo;
     @Mock private DocumentPurposesRepository documentPurposesRepo;
     @Mock private PurposesRepository purposesRepo;
+    @Mock private PurposeDataCategoryRepository purposeDataCategoryRepo;
+    @Mock private RetentionPolicyRepository retentionPolicyRepo;
     @Mock private AuditService auditService;
     @Mock private SecurityContextHelper securityContextHelper;
+    @Mock private jakarta.persistence.EntityManager entityManager;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private AgreementService service;
@@ -66,6 +72,8 @@ class AgreementServiceTest {
         lenient().when(agreementsRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         lenient().when(agreementsPurposesRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         lenient().when(securityContextHelper.getKeycloakId()).thenThrow(new RuntimeException("sin usuario autenticado"));
+        // Sin categorías de datos vinculadas por defecto -> calculateExpiresAt() devuelve null
+        lenient().when(purposeDataCategoryRepo.findByPurposeId(any())).thenReturn(List.of());
     }
 
     // ── Helpers de fixtures ────────────────────────────────────────────────────────

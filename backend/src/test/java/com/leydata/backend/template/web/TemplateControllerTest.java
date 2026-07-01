@@ -177,7 +177,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve200ConTemplateActivado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id)).thenReturn(draftResponse(id));
+        when(service.activate(id, false)).thenReturn(draftResponse(id));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))
                 .andExpect(status().isOk());
@@ -186,7 +186,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve422_siTemplateNoAprobado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id)).thenThrow(new BusinessValidationException(
+        when(service.activate(id, false)).thenThrow(new BusinessValidationException(
                 "El template debe estar aprobado antes de activarse"));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))

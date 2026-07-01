@@ -196,7 +196,7 @@ class TemplateServiceTest {
         when(templatePurposesRepo.findByTemplate_IdOrderByOrderPosition(id))
                 .thenReturn(List.of());
 
-        TemplateResponse response = service.activate(id);
+        TemplateResponse response = service.activate(id, false);
 
         assertThat(response.getIsActive()).isTrue();
         assertThat(response.getStatus()).isEqualTo("ACTIVE");
@@ -212,7 +212,7 @@ class TemplateServiceTest {
         template.setIsActive(true);
         when(templatesRepo.findById(id)).thenReturn(Optional.of(template));
 
-        assertThatThrownBy(() -> service.activate(id))
+        assertThatThrownBy(() -> service.activate(id, false))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
@@ -228,7 +228,7 @@ class TemplateServiceTest {
         when(templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(any(), any()))
                 .thenReturn(List.of(template, newer));
 
-        assertThatThrownBy(() -> service.activate(id))
+        assertThatThrownBy(() -> service.activate(id, false))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
@@ -241,7 +241,7 @@ class TemplateServiceTest {
         when(templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(any(), any()))
                 .thenReturn(List.of(template));
 
-        assertThatThrownBy(() -> service.activate(id))
+        assertThatThrownBy(() -> service.activate(id, false))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
@@ -256,7 +256,7 @@ class TemplateServiceTest {
                 .thenReturn(List.of(template));
         when(templatePurposesRepo.existsByTemplate_IdAndIsVisibleTrue(id)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.activate(id))
+        assertThatThrownBy(() -> service.activate(id, false))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
