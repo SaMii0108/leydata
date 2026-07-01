@@ -53,11 +53,14 @@ public class SecurityConfig {
                         ).permitAll()
 
                         //Gestión de usuarios (CRUD, bloqueo, activación): solo ADMIN
+                        // Perfil propio: cualquier usuario autenticado puede ver su propio perfil
+                        .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")
 
-                        //Gestión de dominios: solo ADMIN
+                        //Gestión de dominios: lectura de activos permitida a DPO; resto solo ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/domains/active").hasAnyRole("ADMIN", "DPO")
                         .requestMatchers(HttpMethod.GET, "/api/domains/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/domains/**").hasRole("ADMIN")
 

@@ -19,6 +19,123 @@
 
 .pageHeader { display: flex; flex-direction: column; gap: 6px; }
 
+/* Stepper de 2 pasos */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  align-self: stretch;
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepItemPending {
+  opacity: 0.4;
+}
+
+.stepCircle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.stepItemActive .stepCircle {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.stepItemDone .stepCircle {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.stepInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stepNum {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.stepName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stepItemPending .stepName {
+  color: var(--color-text-muted);
+}
+
+.stepConnector {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+  margin: 0 12px;
+  min-width: 20px;
+}
+
+/* Banner de éxito (paso 2) */
+.successBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--color-success-bg, #f0fdf4);
+  border: 1px solid var(--color-success, #16a34a);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+}
+
+.successIcon {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-success, #16a34a);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.successBannerText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.successBannerTitle {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-success, #16a34a);
+  margin: 0;
+}
+
+.successBannerDesc {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
 .title {
   font-size: var(--text-3xl);
   font-weight: 700;
@@ -291,3 +408,9 @@
 }
 .cancelBtn:hover:not(:disabled) { border-color: var(--color-text-muted); }
 .cancelBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.submitError {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}

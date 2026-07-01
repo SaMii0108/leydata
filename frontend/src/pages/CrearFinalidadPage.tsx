@@ -3,11 +3,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import { createPurpose, ApiError } from '../api/purposesApi';
 import { getLegalBasis } from '../api/legalBasisApi';
-import { getAllDomains } from '../api/domainsApi';
+import { getActiveDomains } from '../api/domainsApi';
 import type { LegalBasisDto } from '../api/legalBasisApi';
 import type { DomainDto } from '../api/domainsApi';
 import type { PurposeRequestSummary } from '../api/purposeRequestsApi';
 import Button from '../components/common/Button';
+import PurposeDataCategoriesSection from './PurposeDataCategoriesSection';
 import styles from './CrearFinalidadPage.module.css';
 
 interface DatoRow {
@@ -73,6 +74,9 @@ const CrearFinalidadPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const [step, setStep] = useState<'form' | 'categories'>('form');
+  const [createdPurposeId, setCreatedPurposeId] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     getLegalBasis(accessToken)
@@ -88,8 +92,8 @@ const CrearFinalidadPage = () => {
   useEffect(() => {
     if (fromRequest) return;
     let cancelled = false;
-    getAllDomains(accessToken)
-      .then((data) => { if (!cancelled) setDomains(data.filter((d) => d.active)); })
+    getActiveDomains(accessToken)
+      .then((data) => { if (!cancelled) setDomains(data); })
       .catch((err) => {
         if (!cancelled)
           setDomainsError(err instanceof Error ? err.message : 'No se pudieron cargar los dominios');
@@ -97,6 +101,12 @@ const CrearFinalidadPage = () => {
       .finally(() => { if (!cancelled) setLoadingDomains(false); });
     return () => { cancelled = true; };
   }, [accessToken, fromRequest]);
+
+  useEffect(() => {
+    if (step === 'categories') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [step]);
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => {
     setForm((p) => ({ ...p, [k]: v }));
@@ -119,7 +129,7 @@ const CrearFinalidadPage = () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await createPurpose(
+      const created = await createPurpose(
         {
           code: form.code.trim(),
           name: form.name.trim(),
@@ -134,10 +144,8 @@ const CrearFinalidadPage = () => {
         },
         accessToken,
       );
-      navigate(
-        fromRequest ? '/aprobacion-solicitudes' : '/finalidades',
-        { replace: true, state: fromRequest ? { purposeCreated: true } : undefined },
-      );
+      setCreatedPurposeId(created.id);
+      setStep('categories');
     } catch (err) {
       setSubmitError(err instanceof ApiError ? err.message : 'Error al crear la finalidad');
     } finally {
@@ -145,28 +153,79 @@ const CrearFinalidadPage = () => {
     }
   };
 
+  const handleContinue = () => {
+    navigate(
+      fromRequest ? '/aprobacion-solicitudes' : '/finalidades',
+      { replace: true, state: { purposeCreated: true } },
+    );
+  };
+
   const datos = fromRequest ? parseDatos(request?.requestedData) : [];
   const selectedLegalBasis = legalBasisList.find((lb) => lb.id === form.legalBasisId);
+
+  const backDestination = fromRequest ? '/aprobacion-solicitudes' : '/finalidades';
+  const backLabel = fromRequest ? 'Volver a Aprobación de Solicitudes' : 'Volver a Finalidades';
 
   return (
     <div className={styles.page}>
       <button
         className={styles.backLink}
-        onClick={() => navigate(fromRequest ? '/aprobacion-solicitudes' : '/finalidades')}
+        onClick={() => navigate(backDestination)}
       >
-        ← {fromRequest ? 'Volver a Aprobación de Solicitudes' : 'Volver a Finalidades'}
+        ← {backLabel}
       </button>
 
       <div className={styles.pageHeader}>
+        <div className={styles.stepper}>
+          <div className={[styles.stepItem, step === 'form' ? styles.stepItemActive : styles.stepItemDone].join(' ')}>
+            <span className={styles.stepCircle}>{step === 'form' ? '1' : '✓'}</span>
+            <div className={styles.stepInfo}>
+              <span className={styles.stepNum}>Paso 1 de 2</span>
+              <span className={styles.stepName}>Crear Finalidad</span>
+            </div>
+          </div>
+          <div className={styles.stepConnector} />
+          <div className={[styles.stepItem, step === 'categories' ? styles.stepItemActive : styles.stepItemPending].join(' ')}>
+            <span className={styles.stepCircle}>2</span>
+            <div className={styles.stepInfo}>
+              <span className={styles.stepNum}>Paso 2 de 2</span>
+              <span className={styles.stepName}>Categorías de datos personales</span>
+            </div>
+          </div>
+        </div>
         <h2 className={styles.title}>Nueva Finalidad</h2>
         <p className={styles.subtitle}>
-          {fromRequest
+          {step === 'categories'
+            ? 'Configura los tipos de datos personales que tratará esta finalidad.'
+            : fromRequest
             ? 'Registra la finalidad a partir de la solicitud aprobada.'
             : 'Registra una nueva finalidad de tratamiento de datos.'}
         </p>
       </div>
 
-      <div className={styles.formBody}>
+      {step === 'categories' && (
+        <div className={styles.successBanner}>
+          <span className={styles.successIcon}>✓</span>
+          <div className={styles.successBannerText}>
+            <p className={styles.successBannerTitle}>Finalidad creada correctamente.</p>
+            <p className={styles.successBannerDesc}>
+              Ahora configura las categorías de datos personales asociadas.
+              Se requiere al menos una para completar el registro.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {step === 'categories' && createdPurposeId && (
+        <PurposeDataCategoriesSection
+          purposeId={createdPurposeId}
+          accessToken={accessToken}
+          onContinue={handleContinue}
+          continueLabel={fromRequest ? 'Finalizar y volver a Solicitudes' : 'Finalizar y volver a Finalidades'}
+        />
+      )}
+
+      {step === 'form' && <div className={styles.formBody}>
         {fromRequest && (
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
@@ -392,24 +451,22 @@ const CrearFinalidadPage = () => {
         </section>
 
         {submitError && (
-          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-danger)' }}>
-            {submitError}
-          </p>
+          <p className={styles.submitError}>{submitError}</p>
         )}
 
         <div className={styles.formActions}>
           <button
             className={styles.cancelBtn}
-            onClick={() => navigate(fromRequest ? '/aprobacion-solicitudes' : '/finalidades')}
+            onClick={() => navigate(backDestination)}
             disabled={submitting}
           >
             Cancelar
           </button>
           <Button variant="primary" onClick={handleSubmit} disabled={submitting || (!fromRequest && !!domainsError)}>
-            {submitting ? 'Creando…' : 'Crear Finalidad'}
+            {submitting ? 'Creando…' : 'Siguiente: Categorías →'}
           </Button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

@@ -75,9 +75,17 @@ const EditTemplatePage = () => {
 
   const reloadPurposes = async () => {
     if (!id) return;
-    const purps = await getTemplatePurposes(id, accessToken);
-    setPurposes(purps);
-    syncPositions(purps);
+    try {
+      const purps = await getTemplatePurposes(id, accessToken);
+      setPurposes(purps);
+      syncPositions(purps);
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError
+          ? err.message
+          : 'No se pudieron recargar las finalidades. La lista puede estar desactualizada.',
+      );
+    }
   };
 
   const handleAdd = async () => {

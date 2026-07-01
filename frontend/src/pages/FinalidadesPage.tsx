@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import { getPurposes, ApiError } from '../api/purposesApi';
 import type { PurposeResponse } from '../api/purposesApi';
@@ -9,12 +9,24 @@ import styles from './FinalidadesPage.module.css';
 const FinalidadesPage = () => {
   const { user, accessToken } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [purposes, setPurposes] = useState<PurposeResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState('');
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const state = location.state as { purposeCreated?: boolean } | null;
+    if (state?.purposeCreated) {
+      setSuccessMsg('Finalidad creada correctamente.');
+      const tid = setTimeout(() => setSuccessMsg(null), 4000);
+      window.history.replaceState({}, '');
+      return () => clearTimeout(tid);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +96,16 @@ const FinalidadesPage = () => {
           </select>
         )}
       </div>
+
+      {successMsg && (
+        <div className={styles.successBanner}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+          {successMsg}
+        </div>
+      )}
 
       {error && (
         <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-danger)' }}>{error}</p>

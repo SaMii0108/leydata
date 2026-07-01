@@ -29,10 +29,13 @@ export interface CreateUserPayload {
   email: string;
   password: string;
   roleCode: string;
+  domainIds?: string[];
 }
 
 export interface UpdateUserPayload {
   name?: string;
+  email?: string;
+  password?: string;
   roleCodes?: string[];
   domainIds?: string[];
 }
@@ -63,6 +66,11 @@ export const getUsers = async (token?: string | null): Promise<UserSummaryDto[]>
 
 export const getUser = async (id: string, token?: string | null): Promise<UserSummaryDto> => {
   const data = await request<{ status: string; user: UserSummaryDto }>(`/api/users/${id}`, {}, token);
+  return data.user;
+};
+
+export const getMe = async (token?: string | null): Promise<UserSummaryDto> => {
+  const data = await request<{ status: string; user: UserSummaryDto }>('/api/users/me', {}, token);
   return data.user;
 };
 

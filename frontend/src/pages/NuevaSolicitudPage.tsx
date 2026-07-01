@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
-import { getUser } from '../api/usersApi';
+import { getMe } from '../api/usersApi';
 import type { UserDomain } from '../api/usersApi';
 import { createPurposeRequest } from '../api/purposeRequestsApi';
 import styles from './NuevaSolicitudPage.module.css';
@@ -49,7 +49,7 @@ const NuevaSolicitudPage = () => {
     let cancelled = false;
     setLoadingDomains(true);
     setDomainsError(null);
-    getUser(user.id, accessToken)
+    getMe(accessToken)
       .then((u) => {
         if (cancelled) return;
         setDomains(u.domains);

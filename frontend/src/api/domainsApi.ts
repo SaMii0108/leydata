@@ -46,6 +46,15 @@ export const getAllDomains = async (token?: string | null): Promise<DomainDto[]>
   return data.domains;
 };
 
+export const getActiveDomains = async (token?: string | null): Promise<DomainDto[]> => {
+  const data = await request<{ status: string; domains: DomainDto[] }>(
+    '/api/domains/active',
+    {},
+    token,
+  );
+  return data.domains;
+};
+
 export const createDomain = async (
   payload: CreateDomainPayload,
   token?: string | null,
