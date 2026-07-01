@@ -30,8 +30,9 @@ public class UpdateUserByAdminRequest {
             example = "[\"JEFE_DOMINIO\"]")
     private List<String> roleCodes;
 
-    @Schema(description = "Lista completa de IDs de dominios asignados (reemplaza los actuales). " +
-            "Lista vacía limpia todos los dominios. Solo válido para usuarios con rol JEFE_DOMINIO.",
+    @Schema(description = "Dominio asignado, como lista de un solo elemento (reemplaza el actual). " +
+            "Lista vacía limpia el dominio. Solo válido para usuarios con rol JEFE_DOMINIO — " +
+            "un jefe de dominio solo puede tener un dominio asignado a la vez.",
             example = "[\"550e8400-e29b-41d4-a716-446655440000\"]")
     private List<UUID> domainIds;
 }

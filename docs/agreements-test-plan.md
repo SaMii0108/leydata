@@ -14,16 +14,16 @@
 | 10 | Obtener agreement por ID inexistente | ID no existe | GET `/api/agreements/{id}` | 404 |
 | 11 | Listar agreements por dataSubjectId | DataSubject con varios agreements | GET `/api/agreements?dataSubjectId=X` | 200, lista del titular |
 | 12 | Listar agreements por templateId/status | Agreements en distintos templates/status | GET `/api/agreements?templateId=X&status=ACTIVE` | 200, filtrado correcto |
-| 13 | Verificar integridad — hash válido | Agreement sin alteraciones | POST `/api/agreements/{id}/verify-integrity` | 200, `IS_VALID=true`, se crea registro en AGREEMENT_INTEGRITY_LOG |
-| 14 | Verificar integridad — hash inválido | Agreement con datos alterados manualmente en BD (simulación) | POST `/api/agreements/{id}/verify-integrity` | 200/409, `IS_VALID=false`, error_detail con la discrepancia |
-| 15 | Listar historial de integridad de un agreement | Agreement con varias verificaciones | GET `/api/agreements/{id}/integrity-log` | 200, lista ordenada |
+| 13 | Verificar integridad de un agreement | Agreement sin alteraciones | POST `/api/audit/integrity/verify` body `{entityType:"AGREEMENT", entityId:"<id>", checkType:"MANUAL"}` | 200, `isValid:true`, registro en `entity_integrity_log` |
+| 14 | Verificar integridad — hash inválido | Agreement con datos alterados manualmente | POST `/api/audit/integrity/verify` | 200, `isValid:false`, `errorDetail` con la discrepancia |
+| 15 | Historial de verificaciones de un agreement | Agreement con varias verificaciones | GET `/api/audit/integrity/log?entityType=AGREEMENT&entityId=<id>` | 200, lista ordenada |
 | 16 | Eliminar (DELETE) un agreement | Agreement existente | DELETE `/api/agreements/{id}` | 405/no soportado — los agreements no se eliminan (regla 13) |
 | 17 | Eliminar un DATA_SUBJECT con agreements asociados | DataSubject con agreements asociados | DELETE del data subject | No se puede eliminar físicamente (regla 13, `ON DELETE RESTRICT`) — se anonimiza el `IDENTIFIER` en su lugar, los agreements permanecen intactos como evidencia legal |
 | 18 | Consultar agreement ACTIVE para (dataSubjectId, templateId) | DataSubject con un agreement ACTIVE en ese template | GET `/api/agreements/active?dataSubjectId=X&templateId=Y` | 200, devuelve el agreement ACTIVE |
 | 19 | Consultar agreement ACTIVE cuando no hay ninguno | DataSubject sin agreements ACTIVE en ese template | GET `/api/agreements/active?dataSubjectId=X&templateId=Y` | 404 |
 | 20 | Reconsentimiento — ya existe un ACTIVE para el mismo (dataSubject, template) | Agreement ACTIVE previo | POST `/api/agreements` con el mismo dataSubjectId/templateId | 201, el agreement anterior pasa a `REVOKED` (y sus AGREEMENTS_PURPOSES heredan REVOKED), el nuevo queda `ACTIVE` con `PREVIOUS_AGREEMENTS_ID` apuntando al cerrado (regla 15, 6.1, 9) |
 | 21 | Documento no cubre alguna purpose del request | Template con purpose visible no vinculada al documento vía DOCUMENT_PURPOSES | POST `/api/agreements` | 400, error (regla 16) |
-| 22 | Listar verificaciones de integridad fallidas | Hay al menos un AGREEMENT_INTEGRITY_LOG con IS_VALID=false | GET `/api/agreements/integrity-log/failed` | 200, lista solo con los fallidos |
+| 22 | Listar verificaciones fallidas de agreements | Hay al menos un registro con `isValid:false` | GET `/api/audit/integrity/failed?entityType=AGREEMENT` | 200, lista solo con los fallidos |
 
 ---
 
@@ -77,27 +77,11 @@
 | U25 | Devuelve el agreement si hay uno `ACTIVE` para `(dataSubjectId, templateId)` |
 | U26 | Devuelve `Optional.empty()` si no hay ninguno |
 
-### `verifyIntegrity()`
+### `recalculateHash()`
 
 | # | Caso | Regla |
 |---|------|-------|
-| U27 | `isValid=true` cuando el hash recalculado coincide con el almacenado | 10,11 |
-| U28 | `isValid=false` + `errorDetail` poblado cuando el contenido fue alterado | 10,11 |
-| U29 | El log creado encadena `previousHashSha256Id` contra el último `AgreementIntegrityLog.hashSha256` | 17 |
-| U30 | Lanza `AgreementNotFoundException` si el agreement no existe | — |
+| U27 | Devuelve el hash SHA-256 del agreement sin escribir en BD (lectura pura) | 10 |
+| U28 | Lanza `AgreementNotFoundException` si el agreement no existe | — |
 
-### `getIntegrityLog()` / `listFailedVerifications()`
-
-| # | Caso |
-|---|------|
-| U31 | `getIntegrityLog` devuelve el historial ordenado; lanza `AgreementNotFoundException` si no existe el agreement |
-| U32 | `listFailedVerifications` devuelve solo los `IS_VALID=false` |
-
-### `AgreementIntegrityScheduler`
-
-| # | Caso |
-|---|------|
-| U33 | Recorre todos los agreements y llama `verifyIntegrity` para cada uno |
-| U34 | Si `verifyIntegrity` lanza una excepción para un agreement, lo loguea y sigue con el resto (no aborta el batch) |
-| U35 | Publica `AgreementIntegrityFailedEvent` solo cuando `isValid=false` |
-| U36 | No publica ningún evento cuando todos son válidos |
+> **Nota:** la lógica de escribir en `entity_integrity_log` y el scheduler diario migraron a `IntegrityVerifier` y `IntegrityScheduler` en el módulo `audit/`. Ver `docs/audit-module.md` para los tests de esas clases.

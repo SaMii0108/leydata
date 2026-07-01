@@ -7,7 +7,7 @@ Este documento registra la secuencia exacta de requests usada para probar el mó
 - Backend corriendo en `http://localhost:8080`.
 - Keycloak corriendo en `http://localhost:8180`, realm `leydata` configurado (ver `scripts/setup-keycloak.ps1`).
 - Usuarios de prueba ya creados: `admin@leydata.cl` / `Admin1234!` (rol ADMIN), `dpo@leydata.cl` / `Test1234!` (rol DPO).
-- Endpoint temporal `POST /api/test/data-subjects` disponible (`TestDataSubjectController`, solo para entorno local — **eliminar antes de mergear a main**). Existe porque `DATA_SUBJECTS` es responsabilidad del orquestador en producción y no hay otra forma de crear filas de prueba.
+- El orquestador ya está implementado. `DATA_SUBJECTS` se crean automáticamente vía `findOrCreate` en `AgreementService` cuando se envía `subjectIdentifier` en el body. No se necesita ningún endpoint de prueba.
 
 ## 1. Obtener token (Keycloak)
 
@@ -25,18 +25,9 @@ El token dura 5 minutos (`expires_in: 300`). Para los pasos que requieren rol DP
 
 Todas las requests siguientes usan `Authorization: Bearer {token}`.
 
-## 2. Crear Data Subject de prueba
+## 2. Nota sobre Data Subjects
 
-```
-POST http://localhost:8080/api/test/data-subjects
-Content-Type: application/json
-
-{
-  "identifier": "test-titular-001"
-}
-```
-
-**Respuesta:** `{ "id": "<uuid>", "identifier": "test-titular-001" }` → guardar `id` como `dataSubjectId`.
+No es necesario crear el `DataSubject` manualmente. Al enviar `"subjectIdentifier"` en el body del agreement (paso 12), `AgreementService` hace un `findOrCreate` automático: si el identificador ya existe lo reutiliza, si no lo crea. El endpoint `POST /api/test/data-subjects` fue eliminado.
 
 ## 3. Crear Dominio (rol ADMIN)
 
@@ -163,7 +154,7 @@ POST http://localhost:8080/api/agreements
 Content-Type: application/json
 
 {
-  "dataSubjectId": "<paso 2>",
+  "subjectIdentifier": "test-titular-001",
   "templateId": "<paso 5>",
   "documentId": "<paso 9>",
   "purposes": [
@@ -188,9 +179,12 @@ Respuesta `201` con el `Agreement` completo: `id`, `status: ACTIVE`, `hashSha256
 GET  http://localhost:8080/api/agreements/{id}
 GET  http://localhost:8080/api/agreements?dataSubjectId=...&templateId=...&status=...
 GET  http://localhost:8080/api/agreements/active?dataSubjectId=...&templateId=...
-POST http://localhost:8080/api/agreements/{id}/verify-integrity     body: { "checkType": "MANUAL" }
-GET  http://localhost:8080/api/agreements/{id}/integrity-log
-GET  http://localhost:8080/api/agreements/integrity-log/failed
+
+# Trazabilidad e integridad — ahora en el módulo audit/
+POST http://localhost:8080/api/audit/integrity/verify     body: { "entityType": "AGREEMENT", "entityId": "{id}", "checkType": "MANUAL" }
+GET  http://localhost:8080/api/audit/integrity/log?entityType=AGREEMENT&entityId={id}
+GET  http://localhost:8080/api/audit/integrity/failed?entityType=AGREEMENT
+GET  http://localhost:8080/api/audit/trace/agreement/{id}    ← cadena completa: template + documento + purposes
 ```
 
 ## IDs usados en la corrida de referencia (28/06/2026)
@@ -208,7 +202,7 @@ GET  http://localhost:8080/api/agreements/integrity-log/failed
 
 1. **`AgreementMetadata.extraVariables`** — columna `jsonb`, faltaba `@JdbcTypeCode(SqlTypes.JSON)`. Sin esto, el insert fallaba con `column "extra_variables" is of type jsonb but expression is of type character varying`.
 2. **`AgreementMetadata.ipOrigin`** — columna `inet`, faltaba `@ColumnTransformer(write = "?::inet")`. Sin esto, el insert fallaba con `column "ip_origin" is of type inet but expression is of type character varying`.
-3. **`verify-integrity` siempre devolvía `isValid: false`** en agreements recién creados, por dos causas combinadas:
+3. **`verify-integrity` siempre devolvía `isValid: false`** en agreements recién creados (endpoint anterior en `/api/agreements/{id}/verify-integrity`, ahora en `/api/audit/integrity/verify`), por dos causas combinadas:
    - `LocalDateTime.now()` tiene precisión de nanosegundos, pero la columna es `timestamp(6)` (microsegundos) — Postgres trunca al guardar, y el hash en memoria (sin truncar) no coincidía con el hash recalculado tras releer de la BD. Fix: truncar a microsegundos antes de usar el timestamp (`LocalDateTime.now().truncatedTo(ChronoUnit.MICROS)`).
    - Postgres normaliza el valor `inet` (ej. `0:0:0:0:0:0:0:1` → `::1`), pero Java's `InetAddress.getHostAddress()` no comprime IPv6 de la misma forma, así que normalizar en memoria tampoco alcanzaba. Fix: forzar `flush()` + `entityManager.refresh(savedMetadata)` después de guardar la metadata, para que el hash de creación use el valor ya normalizado por la BD.
 

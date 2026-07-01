@@ -10,8 +10,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import com.leydata.backend.entity.Templates;
 
 public interface TemplatesRepository extends JpaRepository<Templates, UUID>, JpaSpecificationExecutor<Templates> {
-    Optional<Templates> findByTemplateKeyAndIsActiveTrue(String templateKey);
-    List<Templates> findByTemplateKeyOrderByVersionDesc(String templateKey);
-    boolean existsByTemplateKeyAndIsActiveTrue(String templateKey);
-    boolean existsByTemplateKeyAndVersion(String templateKey, Integer version);
+    Optional<Templates> findByDomainIdAndTemplateKeyAndIsActiveTrue(UUID domainId, String templateKey);
+    List<Templates> findByDomainIdAndTemplateKeyOrderByVersionDesc(UUID domainId, String templateKey);
+    boolean existsByDomainIdAndTemplateKeyAndIsActiveTrue(UUID domainId, String templateKey);
+    boolean existsByDomainIdAndTemplateKeyAndVersion(UUID domainId, String templateKey, Integer version);
 }

@@ -1,0 +1,34 @@
+meta {
+  name: Revocar Finalidad Específica (Granular)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{orchestratorUrl}}/consent/revoke-purpose
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{externalToken}}
+}
+
+body:json {
+  {
+    "subjectId": "<opaque-subject-id>",
+    "purposeId": "<uuid-finalidad-a-revocar>",
+    "templateKey": "ONBOARDING_CLIENTE"
+  }
+}
+
+docs {
+  Revoca una finalidad individual sin afectar las demás del mismo agreement (Caso 3b).
+  El Orquestador primero consulta subject-summary para obtener el estado actual de todas las
+  finalidades del titular, luego crea un nuevo agreement con la finalidad objetivo en accepted=false
+  y las demás sin cambio. El backend archiva automáticamente el agreement anterior (re-consent).
+  Esto preserva la integridad del hash SHA-256 — no modifica agreements_purposes directamente.
+  Actualiza Redis con status REVOKED para la finalidad revocada.
+  Respuesta: { subjectId, agreementId, status: REVOKED }
+  Requiere JWT del sistema externo (realm empresa-cliente) con claim leydata_domain.
+}

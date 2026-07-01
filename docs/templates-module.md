@@ -10,8 +10,8 @@ Cada template agrupa un conjunto de purposes ordenadas, define los textos del fo
 
 ## Reglas de negocio
 
-1. El mismo `TEMPLATE_KEY` puede tener múltiples versiones, pero solo una puede estar activa a la vez.
-2. Al activar una nueva versión, la anterior del mismo `TEMPLATE_KEY` se desactiva automáticamente en la misma transacción.
+1. El mismo `TEMPLATE_KEY` puede tener múltiples versiones, pero solo una puede estar activa a la vez **dentro del mismo dominio**.
+2. Al activar una nueva versión, la anterior del mismo dominio + `TEMPLATE_KEY` se desactiva automáticamente en la misma transacción.
 3. No se puede editar un template activo — se debe crear una nueva versión.
 4. El `TEMPLATE_KEY` debe ser siempre UPPERCASE.
 5. No se puede eliminar un template que esté referenciado por un `PRIVACY_DOCUMENT` activo.
@@ -20,6 +20,19 @@ Cada template agrupa un conjunto de purposes ordenadas, define los textos del fo
 8. `ORDER_POSITION` no puede repetirse dentro del mismo template.
 9. Un template debe tener al menos una purpose con `IS_VISIBLE = true`.
 10. Para activar un template debe tener: al menos una purpose visible y `APPROVED_BY` asignado.
+11. `DOMAIN_ID` es obligatorio y se fija al crear el template — no cambia entre versiones (`newVersion()` lo hereda del template origen).
+
+---
+
+## Aislamiento por dominio
+
+`Templates.domainId` (FK a `Domains`) reemplazó la unicidad global de `TEMPLATE_KEY` por una unicidad compuesta `(domain_id, template_key, version)`. Dos dominios distintos pueden tener templates con el mismo `TEMPLATE_KEY` sin conflicto — por ejemplo, `ONBOARDING_CLIENTE` puede existir tanto en el dominio Comercial como en el dominio Soporte, cada uno con su propio ciclo de versiones e independiente entre sí.
+
+**Por qué:** `Templates` no tenía ningún campo de dominio. Eso obligaba a que `TEMPLATE_KEY` fuera único en todo el sistema, lo cual no escala cuando distintas áreas de la organización necesitan formularios de consentimiento con el mismo nombre de negocio pero contenido/finalidades distintas.
+
+**Quién decide el dominio:** a diferencia de `Purposes` (donde el dominio viene implícito del `JEFE_DOMINIO` que solicita la finalidad), `Templates` solo lo crean `DPO`/`ADMIN`, roles que no tienen un dominio propio asignado en `user_domains` (esa tabla es exclusiva de `JEFE_DOMINIO`, y desde esta iteración un jefe de dominio solo puede tener **un** dominio asignado a la vez). Por eso `domainId` es un campo explícito en `CreateTemplateRequest`, igual que en `CreatePurposeRequest` — el DPO lo elige al crear el template, normalmente coincidiendo con el dominio que originó las purposes que va a incluir.
+
+**Impacto en endpoints:** `GET /api/templates/active/{templateKey}` y `GET /api/templates/family/{templateKey}` ahora requieren `domainId` como query param obligatorio, ya que `templateKey` dejó de ser suficiente para identificar un template de forma única.
 
 ---
 
@@ -65,14 +78,15 @@ DRAFT → APPROVED → ACTIVE
 
 | Método | Endpoint | Caso de uso |
 |--------|----------|-------------|
-| `POST` | `/api/templates` | Crear template (versión 1) |
+| `POST` | `/api/templates` | Crear template (versión 1, requiere `domainId`) |
 | `POST` | `/api/templates/{id}/new-version` | Crear nueva versión |
 | `GET` | `/api/templates/{id}` | Obtener por ID |
-| `GET` | `/api/templates` | Listar (filtros: `templateKey`, `status`) |
-| `GET` | `/api/templates/family/{templateKey}` | Historial de versiones |
-| `GET` | `/api/templates/active/{templateKey}` | Obtener versión activa |
+| `GET` | `/api/templates` | Listar (filtros: `domainId`, `templateKey`, `status`) |
+| `GET` | `/api/templates/family/{templateKey}?domainId=` | Historial de versiones dentro de un dominio |
+| `GET` | `/api/templates/active/{templateKey}?domainId=` | Obtener versión activa dentro de un dominio |
 | `POST` | `/api/templates/{id}/approve` | Aprobar |
 | `POST` | `/api/templates/{id}/activate` | Activar |
+| `GET` | `/api/templates/resolve?domainId=&templateKey=` | **Uso interno B2B** — resuelve template activo + documento publicado. Llamado por el Orquestador, no requiere rol DPO/ADMIN (solo autenticación). |
 
 ### Purposes del template
 
@@ -102,7 +116,6 @@ template/
       TemplateStatus.java
     exception/
       TemplateNotFoundException.java
-      TemplateBusinessException.java
   infrastructure/
     persistence/
       TemplatesRepository.java

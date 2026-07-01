@@ -32,8 +32,8 @@ public class CreateUserRequest {
             example = "JEFE_DOMINIO")
     private String roleCode;
 
-    @Schema(description = "IDs de dominios a asignar. Solo aplica si roleCode=JEFE_DOMINIO. " +
-            "Los dominios deben estar activos.",
+    @Schema(description = "ID de dominio a asignar, como lista de un solo elemento. Solo aplica si roleCode=JEFE_DOMINIO. " +
+            "Un jefe de dominio solo puede tener un dominio asignado. El dominio debe estar activo.",
             example = "[\"550e8400-e29b-41d4-a716-446655440000\"]")
     private List<UUID> domainIds;
 

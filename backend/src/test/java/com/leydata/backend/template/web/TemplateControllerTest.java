@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -121,7 +122,7 @@ class TemplateControllerTest {
     @Test
     void list_devuelve200ConListaDeTemplates() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.list(any(), any(), any(), any(), any(), any()))
+        when(service.list(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(draftResponse(id)));
 
         mockMvc.perform(get("/api/templates"))
@@ -131,7 +132,7 @@ class TemplateControllerTest {
 
     @Test
     void getHistory_devuelve200ConVersionesOrdenadas() throws Exception {
-        when(service.getHistory("CONSENT_X")).thenReturn(List.of(draftResponse(UUID.randomUUID())));
+        when(service.getHistory(any(), eq("CONSENT_X"))).thenReturn(List.of(draftResponse(UUID.randomUUID())));
 
         mockMvc.perform(get("/api/templates/family/{templateKey}", "CONSENT_X"))
                 .andExpect(status().isOk());
@@ -140,7 +141,7 @@ class TemplateControllerTest {
     @Test
     void getActive_devuelve200ConVersionActiva() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.getActive("CONSENT_X")).thenReturn(draftResponse(id));
+        when(service.getActive(any(), eq("CONSENT_X"))).thenReturn(draftResponse(id));
 
         mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X"))
                 .andExpect(status().isOk());
@@ -148,7 +149,7 @@ class TemplateControllerTest {
 
     @Test
     void getActive_devuelve422_siNoHayVersionActiva() throws Exception {
-        when(service.getActive("CONSENT_X"))
+        when(service.getActive(any(), eq("CONSENT_X")))
                 .thenThrow(new BusinessValidationException("No hay una versión activa para el template CONSENT_X"));
 
         mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X"))
@@ -177,7 +178,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve200ConTemplateActivado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id)).thenReturn(draftResponse(id));
+        when(service.activate(eq(id), anyBoolean())).thenReturn(draftResponse(id));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))
                 .andExpect(status().isOk());
@@ -186,7 +187,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve422_siTemplateNoAprobado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id)).thenThrow(new BusinessValidationException(
+        when(service.activate(eq(id), anyBoolean())).thenThrow(new BusinessValidationException(
                 "El template debe estar aprobado antes de activarse"));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))

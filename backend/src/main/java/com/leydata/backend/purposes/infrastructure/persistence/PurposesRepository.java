@@ -14,4 +14,6 @@ public interface PurposesRepository extends JpaRepository<Purposes, UUID> {
     List<Purposes> findByIsActiveTrue();
     List<Purposes> findByDomainIdAndIsActiveTrue(UUID domainId);
     Optional<Purposes> findByIdAndDomainId(UUID id, UUID domainId);
+    List<Purposes> findByPurposeFamilyIdOrderByVersionDesc(UUID purposeFamilyId);
+    Optional<Purposes> findByPurposeFamilyIdAndStatus(UUID purposeFamilyId, String status);
 }

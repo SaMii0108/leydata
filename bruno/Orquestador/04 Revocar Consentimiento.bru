@@ -1,0 +1,31 @@
+meta {
+  name: Revocar Consentimiento
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{orchestratorUrl}}/consent/revoke
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{externalToken}}
+}
+
+body:json {
+  {
+    "subjectId": "<opaque-subject-id>",
+    "agreementId": "<uuid-agreement>"
+  }
+}
+
+docs {
+  Revoca el consentimiento de un titular a través del Orquestador.
+  El Orquestador llama a PATCH /api/agreements/{id}/revoke en LeyData con credenciales M2M.
+  Escribe REVOKED en Redis por cada purpose del acuerdo (escritura, no borrado — coordina con el
+  AgreementRevocationCacheListener AFTER_COMMIT del backend para evitar split-brain).
+  Respuesta: { subjectId, agreementId, status: REVOKED }
+  Requiere JWT del sistema externo (realm empresa-cliente). Ver archivo 01.
+}

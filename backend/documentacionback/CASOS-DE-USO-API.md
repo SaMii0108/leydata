@@ -538,12 +538,15 @@ Cada Finalidad define **una sola acción específica** (ej. "Enviar promociones"
 
 | Método | URL | Rol mínimo | Descripción |
 |--------|-----|-----------|-------------|
-| POST | `/api/purposes` | DPO | Crear finalidad |
+| POST | `/api/purposes` | DPO | Crear finalidad (v1, status=ACTIVE, purposeFamilyId=id) |
 | GET | `/api/purposes` | JEFE_DOMINIO | Listar activas (jefe ve solo su dominio) |
 | GET | `/api/purposes/{id}` | JEFE_DOMINIO | Ver una finalidad |
 | GET | `/api/purposes/domain/{domainId}` | JEFE_DOMINIO | Listar por dominio |
-| PUT | `/api/purposes/{id}` | DPO | Editar (bloqueado si PUBLISHED) |
+| PUT | `/api/purposes/{id}` | DPO | Editar in-place (bloqueado si locked=true) |
 | DELETE | `/api/purposes/{id}` | DPO | Desactivar (soft delete) |
+| POST | `/api/purposes/{id}/new-version` | DPO | Nueva versión de finalidad bloqueada (anterior → SUPERSEDED) |
+| GET | `/api/purposes/family/{purposeFamilyId}` | DPO · ADMIN | Historial de versiones de una familia |
+| GET | `/api/purposes/active/{purposeFamilyId}` | DPO · ADMIN | Versión ACTIVE de una familia |
 
 ---
 
@@ -1292,6 +1295,78 @@ Recorre toda la cadena de hashes y verifica que ningún registro fue alterado. E
 
 ---
 
+### `POST /api/audit/integrity/verify`
+
+Recalcula el hash SHA-256 de una entidad de negocio (AGREEMENT, TEMPLATE, DOCUMENT o PURPOSE), lo compara con el almacenado, y registra el resultado en `entity_integrity_log`.
+
+```json
+// Request
+{
+  "entityType": "AGREEMENT",
+  "entityId": "uuid-del-agreement",
+  "checkType": "MANUAL"
+}
+
+// Response 200
+{
+  "entityType": "AGREEMENT",
+  "entityId": "uuid-del-agreement",
+  "storedHash": "a3f9b2c1...",
+  "recalculatedHash": "a3f9b2c1...",
+  "isValid": true,
+  "checkType": "MANUAL",
+  "createdAt": "2026-06-28T10:05:00Z"
+}
+```
+
+**Caso negativo — hash no coincide (posible alteración)**
+```json
+// Response 200 (informa, no lanza excepción)
+{ "isValid": false, "storedHash": "a3f9b2c1...", "recalculatedHash": "zz991234...", "errorDetail": "El hash recalculado no coincide con el almacenado" }
+```
+
+---
+
+### `GET /api/audit/integrity/log`
+
+Historial de verificaciones de integridad de una entidad específica, en orden descendente.
+
+```
+GET /api/audit/integrity/log?entityType=AGREEMENT&entityId=uuid
+```
+
+---
+
+### `GET /api/audit/integrity/failed`
+
+Lista todas las verificaciones con `isValid = false`. Sin filtro devuelve todas las entidades; con filtro solo la entidad indicada.
+
+```
+GET /api/audit/integrity/failed
+GET /api/audit/integrity/failed?entityType=AGREEMENT
+```
+
+---
+
+### `GET /api/audit/trace/agreement/{id}`
+
+Traza la cadena completa de un agreement: template activo, documento publicado, y cada purpose con snapshot de hash al consentir vs. hash actual (drift check). Devuelve `overallIntegrity: OK | MISMATCH | PARTIAL`.
+
+```json
+// Response 200
+{
+  "agreementId": "uuid",
+  "overallIntegrity": "OK",
+  "template": { "id": "uuid", "hashSha256": "...", "valid": true },
+  "document": { "id": "uuid", "hashSha256": "...", "valid": true },
+  "purposes": [
+    { "purposeId": "uuid", "purposeHash": "hash-al-consentir", "currentHash": "hash-actual", "drift": false }
+  ]
+}
+```
+
+---
+
 ## 11. Notificaciones
 
 ### ¿Qué hace este módulo?
@@ -1370,9 +1445,12 @@ Solo los roles `DPO` y `ADMIN` pueden operar este módulo.
 **`POST /api/templates`**  
 **Acceso:** DPO, ADMIN
 
+`domainId` es obligatorio — `TEMPLATE_KEY` ya no es único globalmente, sino por dominio (ver [`docs/templates-module.md`](../../docs/templates-module.md)).
+
 ```json
 // Request
 {
+  "domainId": "8e7c1a90-1234-4abc-9def-0123456789ab",
   "templateKey": "bienvenida-clientes",
   "name": "Template de bienvenida para clientes",
   "title": "Gestión de tus datos",
@@ -1384,6 +1462,7 @@ Solo los roles `DPO` y `ADMIN` pueden operar este módulo.
 // Response 201
 {
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "domainId": "8e7c1a90-1234-4abc-9def-0123456789ab",
   "templateKey": "bienvenida-clientes",
   "name": "Template de bienvenida para clientes",
   "title": "Gestión de tus datos",
@@ -1603,6 +1682,8 @@ Cada agreement genera un hash SHA-256 que encadena al hash del agreement anterio
 
 El orquestador o el frontend registra la decisión del titular tras presentarle el template.
 
+**`documentId` es opcional.** Si no se envía, `AgreementService.create()` lo resuelve automáticamente buscando el documento `PUBLISHED` activo vinculado a `templateId` — falla con `BusinessValidationException` si el template no tiene uno. Sigue siendo válido enviarlo explícito como en el ejemplo de abajo.
+
 **Caso positivo — primer consentimiento**
 ```json
 // Request
@@ -1711,51 +1792,171 @@ Devuelve el agreement con su detalle completo de purposes.
 
 ---
 
-### `POST /api/agreements/{id}/verify-integrity`
+### Integridad de agreements
 
-Recalcula el SHA-256 del agreement y lo compara con el almacenado. Registra el resultado en el ledger de integridad.
+Los endpoints de verificación de integridad de agreements fueron movidos al módulo de auditoría (feature/trazabilidad). Ver **Sección 10 — Auditoría**:
 
+- `POST /api/audit/integrity/verify` — verificar integridad de cualquier entidad (incluye AGREEMENT)
+- `GET  /api/audit/integrity/log?entityType=AGREEMENT&entityId={id}` — historial de verificaciones
+- `GET  /api/audit/integrity/failed?entityType=AGREEMENT` — verificaciones fallidas
+- `GET  /api/audit/trace/agreement/{id}` — traza completa: template + documento + purposes con drift check
+
+---
+
+### `PATCH /api/agreements/{id}/revoke`
+
+Revoca manualmente un agreement activo. Cambia su estado a `REVOKED` y el de todas sus `AgreementsPurposes` a `REVOKED`.
+
+**Caso positivo**
 ```json
-// Request (opcional — por defecto checkType = "MANUAL")
-{ "checkType": "MANUAL" }
+// Request
+PATCH /api/agreements/uuid-agreement/revoke
+
+{
+  "subjectId": "uuid-titular"
+}
 
 // Response 200
 {
-  "agreementId": "uuid-agreement",
-  "storedHash": "a3f9b2c1...",
-  "recalculatedHash": "a3f9b2c1...",
-  "isValid": true,
-  "checkType": "MANUAL",
-  "createdAt": "2026-06-28T10:05:00Z"
+  "id": "uuid-agreement",
+  "dataSubjectId": "uuid-titular",
+  "status": "REVOKED",
+  "hashSha256": "a3f9b2c1...",
+  "purposes": [
+    { "purposeId": "uuid-newsletter", "accepted": true, "status": "REVOKED" },
+    { "purposeId": "uuid-publicidad", "accepted": false, "status": "REVOKED" }
+  ]
 }
 ```
 
-**Caso negativo — hash no coincide (posible alteración)**
+**Efectos secundarios tras el commit:**
+- El evento `AgreementRevokedEvent` dispara `AgreementRevocationCacheListener` (`@TransactionalEventListener(AFTER_COMMIT)`)
+- El listener elimina las claves `consent:{subjectId}:{purposeId}` del Redis del Orquestador
+- Garantía: la caché nunca se invalida antes de que el cambio en Postgres sea definitivo (sin split-brain)
+
+**Caso negativo — agreement ya revocado**
 ```json
-// Response 200 (informa, no lanza excepción)
+// Response 409
+{ "status": "CONFLICT", "code": 409, "message": "El agreement ya está en estado REVOKED" }
+```
+
+**Caso negativo — agreement no encontrado**
+```json
+// Response 404
+{ "status": "NOT_FOUND", "code": 404, "message": "Agreement no encontrado" }
+```
+
+> **Acceso:** cualquier usuario autenticado. En llamadas M2M desde el Orquestador, el `subjectId` del body se valida contra el `dataSubjectId` del agreement.
+
+---
+
+## 14. Orquestador B2B (puerto 8081)
+
+### ¿Qué hace el Orquestador?
+
+El **Orquestador** es la capa de acceso B2B de Ley Data. Los sistemas cliente externos (CRM, ERP, plataformas de marketing) se conectan al Orquestador en lugar de conectarse directamente al backend. El Orquestador:
+
+- Valida el JWT del sistema externo contra el JWKS del realm `empresa-cliente`
+- Consulta y actualiza Redis como caché de consentimiento (clave `consent:{subjectId}:{purposeId}`, TTL 300 s)
+- Propaga operaciones al backend con credenciales M2M (`client_credentials` desde el realm `leydata`)
+
+El Orquestador corre en el puerto **8081**. El backend (`8080`) no tiene exposición directa al exterior.
+
+> **Prerrequisito:** ejecutar `bash scripts/setup-empresa-cliente-realm.sh` para crear el realm `empresa-cliente` con el cliente `crm-sistema` y el usuario de prueba `operador@empresa.cl / operador123`.
+
+---
+
+### `GET /consent/check`
+
+Verifica si un titular (identificado con `subjectId` opaco) tiene consentimiento activo para una finalidad.
+
+```json
+// Request
+GET /consent/check?subjectId=abc123&purposeId=uuid-finalidad
+Authorization: Bearer <external-jwt>
+
+// Response 200
 {
-  "isValid": false,
-  "storedHash": "a3f9b2c1...",
-  "recalculatedHash": "zz991234...",
-  "errorDetail": "El hash recalculado no coincide con el almacenado"
+  "subjectId": "abc123",
+  "purposeId": "uuid-finalidad",
+  "status": "ALLOWED",
+  "legalBasisCode": "ART6_1_A",
+  "validUntil": "2027-06-28T10:00:00"
 }
 ```
 
+**Valores de `status`:**
+
+| Valor | Significado |
+|---|---|
+| `ALLOWED` | Consentimiento activo y válido |
+| `REVOKED` | El titular revocó el consentimiento |
+| `DENIED` | El agreement expiró |
+| `PENDING` | Nunca se ha registrado consentimiento |
+
+**Flujo de caché:**
+1. Busca clave `consent:{subjectId}:{purposeId}` en Redis
+2. Si hay hit (JSON válido): deserializa y devuelve sin consultar LeyData
+3. Si hay miss o formato antiguo inválido: consulta `GET /api/agreements/active` en LeyData, construye la respuesta enriquecida y pre-calienta Redis
+
 ---
 
-### `GET /api/agreements/{id}/integrity-log`
+### `POST /consent/capture`
 
-Historial de todas las verificaciones de integridad del agreement. Permite auditar cuándo se verificó y si fue válido cada vez.
+Registra el consentimiento de un titular a través del Orquestador. El sistema cliente **no envía UUIDs internos** — solo el `templateKey` de negocio acordado al integrarse (ej. `ONBOARDING_CLIENTE`).
+
+```json
+// Request
+{
+  "subjectId": "abc123",
+  "templateKey": "ONBOARDING_CLIENTE",
+  "purposes": [
+    { "purposeId": "uuid-finalidad", "accepted": true }
+  ]
+}
+
+// Response 201
+{
+  "subjectId": "abc123",
+  "agreementId": "uuid-agreement",
+  "status": "ALLOWED"
+}
+```
+
+**Resolución de `templateId`/`documentId` (antes de llamar al backend):**
+1. El Orquestador extrae `domainId` del claim `leydata_domain` del JWT del sistema cliente — no viaja en el body.
+2. Llama `GET /api/templates/resolve?domainId=&templateKey=` en el backend → obtiene el `templateId` ACTIVE de ese dominio y el `documentId` del documento `PUBLISHED` vigente vinculado a ese template.
+3. Si el template no existe en ese dominio, no está ACTIVE, o no tiene documento publicado, la petición falla antes de tocar `/api/agreements`.
+4. `documentId` puede sobreescribirse enviándolo explícito en el request — opcional, solo para integraciones que ya lo conocían antes de este cambio.
+
+**Post-condición:** Redis pre-calentado con `ALLOWED` por cada purpose aceptada. Los campos `legalBasisCode` y `validUntil` se toman del acuerdo real devuelto por LeyData (no se inventan).
 
 ---
 
-### `GET /api/agreements/integrity-log/failed`
+### `POST /consent/revoke`
 
-Lista todas las verificaciones fallidas (`isValid = false`) de todos los agreements del sistema. Endpoint para el equipo de auditoría — permite detectar registros de consentimiento que pudieron haber sido alterados.
+Revoca el consentimiento de un titular a través del Orquestador.
+
+```json
+// Request
+{
+  "subjectId": "abc123",
+  "agreementId": "uuid-agreement"
+}
+
+// Response 200
+{
+  "subjectId": "abc123",
+  "agreementId": "uuid-agreement",
+  "status": "REVOKED"
+}
+```
+
+**Post-condición:** Redis actualizado con `REVOKED` por cada purpose del acuerdo. El Orquestador escribe (no borra) para que el dato `REVOKED` esté disponible inmediatamente mientras el `AgreementRevocationCacheListener` del backend completa el ciclo `AFTER_COMMIT`.
 
 ---
 
-## 14. Referencia rápida de códigos de error
+## 15. Referencia rápida de códigos de error
 
 | Código HTTP | Status JSON | Cuándo ocurre |
 |-------------|-------------|---------------|

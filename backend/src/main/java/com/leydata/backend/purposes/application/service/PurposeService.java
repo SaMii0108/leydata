@@ -12,17 +12,24 @@ import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurpose
 import com.leydata.backend.purposes.application.dto.CreatePurposeRequest;
 import com.leydata.backend.purposes.application.dto.PurposeResponse;
 import com.leydata.backend.purposes.application.dto.UpdatePurposeRequest;
+import com.leydata.backend.agreement.infrastructure.persistence.AgreementsRepository;
 import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
+import com.leydata.backend.purposes.domain.exception.PurposeNotLockedException;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
+import com.leydata.backend.template.infrastructure.persistence.TemplatePurposesRepository;
 import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +49,8 @@ public class PurposeService {
     private final AuditService auditService;
     private final SecurityContextHelper securityContextHelper;
     private final UserDomainRepository userDomainRepository;
+    private final TemplatePurposesRepository templatePurposesRepo;
+    private final AgreementsRepository agreementsRepo;
 
     // ── CREAR ─────────────────────────────────────────────────────────────────────
 
@@ -86,8 +95,15 @@ public class PurposeService {
         purpose.setApprovedByName(actorName);
         purpose.setPurposeRequestId(req.getPurposeRequestId());
         purpose.setCreatedAt(LocalDateTime.now());
+        purpose.setVersion(1);
+        purpose.setStatus("ACTIVE");
+        purpose.setHashSha256(computeHash(purpose));
 
         Purposes saved = purposesRepo.save(purpose);
+
+        // purpose_family_id = id propio: self-reference que agrupa futuras versiones de esta finalidad
+        saved.setPurposeFamilyId(saved.getId());
+        saved = purposesRepo.save(saved);
 
         auditService.log(AuditContext.builder()
                 .tableName("purposes")
@@ -179,6 +195,7 @@ public class PurposeService {
             purpose.setLegalBasisId(req.getLegalBasisId());
         }
         purpose.setUpdatedAt(LocalDateTime.now());
+        purpose.setHashSha256(computeHash(purpose));
 
         Purposes saved = purposesRepo.save(purpose);
 
@@ -224,6 +241,110 @@ public class PurposeService {
         return PurposeResponse.from(saved, false);
     }
 
+    // ── VERSIONADO ───────────────────────────────────────────────────────────────
+
+    public PurposeResponse newVersion(UUID sourceId, UpdatePurposeRequest req) {
+        Purposes source = findOrThrow(sourceId);
+
+        if (!isLocked(sourceId)) {
+            throw new PurposeNotLockedException(source.getName());
+        }
+
+        UUID familyId = source.getPurposeFamilyId() != null ? source.getPurposeFamilyId() : source.getId();
+        int nextVersion = purposesRepo.findByPurposeFamilyIdOrderByVersionDesc(familyId).stream()
+                .mapToInt(Purposes::getVersion)
+                .max()
+                .orElse(source.getVersion()) + 1;
+
+        String actorId = securityContextHelper.getKeycloakId();
+        String actorName = securityContextHelper.getName();
+
+        Purposes newPurpose = new Purposes();
+        newPurpose.setPurposeFamilyId(familyId);
+        newPurpose.setVersion(nextVersion);
+        newPurpose.setStatus("ACTIVE");
+        newPurpose.setCode(source.getCode());
+        newPurpose.setName(req.getName() != null ? req.getName() : source.getName());
+        newPurpose.setDescription(req.getDescription() != null ? req.getDescription() : source.getDescription());
+        newPurpose.setShortDescription(req.getShortDescription() != null ? req.getShortDescription() : source.getShortDescription());
+        newPurpose.setConsentStatement(req.getConsentStatement() != null ? req.getConsentStatement() : source.getConsentStatement());
+        newPurpose.setRequired(req.getRequired() != null ? req.getRequired() : source.getRequired());
+        newPurpose.setRevocable(req.getRevocable() != null ? req.getRevocable() : source.getRevocable());
+        newPurpose.setPresentationOrder(req.getPresentationOrder() != null ? req.getPresentationOrder() : source.getPresentationOrder());
+        newPurpose.setLegalBasisId(req.getLegalBasisId() != null ? req.getLegalBasisId() : source.getLegalBasisId());
+        newPurpose.setDomainId(source.getDomainId());
+        newPurpose.setIsActive(true);
+        newPurpose.setCreatedBy(actorId);
+        newPurpose.setCreatedByName(actorName);
+        newPurpose.setApprovedBy(actorId);
+        newPurpose.setApprovedByName(actorName);
+        newPurpose.setCreatedAt(LocalDateTime.now());
+        newPurpose.setHashSha256(computeHash(newPurpose));
+
+        Purposes saved = purposesRepo.save(newPurpose);
+
+        source.setStatus("SUPERSEDED");
+        purposesRepo.save(source);
+
+        auditService.log(AuditContext.builder()
+                .tableName("purposes")
+                .recordId(saved.getId())
+                .action("PURPOSE_NEW_VERSION_CREATED")
+                .oldData(Map.of(
+                        "sourceId", String.valueOf(sourceId),
+                        "sourceVersion", String.valueOf(source.getVersion())))
+                .newData(Map.of(
+                        "id", String.valueOf(saved.getId()),
+                        "version", String.valueOf(saved.getVersion())))
+                .actorId(actorId)
+                .actorRole(securityContextHelper.getActorRole())
+                .build());
+
+        return PurposeResponse.from(saved, isLocked(saved.getId()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<PurposeResponse> getFamily(UUID purposeFamilyId) {
+        return purposesRepo.findByPurposeFamilyIdOrderByVersionDesc(purposeFamilyId).stream()
+                .map(p -> PurposeResponse.from(p, isLocked(p.getId())))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PurposeResponse getActiveByFamily(UUID purposeFamilyId) {
+        return purposesRepo.findByPurposeFamilyIdAndStatus(purposeFamilyId, "ACTIVE")
+                .map(p -> PurposeResponse.from(p, isLocked(p.getId())))
+                .orElseThrow(() -> new BusinessValidationException(
+                        "No hay una versión ACTIVE para la familia " + purposeFamilyId));
+    }
+
+    // ── INTEGRIDAD ───────────────────────────────────────────────────────────────
+
+    /** Recalcula el hash sobre los campos vigentes en BD — usado por IntegrityVerifier. */
+    @Transactional(readOnly = true)
+    public String recalculateHash(UUID purposeId) {
+        return computeHash(findOrThrow(purposeId));
+    }
+
+    private String computeHash(Purposes p) {
+        String content = String.join("|",
+                String.valueOf(p.getCode()),
+                String.valueOf(p.getName()),
+                String.valueOf(p.getDescription()),
+                String.valueOf(p.getShortDescription()),
+                String.valueOf(p.getRequired()),
+                String.valueOf(p.getRevocable()),
+                String.valueOf(p.getConsentStatement()),
+                String.valueOf(p.getLegalBasisId()),
+                String.valueOf(p.getDomainId()));
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(content.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 no disponible en este JVM", e);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────────
 
     private Purposes findOrThrow(UUID id) {
@@ -232,8 +353,19 @@ public class PurposeService {
     }
 
     private boolean isLocked(UUID purposeId) {
+        return isLockedByDocument(purposeId) || isLockedByAgreement(purposeId);
+    }
+
+    private boolean isLockedByDocument(UUID purposeId) {
         return documentPurposesRepo
                 .existsByPurpose_IdAndDocument_StatusAndIsActiveTrue(purposeId, DocumentStatus.PUBLISHED);
+    }
+
+    private boolean isLockedByAgreement(UUID purposeId) {
+        List<UUID> templateIds = templatePurposesRepo.findByPurpose_Id(purposeId).stream()
+                .map(tp -> tp.getTemplate().getId())
+                .toList();
+        return !templateIds.isEmpty() && agreementsRepo.existsByTemplateIdIn(templateIds);
     }
 
     private void enforceNotLocked(UUID purposeId, String purposeName) {

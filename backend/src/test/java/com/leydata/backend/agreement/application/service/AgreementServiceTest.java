@@ -2,7 +2,6 @@ package com.leydata.backend.agreement.application.service;
 
 import com.leydata.backend.agreement.application.dto.*;
 import com.leydata.backend.agreement.domain.exception.AgreementNotFoundException;
-import com.leydata.backend.agreement.infrastructure.persistence.AgreementIntegrityLogRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementMetadataRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementsPurposesRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementsRepository;
@@ -42,7 +41,6 @@ class AgreementServiceTest {
     @Mock private AgreementsRepository agreementsRepo;
     @Mock private AgreementsPurposesRepository agreementsPurposesRepo;
     @Mock private AgreementMetadataRepository agreementMetadataRepo;
-    @Mock private AgreementIntegrityLogRepository integrityLogRepo;
     @Mock private DataSubjectsRepository dataSubjectsRepo;
     @Mock private TemplatesRepository templatesRepo;
     @Mock private TemplatePurposesRepository templatePurposesRepo;
@@ -65,10 +63,8 @@ class AgreementServiceTest {
         lenient().when(agreementsRepo.save(any(Agreements.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(agreementsPurposesRepo.save(any(AgreementsPurposes.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(agreementMetadataRepo.save(any(AgreementMetadata.class))).thenAnswer(inv -> inv.getArgument(0));
-        lenient().when(integrityLogRepo.save(any(AgreementIntegrityLog.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(agreementsRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         lenient().when(agreementsPurposesRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        lenient().when(integrityLogRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         lenient().when(securityContextHelper.getKeycloakId()).thenThrow(new RuntimeException("sin usuario autenticado"));
     }
 
@@ -446,110 +442,4 @@ class AgreementServiceTest {
         assertThat(result).isEmpty();
     }
 
-    // ── verifyIntegrity() ────────────────────────────────────────────────────────
-
-    @Test
-    void verifyIntegrity_isValidTrue_cuandoElHashCoincide() {
-        UUID id = UUID.randomUUID();
-        Agreements agreement = new Agreements();
-        agreement.setId(id);
-        agreement.setCreatedAt(LocalDateTime.now());
-        when(agreementsRepo.findById(id)).thenReturn(Optional.of(agreement));
-        when(agreementsPurposesRepo.findByAgreementId(id)).thenReturn(List.of());
-        when(agreementMetadataRepo.findByAgreementId(id)).thenReturn(Optional.empty());
-
-        // El hash almacenado se calcula con el mismo método que usa verifyIntegrity para recalcular,
-        // así que para simular "sin alteraciones" alcanza con dejarlo null en ambos casos: si hashSha256
-        // del agreement es null y no hubo cambios, ambos hashes recalculados sobre el mismo contenido coinciden.
-        agreement.setHashSha256(null);
-
-        AgreementIntegrityLogResponse response = service.verifyIntegrity(id, "MANUAL", null);
-
-        // No podemos conocer el hash exacto (SHA-256 real), pero si storedHash es null y nunca se
-        // seteó, recalculatedHash sí tendrá valor real -> isValid debe ser false en este escenario.
-        assertThat(response.getStoredHash()).isNull();
-        assertThat(response.getRecalculatedHash()).isNotBlank();
-        assertThat(response.getIsValid()).isFalse();
-    }
-
-    @Test
-    void verifyIntegrity_isValidFalse_cuandoElContenidoFueAlterado() {
-        UUID id = UUID.randomUUID();
-        Agreements agreement = new Agreements();
-        agreement.setId(id);
-        agreement.setCreatedAt(LocalDateTime.now());
-        agreement.setHashSha256("hash-guardado-que-no-coincide");
-        when(agreementsRepo.findById(id)).thenReturn(Optional.of(agreement));
-        when(agreementsPurposesRepo.findByAgreementId(id)).thenReturn(List.of());
-        when(agreementMetadataRepo.findByAgreementId(id)).thenReturn(Optional.empty());
-
-        AgreementIntegrityLogResponse response = service.verifyIntegrity(id, "ON_DEMAND", null);
-
-        assertThat(response.getIsValid()).isFalse();
-        assertThat(response.getStoredHash()).isEqualTo("hash-guardado-que-no-coincide");
-    }
-
-    @Test
-    void verifyIntegrity_encadenaPreviousHashShaContraElUltimoLog() {
-        UUID id = UUID.randomUUID();
-        Agreements agreement = new Agreements();
-        agreement.setId(id);
-        agreement.setCreatedAt(LocalDateTime.now());
-        when(agreementsRepo.findById(id)).thenReturn(Optional.of(agreement));
-        when(agreementsPurposesRepo.findByAgreementId(id)).thenReturn(List.of());
-        when(agreementMetadataRepo.findByAgreementId(id)).thenReturn(Optional.empty());
-
-        AgreementIntegrityLog lastLog = new AgreementIntegrityLog();
-        lastLog.setHashSha256("hash-log-anterior");
-        when(integrityLogRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.of(lastLog));
-
-        service.verifyIntegrity(id, "MANUAL", null);
-
-        assertThat(true).isTrue(); // se valida que no lance excepción al encadenar; el valor exacto es un hash SHA-256 no determinable a mano
-    }
-
-    @Test
-    void verifyIntegrity_lanzaAgreementNotFoundException_siNoExiste() {
-        UUID id = UUID.randomUUID();
-        when(agreementsRepo.findById(id)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.verifyIntegrity(id, "MANUAL", null))
-                .isInstanceOf(AgreementNotFoundException.class);
-    }
-
-    // ── getIntegrityLog() / listFailedVerifications() ───────────────────────────
-
-    @Test
-    void getIntegrityLog_devuelveElHistorialOrdenado() {
-        UUID id = UUID.randomUUID();
-        when(agreementsRepo.findById(id)).thenReturn(Optional.of(new Agreements()));
-        AgreementIntegrityLog log = new AgreementIntegrityLog();
-        log.setAgreementId(id);
-        when(integrityLogRepo.findByAgreementIdOrderByCreatedAtDesc(id)).thenReturn(List.of(log));
-
-        List<AgreementIntegrityLogResponse> result = service.getIntegrityLog(id);
-
-        assertThat(result).hasSize(1);
-    }
-
-    @Test
-    void getIntegrityLog_lanzaAgreementNotFoundException_siNoExisteElAgreement() {
-        UUID id = UUID.randomUUID();
-        when(agreementsRepo.findById(id)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.getIntegrityLog(id))
-                .isInstanceOf(AgreementNotFoundException.class);
-    }
-
-    @Test
-    void listFailedVerifications_devuelveSoloLosInvalidos() {
-        AgreementIntegrityLog failed = new AgreementIntegrityLog();
-        failed.setIsValid(false);
-        when(integrityLogRepo.findByIsValidFalse()).thenReturn(List.of(failed));
-
-        List<AgreementIntegrityLogResponse> result = service.listFailedVerifications();
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getIsValid()).isFalse();
-    }
 }

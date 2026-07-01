@@ -1,0 +1,24 @@
+meta {
+  name: Pending Deletions (Finalidades Vencidas)
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/agreements/pending-deletions?domainId={{domainId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Lista las finalidades vencidas (expiresAt < now) cuyos datos aún no han sido eliminados.
+  Cumplimiento de plazos de retención de DataRetentionPolicies (Ley 21.719, art. 14 y ss.).
+  Usado internamente por el Orquestador en el Caso 6 (GET /consent/pending-deletions).
+  Respuesta: lista de { subjectIdentifier, purposeId, purposeCode, purposeName, agreementId, expiredAt, anonymizeAfter }
+  anonymizeAfter=true indica que la política exige anonimizar en lugar de eliminar definitivamente.
+  Accesible por cualquier rol autenticado.
+}
