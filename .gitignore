@@ -19,12 +19,15 @@ backend/.settings/
 .github/
 graphify-out/
 
+# Logs (generados por logback-spring.xml al arrancar)
+logs/
+
 
 # IDEs
 .vscode/
 .idea/
 
-# SISTEMAS OPERATIVOS 
+# SISTEMAS OPERATIVOS
 .DS_Store
 
 # BBDD
@@ -38,3 +41,7 @@ postgres_replica_data/
 CLAUDE.md
 .claude/
 graphify-out/
+
+orchestrator/target/classes/application.yml
+orchestrator/target/classes/com/leydata/orchestrator/consent/ConsentController.class
+orchestrator/target/classes/logback-spring.xml

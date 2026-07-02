@@ -4,6 +4,7 @@ import com.leydata.backend.audit.application.dto.AuditContext;
 import com.leydata.backend.audit.application.service.AuditService;
 import com.leydata.backend.datacategory.infrastructure.persistence.DataCategoryRepository;
 import com.leydata.backend.entity.DataRetentionPolicies;
+import com.leydata.backend.entity.DataCategories;
 import com.leydata.backend.entity.PurposeDataCategories;
 import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
@@ -58,7 +59,7 @@ public class PurposeDataCategoryService {
 
     public PurposeDataCategoryResponse link(UUID purposeId, PurposeDataCategoryRequest req) {
         validatePurposeApproved(purposeId);
-        validateDataCategoryActive(req.getDataCategoryId());
+        var dataCategory = loadDataCategoryActive(req.getDataCategoryId());
         // Agregar categorías a una finalidad en doc PUBLISHED amplía el alcance del
         // consentimiento sin que el titular lo haya visto — requiere nueva versión del doc.
         enforceRetentionNotLocked(purposeId);
@@ -78,7 +79,9 @@ public class PurposeDataCategoryService {
         // La política de retención se crea junto con el vínculo — nunca puede quedar sin definir
         DataRetentionPolicies retention = buildRetention(saved.getId(), req.getRetention());
         retentionRepo.save(retention);
-        // Setear en memoria: @OneToOne(mappedBy=...) no actualiza saved en la caché L1 de Hibernate
+        // Poblar relaciones lazy en memoria con objetos ya cargados — save() solo persiste FK IDs
+        // y findById() devolvería el objeto del L1 cache sin las relaciones inicializadas.
+        saved.setDataCategory(dataCategory);
         saved.setDataRetentionPolicy(retention);
 
         auditService.log(AuditContext.builder()
@@ -96,7 +99,7 @@ public class PurposeDataCategoryService {
                 .actorRole(securityContextHelper.getActorRole())
                 .build());
 
-        return PurposeDataCategoryResponse.from(findOrThrow(saved.getId()), false);
+        return PurposeDataCategoryResponse.from(saved, false);
     }
 
     // ── ACTUALIZAR política de retención — OPCIÓN B ───────────────────────────────
@@ -196,13 +199,14 @@ public class PurposeDataCategoryService {
         }
     }
 
-    private void validateDataCategoryActive(UUID dataCategoryId) {
+    private DataCategories loadDataCategoryActive(UUID dataCategoryId) {
         var cat = dataCategoryRepo.findById(dataCategoryId)
                 .orElseThrow(() -> new BusinessValidationException("Categoría de datos no encontrada: " + dataCategoryId));
         if (!Boolean.TRUE.equals(cat.getIsActive())) {
             throw new BusinessValidationException(
                     "La categoría de datos '" + cat.getName() + "' está inactiva.");
         }
+        return cat;
     }
 
     private DataRetentionPolicies buildRetention(UUID purposeDataCategoryId, DataRetentionPolicyRequest req) {

@@ -1,6 +1,6 @@
 # Estructura del Proyecto — Backend LeyData
 
-**Fecha:** 2026-06-26
+**Fecha:** 2026-07-01
 
 Guía de referencia rápida sobre cómo está organizado el código fuente del backend y qué hace cada carpeta.
 
@@ -17,6 +17,7 @@ backend/src/main/java/com/leydata/backend/
 │   ├── GlobalExceptionHandler.java
 │   ├── OpenApiConfig.java
 │   ├── SecurityConfig.java
+│   ├── AuditHealthIndicator.java        ← HealthIndicator — expone estado del audit log en /actuator/health como componente "auditChain"
 │   ├── DataSourceConfig.java            ← AbstractRoutingDataSource (write → PgBouncer :5435, read → replica :5434)
 │   ├── DataSourceType.java              ← enum WRITE | READ
 │   ├── ReadWriteRoutingDataSource.java  ← determineCurrentLookupKey() via TransactionSynchronizationManager
@@ -24,7 +25,8 @@ backend/src/main/java/com/leydata/backend/
 │
 ├── shared/                              ← componentes sin módulo dueño
 │   ├── SecurityContextHelper.java
-│   └── EmailService.java
+│   ├── EmailService.java
+│   └── RequestIdFilter.java             ← OncePerRequestFilter — genera/propaga X-Request-ID, lo inyecta en MDC para correlación de logs y Zipkin
 │
 ├── entity/                              ← entidades JPA compartidas (modelo Keycloak-first)
 │   ├── Users.java                       ← caché local mínima: keycloak_id, email, name, active
@@ -396,6 +398,7 @@ Enums con significado de negocio. Por ejemplo:
 | `SecurityConfig.java` | Define qué rutas son públicas, cuáles requieren ADMIN, DPO, etc. Configura el backend como OAuth2 Resource Server de Keycloak. |
 | `GlobalExceptionHandler.java` | `@ControllerAdvice` que captura todas las excepciones tipadas y las convierte al código HTTP correcto. |
 | `OpenApiConfig.java` | Configura Swagger UI en `/swagger-ui.html`. |
+| `AuditHealthIndicator.java` | Implementa `HealthIndicator` (Spring Boot 4.x: `org.springframework.boot.health.contributor`). Consulta `SystemAuditLogRepository.count()` y el último registro. Aparece en `/actuator/health` como componente `auditChain: UP/DOWN`. Si la BD no es accesible, reporta DOWN. |
 
 ### `shared/`
 
@@ -403,6 +406,7 @@ Enums con significado de negocio. Por ejemplo:
 |---|---|
 | `SecurityContextHelper.java` | Extrae identidad y rol del JWT de Keycloak. No hace consultas a la BD — toda la información viene del token. |
 | `EmailService.java` | Envío de emails HTML por SMTP. Solo se activa si `MAIL_ENABLED=true`. |
+| `RequestIdFilter.java` | `OncePerRequestFilter` con prioridad máxima. Lee el header `X-Request-ID` de la request entrante (o genera un UUID si no viene). Lo inyecta en el MDC de Logback bajo la clave `requestId` para que aparezca en todos los logs del mismo request. También lo propaga como header de respuesta y es el mismo valor que Zipkin registra como `traceId`. |
 
 Métodos disponibles en `SecurityContextHelper`:
 
@@ -494,6 +498,31 @@ Los siguientes repositorios en `repository/` tienen duplicado activo en un módu
 - `AgreementsRepository`, `AgreementsPurposesRepository`, `AgreementIntegrityLogRepository`, `AgreementMetadataRepository` → usar los equivalentes en `agreement/infrastructure/persistence/`
 
 `TemplatesRepository` y `TemplatePurposesRepository` **ya no existen en `repository/`** — fueron migrados a `template/infrastructure/persistence/` como parte de la integración del módulo de templates.
+
+---
+
+## Observabilidad — archivos de configuración
+
+### Backend (`backend/src/main/resources/`)
+
+| Archivo | Qué hace |
+|---|---|
+| `logback-spring.xml` | Define tres appenders: CONSOLE (texto plano con `requestId`), FILE_JSON (JSON rotativo via `LogstashEncoder`), LOKI (push a Loki via `loki4j`). La ruta de logs es configurable via `logging.file.path` (default: `logs/`). La URL de Loki via `loki.url` (default: `http://localhost:3100`). |
+| `application.properties` | Config de Actuator (`management.endpoints.web.exposure.include=health,metrics,prometheus`), Zipkin (`management.zipkin.tracing.endpoint`), y sampling (`management.tracing.sampling.probability=1.0`). |
+
+### Infraestructura (`monitoring/` en la raíz del proyecto)
+
+| Archivo | Qué hace |
+|---|---|
+| `prometheus.yml` | Scrape: backend en `host.docker.internal:8080`, orquestador en `orchestrator:8081`, cada 15s |
+| `loki-config.yml` | Config mínima de Loki: filesystem, sin auth, schema v13, puerto 3100 |
+| `grafana-dashboards/leydata.json` | Dashboard "LeyData — Compliance & Consent" — carga automáticamente |
+| `grafana-provisioning/datasources/prometheus.yml` | Datasource Prometheus (UID `DS_PROMETHEUS`) |
+| `grafana-provisioning/datasources/loki.yml` | Datasource Loki (UID `DS_LOKI`) |
+| `grafana-provisioning/dashboards/leydata.yml` | Apunta Grafana al directorio de dashboards |
+| `grafana-provisioning/alerting/leydata-alerts.yml` | Alertas: ruptura SHA-256 en audit log + backend DOWN; contact points webhook y email |
+
+Ver documentación completa: [`docs/monitoring-module.md`](../../docs/monitoring-module.md)
 
 ---
 

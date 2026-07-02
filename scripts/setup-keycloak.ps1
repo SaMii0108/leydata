@@ -10,7 +10,9 @@
 #   4. Crea el cliente "leydata-backend" (confidential, service account)
 #   5. Asigna manage-users + view-realm al service account de leydata-backend
 #   6. Crea el usuario admin@leydata.cl con contraseña Admin1234! y rol ADMIN
-#   7. Muestra el KC_BACKEND_SECRET generado
+#   7. Crea usuarios de prueba (dpo, jefe)
+#   8. Crea el cliente "leydata-orchestrator" (M2M para el orquestador)
+#   9. Muestra KC_BACKEND_SECRET y KC_ORCHESTRATOR_CLIENT_SECRET
 #
 # Prerequisito: Keycloak corriendo en http://localhost:8180
 
@@ -270,9 +272,39 @@ function Create-UserWithRole {
 Create-UserWithRole -Username "dpo" -Email "dpo@leydata.cl" -FirstName "DPO" -LastName "LeyData" -Role "DPO"
 Create-UserWithRole -Username "jefe" -Email "jefe@test.cl" -FirstName "Jefe" -LastName "Dominio" -Role "JEFE_DOMINIO"
 
-# ── 8. Mostrar KC_BACKEND_SECRET ───────────────────────────────────────────────
+# ── 8. Crear cliente leydata-orchestrator (M2M) ──────────────────────────────
+Write-Host "-> Creando cliente 'leydata-orchestrator' (service account M2M)..."
+$orchBody = @{
+    clientId                 = "leydata-orchestrator"
+    enabled                  = $true
+    publicClient             = $false
+    serviceAccountsEnabled   = $true
+    standardFlowEnabled      = $false
+    directAccessGrantsEnabled = $false
+} | ConvertTo-Json
+try {
+    Invoke-RestMethod -Method Post -Uri "$KC_URL/admin/realms/$REALM/clients" `
+        -Headers $headers -Body $orchBody -ErrorAction Stop | Out-Null
+    Write-Host "   Creado."
+} catch {
+    if ($_.Exception.Response.StatusCode.value__ -eq 409) {
+        Write-Host "   Ya existe, omitido."
+    } else {
+        Write-Host "   HTTP $($_.Exception.Response.StatusCode.value__)"
+    }
+}
+
+$ORCH_ID = (Invoke-RestMethod -Method Get `
+    -Uri "$KC_URL/admin/realms/$REALM/clients?clientId=leydata-orchestrator" `
+    -Headers $headers)[0].id
+
+# ── 9. Mostrar secrets ────────────────────────────────────────────────────────
 $SECRET = (Invoke-RestMethod -Method Get `
     -Uri "$KC_URL/admin/realms/$REALM/clients/$BACKEND_ID/client-secret" `
+    -Headers $headers).value
+
+$ORCH_SECRET = (Invoke-RestMethod -Method Get `
+    -Uri "$KC_URL/admin/realms/$REALM/clients/$ORCH_ID/client-secret" `
     -Headers $headers).value
 
 Write-Host ""
@@ -285,8 +317,9 @@ Write-Host "   App admin:  admin@leydata.cl  / Admin1234!  (rol ADMIN)"
 Write-Host "   App DPO:    dpo@leydata.cl    / Test1234!   (rol DPO)"
 Write-Host "   App prueba: jefe@test.cl      / Test1234!   (rol JEFE_DOMINIO)"
 Write-Host ""
-Write-Host " Variable de entorno para el backend:"
+Write-Host " Variables de entorno — copiar en .env:" -ForegroundColor Yellow
 Write-Host "   KC_BACKEND_SECRET=$SECRET" -ForegroundColor Yellow
+Write-Host "   KC_ORCHESTRATOR_CLIENT_SECRET=$ORCH_SECRET" -ForegroundColor Yellow
 Write-Host ""
 Write-Host " Arrancar el backend (PowerShell):"
 Write-Host "   `$env:DB_USER='admin'"

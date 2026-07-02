@@ -446,11 +446,9 @@ public class PrivacyDocumentService {
 
     public PrivacyDocumentResponse archive(UUID id) {
         PrivacyDocuments doc = findOrThrow(id);
-        if (purposeRepo.existsByDocument_IdAndIsActiveTrue(id)) {
-            throw new BusinessValidationException(
-                "No se puede archivar el documento: tiene finalidades activas. Desvinculálas primero.");
-        }
         validateTransition(doc.getStatus(), DocumentStatus.ARCHIVED);
+        // No se bloquea por finalidades activas: publish() las requiere, y removePurpose() solo funciona
+        // en DRAFT. El chequeo previo creaba un estado inalcanzable para documentos PUBLISHED.
 
         String previousStatus = String.valueOf(doc.getStatus());
         doc.setStatus(DocumentStatus.ARCHIVED);

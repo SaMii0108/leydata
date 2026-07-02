@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: backend
+    # El backend corre en el host (fuera de Docker).
+    # Mac / Windows: host.docker.internal funciona directamente.
+    # Windows + WSL: exportar BACKEND_HOST=<ip-wsl> antes de docker-compose up
+    #   y reemplazar el target por ${BACKEND_HOST}:8080 manualmente,
+    #   o recrear el contenedor de prometheus con la variable seteada.
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    metrics_path: /actuator/prometheus
+
+  - job_name: orchestrator
+    static_configs:
+      - targets: ['orchestrator:8081']
+    metrics_path: /actuator/prometheus

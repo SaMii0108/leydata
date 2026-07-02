@@ -9,6 +9,7 @@ import com.leydata.backend.agreement.infrastructure.persistence.AgreementsReposi
 import com.leydata.backend.audit.application.dto.AuditContext;
 import com.leydata.backend.audit.application.service.AuditService;
 import com.leydata.backend.entity.*;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
@@ -57,6 +58,7 @@ public class AgreementService {
     private final SecurityContextHelper securityContextHelper;
     private final jakarta.persistence.EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
+    private final MeterRegistry meterRegistry;
 
     // ── CREACIÓN ─────────────────────────────────────────────────────────────────
 
@@ -227,6 +229,8 @@ public class AgreementService {
         savedAgreement.setHashSha256(computeAgreementHash(savedAgreement, savedPurposes, savedMetadata));
         Agreements finalAgreement = agreementsRepo.save(savedAgreement);
 
+        meterRegistry.counter("consent.captured",
+                "template", template.getId().toString()).increment();
         return AgreementResponse.from(
                 finalAgreement,
                 savedPurposes.stream().map(AgreementPurposeResponse::from).toList(),
@@ -288,6 +292,8 @@ public class AgreementService {
                 .actorRole(actorId != null ? securityContextHelper.getActorRole() : "ORCHESTRATOR")
                 .build());
 
+        meterRegistry.counter("consent.revoked",
+                "template", agreement.getTemplateId().toString()).increment();
         // Publica el evento — el listener elimina Redis DESPUÉS del commit (AFTER_COMMIT)
         List<UUID> purposeIds = purposes.stream().map(AgreementsPurposes::getPurposeId).toList();
         eventPublisher.publishEvent(new AgreementRevokedEvent(dataSubject.getIdentifier(), purposeIds));
