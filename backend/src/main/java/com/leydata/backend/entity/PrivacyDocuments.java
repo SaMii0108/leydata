@@ -33,13 +33,6 @@ public class PrivacyDocuments {
 
     // ── Identificación ──────────────────────────────────────────────────────────
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "template_id", insertable = false, updatable = false)
-    private Templates template;
-
-    @Column(name = "template_id")
-    private UUID templateId;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "category", nullable = false, length = 30)
     private DocumentCategory category;
@@ -114,6 +107,10 @@ public class PrivacyDocuments {
     @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<DocumentPurposes> documentPurposes = new ArrayList<>();
+
+    @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<DocumentTemplates> documentTemplates = new ArrayList<>();
 
     @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Agreements> agreements;

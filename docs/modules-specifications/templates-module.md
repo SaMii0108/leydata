@@ -14,13 +14,19 @@ Cada template agrupa un conjunto de purposes ordenadas, define los textos del fo
 2. Al activar una nueva versión, la anterior del mismo dominio + `TEMPLATE_KEY` se desactiva automáticamente en la misma transacción.
 3. No se puede editar un template activo — se debe crear una nueva versión.
 4. El `TEMPLATE_KEY` debe ser siempre UPPERCASE.
-5. No se puede eliminar un template que esté referenciado por un `PRIVACY_DOCUMENT` activo.
+5. No se puede eliminar un template que esté referenciado (vía `document_templates`) por un `PRIVACY_DOCUMENT` activo. Un mismo template puede estar asociado a varios documentos a la vez; el vínculo es propiedad del documento y no exige que el template esté `ACTIVE` (ver [`privacydoc-module.md`](privacydoc-module.md)).
 6. Los templates no se eliminan, solo se versionan. Siempre debe quedar evidencia de qué finalidades tenía y cuántos acuerdos generó.
 7. Solo se pueden vincular purposes aprobadas y activas al template.
 8. `ORDER_POSITION` no puede repetirse dentro del mismo template.
 9. Un template debe tener al menos una purpose con `IS_VISIBLE = true`.
 10. Para activar un template debe tener: al menos una purpose visible y `APPROVED_BY` asignado.
 11. `DOMAIN_ID` es obligatorio y se fija al crear el template — no cambia entre versiones (`newVersion()` lo hereda del template origen).
+
+---
+
+## Relación con Documentos de Privacidad
+
+Un `PrivacyDocument` puede asociarse a cero, uno o varios templates (tabla de unión `document_templates`), en cualquier estado del documento y sin exigir que el template esté `ACTIVE`. La relación es unidireccional y de propiedad del documento: el documento referencia templates, nunca al revés, y puede publicarse sin tener ningún template asociado — el orden habitual es publicar primero y asociar template(s) después. Ver detalle completo en [`privacydoc-module.md`](privacydoc-module.md).
 
 ---
 

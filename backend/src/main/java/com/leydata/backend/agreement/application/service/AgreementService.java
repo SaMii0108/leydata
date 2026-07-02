@@ -13,6 +13,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
+import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentTemplatesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
 import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
 import com.leydata.backend.purposedatacategory.infrastructure.persistence.RetentionPolicyRepository;
@@ -50,6 +51,7 @@ public class AgreementService {
     private final TemplatePurposesRepository templatePurposesRepo;
     private final PrivacyDocumentsRepository privacyDocumentsRepo;
     private final DocumentPurposesRepository documentPurposesRepo;
+    private final DocumentTemplatesRepository documentTemplatesRepo;
     private final PurposesRepository purposesRepo;
     private final PurposeDataCategoryRepository purposeDataCategoryRepo;
     private final RetentionPolicyRepository retentionPolicyRepo;
@@ -100,8 +102,12 @@ public class AgreementService {
                     .orElseThrow(() -> new BusinessValidationException(
                             "El documento " + req.getDocumentId() + " no existe"));
         } else {
-            document = privacyDocumentsRepo
-                    .findByTemplateIdAndStatusAndIsActiveTrue(template.getId(), DocumentStatus.PUBLISHED)
+            document = documentTemplatesRepo
+                    .findByTemplate_IdAndIsActiveTrueAndDocument_StatusAndDocument_IsActiveTrue(
+                            template.getId(), DocumentStatus.PUBLISHED)
+                    .stream()
+                    .findFirst()
+                    .map(DocumentTemplates::getDocument)
                     .orElseThrow(() -> new BusinessValidationException(
                             "El template " + template.getId() + " no tiene un documento publicado asociado"));
         }

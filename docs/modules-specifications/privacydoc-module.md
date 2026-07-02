@@ -25,7 +25,9 @@ PUBLISHED  →  ARCHIVED
 
 Solo el DPO puede mover un documento entre estados. Un documento `PUBLISHED` no puede ser modificado — cualquier cambio requiere crear una nueva versión (`DRAFT`) y pasar por el workflow completo.
 
-**Un solo `PUBLISHED` por template:** si el documento tiene `templateId` asignado (vínculo opcional a `Templates`), `publish()` archiva automáticamente cualquier otro documento `PUBLISHED` con el mismo `templateId` antes de publicar la nueva versión — mismo patrón que `TemplateService.activate()` usa para desactivar la versión anterior de un `TEMPLATE_KEY`. Esto garantiza que "el documento vigente de este template" sea siempre una búsqueda sin ambigüedad, lo cual usa `AgreementService.create()` para resolver `documentId` automáticamente cuando no viene en el request (ver [`docs/agreements-module.md`](agreements-module.md)) y el endpoint B2B `GET /api/templates/resolve` del Orquestador (ver [`docs/orchestrator-module.md`](orchestrator-module.md)).
+**Relación con Templates — el documento es el dueño del vínculo:** un documento puede tener cero, uno o varios templates asociados (tabla de unión `document_templates`). La asociación se gestiona vía `POST/DELETE /api/privacy-documents/{id}/templates/{templateId}` y es independiente del ciclo de vida del documento: se puede vincular o desvincular un template en cualquier estado (DRAFT, IN_REVIEW, APPROVED, PUBLISHED, ARCHIVED), y no se exige que el template esté `ACTIVE`. A diferencia de las purposes, el documento **no necesita ningún template asociado para poder publicarse** — el orden habitual de trabajo es publicar el documento primero y asociarle template(s) después, nunca al revés.
+
+**Un solo `PUBLISHED` por template:** para cada template vinculado, `publish()` archiva automáticamente cualquier otro documento `PUBLISHED` que comparta ese mismo template — mismo patrón que `TemplateService.activate()` usa para desactivar la versión anterior de un `TEMPLATE_KEY`. Esto garantiza que "el documento vigente de este template" siga siendo una búsqueda sin ambigüedad, usada por `AgreementService.create()` para resolver `documentId` automáticamente cuando no viene en el request (ver [`docs/agreements-module.md`](agreements-module.md)) y por el endpoint B2B `GET /api/templates/resolve` del Orquestador (ver [`docs/orchestrator-module.md`](orchestrator-module.md)).
 
 ---
 
@@ -57,6 +59,8 @@ PATCH  /api/privacy-documents/{id}/archive           — Archivar documento obso
 GET    /api/privacy-documents/{id}/verify            — Verificar integridad del documento
 POST   /api/privacy-documents/{id}/purposes          — Vincular purposes al documento
 DELETE /api/privacy-documents/{id}/purposes/{pid}    — Desvincular purpose
+POST   /api/privacy-documents/{id}/templates/{tid}   — Vincular template (cualquier estado)
+DELETE /api/privacy-documents/{id}/templates/{tid}   — Desvincular template (cualquier estado)
 GET    /api/privacy-documents/download/{id}          — Descargar PDF generado
 ```
 
@@ -90,3 +94,4 @@ El servicio `PdfGeneratorService` (`privacydoc/infrastructure/pdf/`) genera un P
 | `privacydoc/infrastructure/pdf/PdfGeneratorService.java` | Generación de PDF |
 | `privacydoc/infrastructure/persistence/PrivacyDocumentsRepository.java` | JPA sobre `privacy_documents` |
 | `privacydoc/infrastructure/persistence/DocumentPurposesRepository.java` | JPA sobre `document_purposes` |
+| `privacydoc/infrastructure/persistence/DocumentTemplatesRepository.java` | JPA sobre `document_templates` |

@@ -149,6 +149,36 @@ public class PrivacyDocumentController {
         service.removePurpose(id, purposeId);
     }
 
+    // ── TEMPLATES ────────────────────────────────────────────────────────────────
+
+    @PreAuthorize("hasRole('DPO')")
+    @PostMapping("/{id}/templates/{templateId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Vincular template (cualquier estado, no requiere ACTIVE) [DPO]")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Template vinculado"),
+            @ApiResponse(responseCode = "401", description = "No autenticado"),
+            @ApiResponse(responseCode = "403", description = "Sin rol DPO"),
+            @ApiResponse(responseCode = "404", description = "Documento o template no encontrado")
+    })
+    public void addTemplate(@PathVariable UUID id, @PathVariable UUID templateId) {
+        service.addTemplate(id, templateId);
+    }
+
+    @PreAuthorize("hasRole('DPO')")
+    @DeleteMapping("/{id}/templates/{templateId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Desvincular template (cualquier estado) [DPO]")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Template desvinculado"),
+            @ApiResponse(responseCode = "401", description = "No autenticado"),
+            @ApiResponse(responseCode = "403", description = "Sin rol DPO"),
+            @ApiResponse(responseCode = "404", description = "Documento o template no encontrado")
+    })
+    public void removeTemplate(@PathVariable UUID id, @PathVariable UUID templateId) {
+        service.removeTemplate(id, templateId);
+    }
+
     // ── WORKFLOW ─────────────────────────────────────────────────────────────────
 
     @PreAuthorize("hasRole('DPO')")

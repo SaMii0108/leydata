@@ -81,6 +81,8 @@ Catálogo de solo lectura (sembrado por `CatalogSeeder`).
 | GET | `/api/privacy-documents/family/{familyId}` | Listar todas las versiones activas de una familia de documentos |
 | POST | `/api/privacy-documents/{id}/purposes/{purposeId}` | Vincular propósito (solo DRAFT) |
 | DELETE | `/api/privacy-documents/{id}/purposes/{purposeId}` | Desvincular propósito (solo DRAFT) |
+| POST | `/api/privacy-documents/{id}/templates/{templateId}` | Vincular template (cualquier estado, no requiere que el template esté ACTIVE) |
+| DELETE | `/api/privacy-documents/{id}/templates/{templateId}` | Desvincular template (cualquier estado) |
 | POST | `/api/privacy-documents/{id}/submit` | DRAFT → IN_REVIEW |
 | POST | `/api/privacy-documents/{id}/resubmit` | REJECTED → IN_REVIEW |
 | POST | `/api/privacy-documents/{id}/approve` | IN_REVIEW → APPROVED |

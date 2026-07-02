@@ -13,6 +13,8 @@ import {
   newDocumentVersion,
   addDocumentPurpose,
   removeDocumentPurpose,
+  addDocumentTemplate,
+  removeDocumentTemplate,
   ApiError,
   type PrivacyDocumentDto,
   type DocumentStatus,
@@ -73,7 +75,6 @@ const formatDate = (iso: string | null): string => {
 interface EditForm {
   name: string;
   content: string;
-  templateId: string;
 }
 
 const DocumentosPrivacidadPage = () => {
@@ -98,7 +99,7 @@ const DocumentosPrivacidadPage = () => {
 
   // ── Editar ────────────────────────────────────────────────────────────────
   const [editingDoc, setEditingDoc]     = useState<PrivacyDocumentDto | null>(null);
-  const [editForm, setEditForm]         = useState<EditForm>({ name: '', content: '', templateId: '' });
+  const [editForm, setEditForm]         = useState<EditForm>({ name: '', content: '' });
   const [saving, setSaving]             = useState(false);
   const [saveError, setSaveError]       = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess]   = useState(false);
@@ -114,8 +115,12 @@ const DocumentosPrivacidadPage = () => {
   const [actionError, setActionError]     = useState<{ id: string; msg: string } | null>(null);
 
   // ── Plantillas (drawer) ───────────────────────────────────────────────────
-  const [allTemplates, setAllTemplates]         = useState<TemplateResponse[]>([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [allTemplates, setAllTemplates]           = useState<TemplateResponse[]>([]);
+  const [loadingTemplates, setLoadingTemplates]   = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateOpLoading, setTemplateOpLoading] = useState<string | null>(null);
+  const [templateError, setTemplateError]         = useState<string | null>(null);
+  const [templateSuccess, setTemplateSuccess]     = useState<string | null>(null);
 
   // ── Finalidades (drawer) ──────────────────────────────────────────────────
   const [allPurposes, setAllPurposes]             = useState<PurposeResponse[]>([]);
@@ -178,13 +183,15 @@ const DocumentosPrivacidadPage = () => {
     setEditForm({
       name: doc.name,
       content: doc.content ?? '',
-      templateId: doc.templateId ?? '',
     });
     setSaveError(null);
     setSaveSuccess(false);
     setPurposeError(null);
     setPurposeSuccess(null);
     setSelectedPurposeId('');
+    setTemplateError(null);
+    setTemplateSuccess(null);
+    setSelectedTemplateId('');
     setAllTemplates([]);
     setAllPurposes([]);
 
@@ -211,7 +218,6 @@ const DocumentosPrivacidadPage = () => {
       const updated = await updateDocument(editingDoc.id, {
         name: editForm.name.trim(),
         content: editForm.content || undefined,
-        templateId: editForm.templateId || undefined,
       }, accessToken);
       setDocs((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
       setEditingDoc(updated);
@@ -287,6 +293,48 @@ const DocumentosPrivacidadPage = () => {
       setPurposeError(err instanceof ApiError ? err.message : 'No se pudo eliminar la finalidad');
     } finally {
       setPurposeOpLoading(null);
+    }
+  };
+
+  // ── Gestión de templates ──────────────────────────────────────────────────
+  const handleAddTemplate = async () => {
+    if (!editingDoc || !selectedTemplateId) return;
+    setTemplateOpLoading(`add-${selectedTemplateId}`);
+    setTemplateError(null);
+    setTemplateSuccess(null);
+    try {
+      await addDocumentTemplate(editingDoc.id, selectedTemplateId, accessToken);
+      const newIds = [...editingDoc.templateIds, selectedTemplateId];
+      const updatedDoc = { ...editingDoc, templateIds: newIds };
+      setEditingDoc(updatedDoc);
+      setDocs((prev) => prev.map((d) => (d.id === editingDoc.id ? updatedDoc : d)));
+      setSelectedTemplateId('');
+      setTemplateSuccess('Template agregado correctamente');
+      setTimeout(() => setTemplateSuccess(null), 3000);
+    } catch (err) {
+      setTemplateError(err instanceof ApiError ? err.message : 'No se pudo agregar el template');
+    } finally {
+      setTemplateOpLoading(null);
+    }
+  };
+
+  const handleRemoveTemplate = async (templateId: string) => {
+    if (!editingDoc) return;
+    setTemplateOpLoading(`remove-${templateId}`);
+    setTemplateError(null);
+    setTemplateSuccess(null);
+    try {
+      await removeDocumentTemplate(editingDoc.id, templateId, accessToken);
+      const newIds = editingDoc.templateIds.filter((id) => id !== templateId);
+      const updatedDoc = { ...editingDoc, templateIds: newIds };
+      setEditingDoc(updatedDoc);
+      setDocs((prev) => prev.map((d) => (d.id === editingDoc.id ? updatedDoc : d)));
+      setTemplateSuccess('Template eliminado correctamente');
+      setTimeout(() => setTemplateSuccess(null), 3000);
+    } catch (err) {
+      setTemplateError(err instanceof ApiError ? err.message : 'No se pudo eliminar el template');
+    } finally {
+      setTemplateOpLoading(null);
     }
   };
 
@@ -402,6 +450,12 @@ const DocumentosPrivacidadPage = () => {
                     {isDpo && doc.status === 'DRAFT' && (
                       <button className={styles.actionBtn} onClick={() => openEdit(doc)}>
                         Editar
+                      </button>
+                    )}
+                    {/* Templates (DPO, cualquier estado — independiente de la publicación) */}
+                    {isDpo && doc.status !== 'DRAFT' && (
+                      <button className={styles.actionBtn} onClick={() => openEdit(doc)}>
+                        Templates
                       </button>
                     )}
                     {/* Enviar a revisión (DPO, DRAFT) */}
@@ -545,73 +599,127 @@ const DocumentosPrivacidadPage = () => {
               <button className={styles.closeBtn} onClick={() => setEditingDoc(null)}>×</button>
             </div>
             <div className={styles.drawerBody}>
-              {/* Nombre */}
+              {editingDoc.status === 'DRAFT' && (
+                <>
+                  {/* Nombre */}
+                  <div className={styles.drawerSection}>
+                    <p className={styles.sectionTitle}>Información básica</p>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Nombre</label>
+                      <input
+                        className={styles.input}
+                        type="text"
+                        value={editForm.name}
+                        onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  {/* Contenido */}
+                  <div className={styles.drawerSection}>
+                    <p className={styles.sectionTitle}>Contenido legal</p>
+                    <textarea
+                      className={styles.textarea}
+                      rows={10}
+                      placeholder="Redacta aquí el texto legal del documento. Requerido antes de enviar a revisión."
+                      value={editForm.content}
+                      onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
+                    />
+                  </div>
+                  {/* Finalidades */}
+                  <div className={styles.drawerSection}>
+                    <p className={styles.sectionTitle}>Finalidades vinculadas</p>
+                    {loadingPurposes ? (
+                      <p className={styles.noteText}>Cargando finalidades…</p>
+                    ) : (
+                      <>
+                        {editingDoc.purposeIds.length === 0 ? (
+                          <p className={styles.noteText}>Sin finalidades vinculadas.</p>
+                        ) : (
+                          <ul className={styles.purposeList}>
+                            {editingDoc.purposeIds.map((pid) => {
+                              const p = allPurposes.find((ap) => ap.id === pid);
+                              const busy = purposeOpLoading === `remove-${pid}`;
+                              return (
+                                <li key={pid} className={styles.purposeRow}>
+                                  <span className={styles.purposeName}>
+                                    {p ? `${p.name} (${p.code})` : pid}
+                                  </span>
+                                  <button
+                                    className={styles.purposeRemoveBtn}
+                                    disabled={!!purposeOpLoading}
+                                    onClick={() => handleRemovePurpose(pid)}
+                                    title="Quitar finalidad"
+                                  >
+                                    {busy ? '…' : '×'}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                        {allPurposes.filter((p) => p.isActive && !editingDoc.purposeIds.includes(p.id)).length > 0 && (
+                          <div className={styles.addPurposeRow}>
+                            <div style={{ flex: 1 }}>
+                              <select
+                                className={styles.select}
+                                value={selectedPurposeId}
+                                onChange={(e) => setSelectedPurposeId(e.target.value)}
+                                disabled={!!purposeOpLoading}
+                              >
+                                <option value="">— Seleccionar finalidad —</option>
+                                {allPurposes
+                                  .filter((p) => p.isActive && !editingDoc.purposeIds.includes(p.id))
+                                  .map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} ({p.domainName})
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                            <button
+                              className={styles.actionBtn}
+                              disabled={!selectedPurposeId || !!purposeOpLoading}
+                              onClick={handleAddPurpose}
+                            >
+                              {purposeOpLoading?.startsWith('add-') ? '…' : 'Agregar'}
+                            </button>
+                          </div>
+                        )}
+                        {purposeError && (
+                          <p className={[styles.errorMsg, styles.drawerMsg].join(' ')}>{purposeError}</p>
+                        )}
+                        {purposeSuccess && (
+                          <p className={[styles.successBanner, styles.drawerMsg].join(' ')}>{purposeSuccess}</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+              {/* Templates — el documento es el dueño del vínculo, se puede gestionar en cualquier estado */}
               <div className={styles.drawerSection}>
-                <p className={styles.sectionTitle}>Información básica</p>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Nombre</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                  />
-                </div>
-                <div className={[styles.fieldGroup, styles.fieldGroupMt].join(' ')}>
-                  <label className={styles.fieldLabel}>Plantilla</label>
-                  {loadingTemplates ? (
-                    <p className={styles.noteText}>Cargando plantillas…</p>
-                  ) : (
-                    <select
-                      className={styles.select}
-                      value={editForm.templateId}
-                      onChange={(e) => setEditForm((f) => ({ ...f, templateId: e.target.value }))}
-                    >
-                      <option value="">— Sin plantilla —</option>
-                      {allTemplates.map((tpl) => (
-                        <option key={tpl.id} value={tpl.id}>
-                          {tpl.name} (v{tpl.version}) — {tpl.status}{tpl.templateKey ? ` · ${tpl.templateKey}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-              {/* Contenido */}
-              <div className={styles.drawerSection}>
-                <p className={styles.sectionTitle}>Contenido legal</p>
-                <textarea
-                  className={styles.textarea}
-                  rows={10}
-                  placeholder="Redacta aquí el texto legal del documento. Requerido antes de enviar a revisión."
-                  value={editForm.content}
-                  onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
-                />
-              </div>
-              {/* Finalidades */}
-              <div className={styles.drawerSection}>
-                <p className={styles.sectionTitle}>Finalidades vinculadas</p>
-                {loadingPurposes ? (
-                  <p className={styles.noteText}>Cargando finalidades…</p>
+                <p className={styles.sectionTitle}>Templates vinculados</p>
+                {loadingTemplates ? (
+                  <p className={styles.noteText}>Cargando templates…</p>
                 ) : (
                   <>
-                    {editingDoc.purposeIds.length === 0 ? (
-                      <p className={styles.noteText}>Sin finalidades vinculadas.</p>
+                    {editingDoc.templateIds.length === 0 ? (
+                      <p className={styles.noteText}>Sin templates vinculados.</p>
                     ) : (
                       <ul className={styles.purposeList}>
-                        {editingDoc.purposeIds.map((pid) => {
-                          const p = allPurposes.find((ap) => ap.id === pid);
-                          const busy = purposeOpLoading === `remove-${pid}`;
+                        {editingDoc.templateIds.map((tid) => {
+                          const t = allTemplates.find((at) => at.id === tid);
+                          const busy = templateOpLoading === `remove-${tid}`;
                           return (
-                            <li key={pid} className={styles.purposeRow}>
+                            <li key={tid} className={styles.purposeRow}>
                               <span className={styles.purposeName}>
-                                {p ? `${p.name} (${p.code})` : pid}
+                                {t ? `${t.name} (v${t.version})` : tid}
                               </span>
                               <button
                                 className={styles.purposeRemoveBtn}
-                                disabled={!!purposeOpLoading}
-                                onClick={() => handleRemovePurpose(pid)}
-                                title="Quitar finalidad"
+                                disabled={!!templateOpLoading}
+                                onClick={() => handleRemoveTemplate(tid)}
+                                title="Quitar template"
                               >
                                 {busy ? '…' : '×'}
                               </button>
@@ -620,39 +728,39 @@ const DocumentosPrivacidadPage = () => {
                         })}
                       </ul>
                     )}
-                    {allPurposes.filter((p) => p.isActive && !editingDoc.purposeIds.includes(p.id)).length > 0 && (
+                    {allTemplates.filter((t) => !editingDoc.templateIds.includes(t.id)).length > 0 && (
                       <div className={styles.addPurposeRow}>
                         <div style={{ flex: 1 }}>
                           <select
                             className={styles.select}
-                            value={selectedPurposeId}
-                            onChange={(e) => setSelectedPurposeId(e.target.value)}
-                            disabled={!!purposeOpLoading}
+                            value={selectedTemplateId}
+                            onChange={(e) => setSelectedTemplateId(e.target.value)}
+                            disabled={!!templateOpLoading}
                           >
-                            <option value="">— Seleccionar finalidad —</option>
-                            {allPurposes
-                              .filter((p) => p.isActive && !editingDoc.purposeIds.includes(p.id))
-                              .map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name} ({p.domainName})
+                            <option value="">— Seleccionar template —</option>
+                            {allTemplates
+                              .filter((t) => !editingDoc.templateIds.includes(t.id))
+                              .map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name} (v{t.version}) — {t.status}{t.templateKey ? ` · ${t.templateKey}` : ''}
                                 </option>
                               ))}
                           </select>
                         </div>
                         <button
                           className={styles.actionBtn}
-                          disabled={!selectedPurposeId || !!purposeOpLoading}
-                          onClick={handleAddPurpose}
+                          disabled={!selectedTemplateId || !!templateOpLoading}
+                          onClick={handleAddTemplate}
                         >
-                          {purposeOpLoading?.startsWith('add-') ? '…' : 'Agregar'}
+                          {templateOpLoading?.startsWith('add-') ? '…' : 'Agregar'}
                         </button>
                       </div>
                     )}
-                    {purposeError && (
-                      <p className={[styles.errorMsg, styles.drawerMsg].join(' ')}>{purposeError}</p>
+                    {templateError && (
+                      <p className={[styles.errorMsg, styles.drawerMsg].join(' ')}>{templateError}</p>
                     )}
-                    {purposeSuccess && (
-                      <p className={[styles.successBanner, styles.drawerMsg].join(' ')}>{purposeSuccess}</p>
+                    {templateSuccess && (
+                      <p className={[styles.successBanner, styles.drawerMsg].join(' ')}>{templateSuccess}</p>
                     )}
                   </>
                 )}
@@ -661,10 +769,16 @@ const DocumentosPrivacidadPage = () => {
               {saveSuccess && <p className={[styles.successBanner, styles.drawerMsg].join(' ')}>✓ Cambios guardados</p>}
             </div>
             <div className={styles.drawerFooter}>
-              <Button variant="secondary" onClick={() => setEditingDoc(null)}>Cancelar</Button>
-              <Button variant="primary" onClick={handleSave} disabled={saving || !editForm.name.trim()}>
-                {saving ? 'Guardando…' : 'Guardar cambios'}
-              </Button>
+              {editingDoc.status === 'DRAFT' ? (
+                <>
+                  <Button variant="secondary" onClick={() => setEditingDoc(null)}>Cancelar</Button>
+                  <Button variant="primary" onClick={handleSave} disabled={saving || !editForm.name.trim()}>
+                    {saving ? 'Guardando…' : 'Guardar cambios'}
+                  </Button>
+                </>
+              ) : (
+                <Button variant="secondary" onClick={() => setEditingDoc(null)}>Cerrar</Button>
+              )}
             </div>
           </div>
         )}

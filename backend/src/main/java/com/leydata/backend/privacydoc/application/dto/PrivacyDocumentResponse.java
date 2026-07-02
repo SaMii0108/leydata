@@ -16,7 +16,7 @@ public class PrivacyDocumentResponse {
 
     private UUID id;
     private UUID documentFamilyId;
-    private UUID templateId;
+    private List<UUID> templateIds;
     private DocumentCategory category;
     private DocumentStatus status;
     private Integer version;
@@ -38,7 +38,7 @@ public class PrivacyDocumentResponse {
         return PrivacyDocumentResponse.builder()
                 .id(e.getId())
                 .documentFamilyId(e.getDocumentFamilyId())
-                .templateId(e.getTemplateId())
+                .templateIds(activeTemplateIds(e))
                 .category(e.getCategory())
                 .status(e.getStatus())
                 .version(e.getVersion())
@@ -67,7 +67,7 @@ public class PrivacyDocumentResponse {
         return PrivacyDocumentResponse.builder()
                 .id(e.getId())
                 .documentFamilyId(e.getDocumentFamilyId())
-                .templateId(e.getTemplateId())
+                .templateIds(activeTemplateIds(e))
                 .category(e.getCategory())
                 .status(e.getStatus())
                 .version(e.getVersion())
@@ -87,5 +87,12 @@ public class PrivacyDocumentResponse {
                                 .toList()
                 )
                 .build();
+    }
+
+    private static List<UUID> activeTemplateIds(PrivacyDocuments e) {
+        return e.getDocumentTemplates().stream()
+                .filter(dt -> Boolean.TRUE.equals(dt.getIsActive()))
+                .map(dt -> dt.getId().getTemplateId())
+                .toList();
     }
 }
