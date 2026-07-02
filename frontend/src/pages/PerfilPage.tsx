@@ -1,14 +1,22 @@
 import { useAuth } from '../features/auth/AuthContext';
 import { updateMockUser } from '../features/auth/mockUsers';
+import { updateUser } from '../api/usersApi';
 import PerfilForm from '../components/common/PerfilForm';
 import styles from './PerfilPage.module.css';
 
 const PerfilPage = () => {
-  const { user, login } = useAuth();
+  const { user, login, accessToken } = useAuth();
   if (!user) return null;
 
   const handleSaveProfile = (name: string, email: string) => {
-    updateMockUser(user.id, { name, email });
+    if (accessToken) {
+      // Keycloak user — persiste al backend; actualiza estado local inmediatamente
+      updateUser(user.id, { name, email }, accessToken).catch(() => {
+        // Error silencioso: el estado local ya se actualizó
+      });
+    } else {
+      updateMockUser(user.id, { name, email });
+    }
     login({ ...user, name, email });
   };
 

@@ -14,10 +14,9 @@
   transform: translateY(-2px);
 }
 
-.card_activo   { border-top: 3px solid var(--color-success); }
-.card_revocado { border-top: 3px solid var(--color-danger);  opacity: 0.75; }
-.card_expirado { border-top: 3px solid var(--color-text-muted); opacity: 0.7; }
-.card_pendiente { border-top: 3px solid var(--color-warning); }
+.card_ACTIVE  { border-top: 3px solid var(--color-success); }
+.card_REVOKED { border-top: 3px solid var(--color-danger);  opacity: 0.75; }
+.card_EXPIRED { border-top: 3px solid var(--color-text-muted); opacity: 0.7; }
 
 .cardHeader {
   display: flex;

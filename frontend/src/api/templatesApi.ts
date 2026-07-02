@@ -22,6 +22,7 @@ export interface TemplateResponse {
   approvedBy: string | null;
   approvedAt: string | null;
   activationDate: string | null;
+  domainId: string;
 }
 
 export interface TemplatePurposeResponse {
@@ -41,6 +42,7 @@ export interface TemplateVerifyResponse {
 }
 
 export interface CreateTemplatePayload {
+  domainId: string;
   templateKey: string;
   name: string;
   description?: string;
@@ -154,9 +156,10 @@ export const newTemplateVersion = async (
 
 export const getTemplateFamily = async (
   templateKey: string,
+  domainId: string,
   token?: string | null,
 ): Promise<TemplateResponse[]> =>
-  request<TemplateResponse[]>(`/api/templates/family/${templateKey}`, {}, token);
+  request<TemplateResponse[]>(`/api/templates/family/${templateKey}?domainId=${domainId}`, {}, token);
 
 export const getActiveTemplate = async (
   templateKey: string,

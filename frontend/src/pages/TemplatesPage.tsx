@@ -164,15 +164,23 @@ const TemplatesPage = () => {
   };
 
   const handleApprove = async (id: string) => {
+    console.log('[APPROVE] START id=', id, 'processingId=', processingId);
     setProcessingId(id);
     try {
-      await approveTemplate(id, accessToken);
+      console.log('[APPROVE] calling approveTemplate...');
+      const result = await approveTemplate(id, accessToken);
+      console.log('[APPROVE] approveTemplate OK result=', result);
+      console.log('[APPROVE] calling reloadTemplates...');
       await reloadTemplates();
+      console.log('[APPROVE] reloadTemplates OK');
       showMessage(id, true, 'Plantilla aprobada correctamente.');
     } catch (err) {
+      console.log('[APPROVE] CATCH err=', err);
       showMessage(id, false, err instanceof ApiError ? err.message : 'Error al aprobar la plantilla.');
     } finally {
-      if (isMounted.current) setProcessingId(null);
+      console.log('[APPROVE] FINALLY — calling setProcessingId(null)');
+      setProcessingId(null);
+      console.log('[APPROVE] FINALLY — done');
     }
   };
 
@@ -185,7 +193,7 @@ const TemplatesPage = () => {
     } catch (err) {
       showMessage(id, false, err instanceof ApiError ? err.message : 'Error al activar la plantilla.');
     } finally {
-      if (isMounted.current) setProcessingId(null);
+      setProcessingId(null);
     }
   };
 
@@ -198,7 +206,7 @@ const TemplatesPage = () => {
     } catch (err) {
       showMessage(id, false, err instanceof ApiError ? err.message : 'Error al crear nueva versión.');
     } finally {
-      if (isMounted.current) setProcessingId(null);
+      setProcessingId(null);
     }
   };
 
