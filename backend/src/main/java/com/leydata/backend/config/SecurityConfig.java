@@ -52,6 +52,9 @@ public class SecurityConfig {
                                 "/v3/api-docs.yaml"
                         ).permitAll()
 
+                        //Actuator: health público, prometheus y metrics sin auth para Prometheus/Grafana
+                        .requestMatchers("/actuator/health", "/actuator/prometheus", "/actuator/metrics").permitAll()
+
                         //Gestión de usuarios (CRUD, bloqueo, activación): solo ADMIN
                         // Perfil propio: cualquier usuario autenticado puede ver su propio perfil
                         .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()

@@ -1,0 +1,21 @@
+meta {
+  name: Marcar Todas las Notificaciones como Leídas
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/notifications/read-all
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Marca todas las notificaciones del usuario autenticado como leídas.
+  Retorna 204 No Content.
+  Requiere autenticación.
+}

@@ -143,10 +143,23 @@ El archivo `docker-compose.override.yml` (en la raíz) se aplica automáticament
 | Plataforma | `LEYDATA_BACKEND_URL` |
 |---|---|
 | Mac / Windows nativo (Docker Desktop) | `http://host.docker.internal:8080` (valor por defecto — dejar como está) |
-| WSL (backend corriendo en Linux) | `http://<ip-wsl>:8080` — obtener la IP con `ip addr show eth0 \| grep 'inet '` |
+| WSL (backend corriendo en Linux) | `http://<ip-wsl>:8080` — ver paso 4 WSL abajo |
 | Linux nativo (Docker Engine) | `http://172.17.0.1:8080` (gateway docker0) |
 
-La IP de WSL cambia con cada reinicio. Si el Orquestador no puede conectar al backend en WSL, actualizar ese valor en el archivo y volver a ejecutar `docker-compose up -d orchestrator`.
+#### WSL — actualizar la IP del backend en `.env`
+
+En Docker Desktop + WSL2, `host.docker.internal` resuelve a `192.168.65.254` (el gateway de Docker Desktop en Windows), **no** a la VM de WSL donde corre el backend. Hay que poner la IP real de WSL en el `.env`:
+
+```bash
+WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+echo "LEYDATA_BACKEND_URL=http://$WSL_IP:8080" >> .env
+```
+
+El `docker-compose.override.yml` ya lee esa variable con `${LEYDATA_BACKEND_URL:-http://host.docker.internal:8080}`, así que agregar la línea al `.env` es suficiente — no hay que editar el override directamente.
+
+> **La IP de WSL cambia con cada reinicio de Windows.** Actualizar el `.env` y recrear el orquestador con `docker-compose up -d --force-recreate orchestrator` si el orquestador dice "Connection refused" al backend.
+
+> **Prometheus también necesita la IP de WSL.** Ver sección 10.
 
 ---
 
@@ -409,28 +422,31 @@ El Orquestador es un servicio Spring WebFlux en el directorio `orchestrator/`. C
 - El realm `empresa-cliente` existe (paso 6)
 - `KC_ORCHESTRATOR_CLIENT_SECRET` está en el `.env` (copiado desde la salida del paso 5)
 
-### ⚠️ Si estás en WSL — actualizar la URL del backend
+### ⚠️ Si estás en WSL — actualizar la IP del backend en `.env`
 
-El Orquestador corre dentro de Docker y necesita alcanzar el backend que corre en WSL (fuera de Docker). Editar `docker-compose.override.yml` antes de continuar:
+El Orquestador corre dentro de Docker y necesita alcanzar el backend que corre en WSL (fuera de Docker). En Docker Desktop + WSL2, `host.docker.internal` resuelve a `192.168.65.254` (el gateway de Docker Desktop en Windows), **no** a la IP de WSL.
+
+Obtener la IP y agregarla al `.env`:
 
 ```bash
-# Obtener la IP actual de WSL
-ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1
-# Ejemplo: 172.30.171.177
+WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+echo "LEYDATA_BACKEND_URL=http://$WSL_IP:8080" >> .env
 ```
 
-En `docker-compose.override.yml`, reemplazar:
-```yaml
-LEYDATA_BACKEND_URL: http://host.docker.internal:8080
-```
-por:
-```yaml
-LEYDATA_BACKEND_URL: http://172.30.171.177:8080   # ← tu IP de WSL
+Verificar que quedó bien:
+```bash
+grep LEYDATA_BACKEND_URL .env
+# Esperado: LEYDATA_BACKEND_URL=http://172.30.171.177:8080  (tu IP real)
 ```
 
 > En Mac y Windows nativo (Docker Desktop sin WSL) `host.docker.internal` funciona directamente — no hay que cambiar nada.
 
-> La IP de WSL **cambia con cada reinicio**. Si el Orquestador dice "Connection refused" al backend, la IP cambió — actualizar y volver a levantar el contenedor.
+> La IP de WSL **cambia con cada reinicio de Windows**. Si el Orquestador dice "Connection refused" al backend, la IP cambió:
+> ```bash
+> WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+> sed -i "s|LEYDATA_BACKEND_URL=.*|LEYDATA_BACKEND_URL=http://$WSL_IP:8080|" .env
+> docker-compose up -d --force-recreate orchestrator
+> ```
 
 ### Construir y levantar el contenedor
 
@@ -719,11 +735,13 @@ Abrir `http://localhost:3000`. El dashboard **"LeyData — Compliance & Consent"
 
 Abrir `http://localhost:9090` → **Status → Targets**. Deben aparecer `backend` y `orchestrator` en estado `UP`.
 
-Si `backend` aparece en `DOWN`, el backend no está corriendo o el endpoint `/actuator/prometheus` no responde. Verificar con:
+Si `backend` aparece en `DOWN`:
 
+1. Verificar que el backend responde:
 ```bash
 curl http://localhost:8080/actuator/prometheus | head -5
 ```
+2. Si estás en WSL, la IP del target en `monitoring/prometheus.yml` puede estar desactualizada. Ver sección 13 "Prometheus `backend` en estado DOWN en WSL".
 
 ### Zipkin — trazas distribuidas
 
@@ -932,7 +950,7 @@ Get-Content ..\.env | Where-Object { $_ -notmatch '^#' -and $_ -match '=' } | Fo
 cd backend; .\mvnw.cmd spring-boot:run
 ```
 
-> **WSL:** si la IP de WSL cambió desde la última vez (ej. después de reiniciar), actualizar `LEYDATA_BACKEND_URL` en `docker-compose.override.yml` antes del `docker-compose up`. Ver sección 8.
+> **WSL:** si la IP de WSL cambió desde la última vez (ej. después de reiniciar), actualizar `LEYDATA_BACKEND_URL` en el `.env` antes del `docker-compose up`. Ver sección 8.
 
 ### Detener los contenedores sin perder datos
 
@@ -1295,11 +1313,133 @@ Candidatos frecuentes: Apache, otro NGINX local, IIS (Windows). Si el puerto 80 
 ### Puerto 8080 o 5433 ya en uso
 
 ```bash
-# WSL / macOS
-lsof -i :8080
-kill -9 <PID>
+# WSL / macOS — fuser no falla si no hay proceso
+fuser -k 8080/tcp
+# o
+kill $(lsof -t -i:8080) 2>/dev/null || true
 
 # PowerShell
-netstat -ano | findstr :8080
-taskkill /PID <PID> /F
+$proc = (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+if ($proc) { Stop-Process -Id $proc -Force }
 ```
+
+> **Nota:** `kill $(lsof -t -i:8080)` falla con "not enough arguments" si ningún proceso ocupa el puerto. Usar `|| true` al final para evitar que rompa un pipeline de comandos.
+
+---
+
+### Orquestador "Connection refused" al backend en WSL
+
+El Orquestador (Docker) no puede alcanzar el backend (JVM en WSL) porque `host.docker.internal` resuelve a `192.168.65.254` (gateway de Docker Desktop) y no a la VM de WSL.
+
+```bash
+# Ver IP actual de WSL
+WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+echo "IP WSL actual: $WSL_IP"
+
+# Ver qué tiene configurado el orquestador
+docker exec leydata-orchestrator env | grep LEYDATA_BACKEND_URL
+
+# Actualizar .env y recrear el contenedor
+sed -i "s|LEYDATA_BACKEND_URL=.*|LEYDATA_BACKEND_URL=http://$WSL_IP:8080|" .env
+docker-compose up -d --force-recreate orchestrator
+```
+
+**Windows PowerShell:**
+```powershell
+$wslIp = (wsl hostname -I).Trim().Split(' ')[0]
+(Get-Content .env) -replace 'LEYDATA_BACKEND_URL=.*', "LEYDATA_BACKEND_URL=http://${wslIp}:8080" | Set-Content .env
+docker-compose up -d --force-recreate orchestrator
+```
+
+> Esto ocurre **después de cada reinicio de Windows** porque la IP de WSL cambia.
+
+---
+
+### Prometheus `backend` en estado DOWN en WSL
+
+Mismo problema que arriba pero con Prometheus: `monitoring/prometheus.yml` apunta a `host.docker.internal:8080` que tampoco resuelve correctamente.
+
+```bash
+WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+sed -i "s|- '.*:8080'|- '$WSL_IP:8080'|" monitoring/prometheus.yml
+
+# Recrear prometheus (restart no funciona en WSL con bind mounts)
+docker-compose down prometheus && docker-compose up -d prometheus
+```
+
+Verificar en `http://localhost:9090/targets` que `backend` queda en estado `UP`.
+
+---
+
+### `docker-compose restart` falla con error de bind mount en WSL
+
+```
+Error response from daemon: failed to create shim task: OCI runtime create failed:
+unable to start container process: error mounting "/run/desktop/mnt/host/wsl/..."
+```
+
+Los bind mounts de WSL tienen rutas que cambian entre reinicios del contenedor. `docker-compose restart` intenta usar la ruta antigua.
+
+**Fix:** usar `down` + `up` en vez de `restart`:
+```bash
+docker-compose down <servicio> && docker-compose up -d <servicio>
+# Ejemplo:
+docker-compose down orchestrator && docker-compose up -d orchestrator
+```
+
+---
+
+### Grafana no arranca — loop de reinicios con error de contact point
+
+```
+ERROR: Failed to provision alerting: failure parsing contact points:
+       required field 'url' is not specified
+```
+
+Grafana 10.x no tolera contact points con URLs vacías en la provisión automática. Ocurre cuando `GRAFANA_ALERT_WEBHOOK_URL` o `GRAFANA_ALERT_EMAIL_TO` están vacíos en `.env` y el archivo `monitoring/grafana-provisioning/alerting/leydata-alerts.yml` tiene secciones `contactPoints` activas.
+
+**Fix:** el archivo ya fue corregido para no tener `contactPoints`. Si el problema persiste, verificar:
+
+```bash
+cat monitoring/grafana-provisioning/alerting/leydata-alerts.yml | grep -A5 contactPoints
+```
+
+No debe aparecer ningún bloque `contactPoints`. Las reglas de alerta sí pueden estar — solo los `contactPoints` con URLs vacías son problemáticos.
+
+Si querés configurar notificaciones, agregar las variables en `.env` **antes** de levantar Grafana:
+```bash
+GRAFANA_ALERT_WEBHOOK_URL=https://hooks.slack.com/...
+# o
+GRAFANA_SMTP_ENABLED=true
+GRAFANA_ALERT_EMAIL_TO=ops@leydata.cl
+```
+
+---
+
+### `/consent/capture` guarda `accepted: false` aunque se mandó ACCEPTED
+
+El endpoint responde `200 / ALLOWED` pero el agreement queda con `accepted: false` en la BD.
+
+**Causa:** el DTO del orquestador tiene el campo `boolean accepted` (no `String decision`):
+```java
+public record PurposeDecision(UUID purposeId, boolean accepted) {}
+```
+
+Mandar `"decision": "ACCEPTED"` hace que Jackson no mapee el campo y lo deje en `false` (valor por defecto).
+
+**Fix:** usar el campo correcto:
+```json
+{ "purposeId": "<uuid>", "accepted": true }
+```
+
+---
+
+### El orquestador no tiene `mvnw` — `zsh: no such file or directory: ./mvnw`
+
+El directorio `orchestrator/` no incluye Maven wrapper. El orquestador solo puede ejecutarse como contenedor Docker:
+
+```bash
+docker-compose up -d --build orchestrator
+```
+
+No intentar `cd orchestrator && ./mvnw spring-boot:run`.

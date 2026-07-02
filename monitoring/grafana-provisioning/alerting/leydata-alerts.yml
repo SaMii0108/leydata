@@ -1,53 +1,8 @@
 apiVersion: 1
 
-# ── Contact points ────────────────────────────────────────────────────────────
-# Canal 1: Webhook (Slack / Teams / Discord / webhook propio)
-# Activar: poner GRAFANA_ALERT_WEBHOOK_URL en el .env
-#
-# Canal 2: Email
-# Activar: poner GRAFANA_SMTP_ENABLED=true + credenciales SMTP en el .env
-#          y GRAFANA_ALERT_EMAIL_TO con las direcciones destino
-
-contactPoints:
-  - orgId: 1
-    name: LeyData Ops — Webhook
-    receivers:
-      - uid: leydata-webhook
-        type: webhook
-        settings:
-          url: ${GF_ALERT_WEBHOOK_URL}
-          httpMethod: POST
-          maxAlerts: 0
-        disableResolveMessage: false
-
-  - orgId: 1
-    name: LeyData Ops — Email
-    receivers:
-      - uid: leydata-email
-        type: email
-        settings:
-          addresses: ${GF_ALERT_EMAIL_TO}
-          singleEmail: false
-        disableResolveMessage: false
-
-# ── Notification policy ───────────────────────────────────────────────────────
-# Alertas etiquetadas con compliance=ley21719 van a ambos canales.
-# Si un canal no está configurado (URL vacía / SMTP desactivado),
-# Grafana loguea un warning pero no falla — el otro canal sigue funcionando.
-
-policies:
-  - orgId: 1
-    receiver: grafana-default-email
-    group_by: ['grafana_folder', 'alertname']
-    routes:
-      - receiver: LeyData Ops — Webhook
-        matchers:
-          - compliance = ley21719
-        continue: true
-      - receiver: LeyData Ops — Email
-        matchers:
-          - compliance = ley21719
-        continue: false
+# Contact points y notification policies deshabilitados en dev (sin SMTP ni webhook configurado).
+# Para activar notificaciones: configurar GRAFANA_ALERT_WEBHOOK_URL o GRAFANA_SMTP_* en .env
+# y agregar los contact points aquí.
 
 # ── Alert rules ───────────────────────────────────────────────────────────────
 
@@ -59,8 +14,6 @@ groups:
     rules:
 
       # Regla 1: ruptura en la cadena de auditoría
-      # Dispara si aparece aunque sea 1 mismatch SHA-256 en los últimos 5 minutos.
-      # Según Ley 21.719, cualquier alteración del audit log debe notificarse al CPDT.
       - uid: audit-integrity-mismatch
         title: "Ruptura en Cadena de Auditoría (Ley 21.719)"
         condition: threshold
@@ -108,8 +61,56 @@ groups:
           compliance: ley21719
         isPaused: false
 
-      # Regla 2: backend inaccesible por más de 2 minutos
-      # noDataState=Alerting: si Prometheus no puede scrapearlo, también es DOWN.
+      # Regla 2: mutación directa en la BD (bypass de la API)
+      - uid: direct-db-tamper
+        title: "Mutación Directa en BD — Bypass de API (Ley 21.719)"
+        condition: threshold
+        data:
+          - refId: tamper_count
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              expr: 'increase(audit_tamper_detected_total[5m])'
+              instant: false
+              range: true
+              refId: tamper_count
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: tamper_count
+              refId: threshold
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [tamper_count]
+                  reducer:
+                    type: last
+                    params: []
+                  type: query
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Cambio directo en BD detectado — agreements modificados sin pasar por la API"
+          description: >
+            Se detectó una mutación directa (UPDATE o DELETE) en la tabla agreements
+            o agreements_purposes sin pasar por la API del orquestador.
+            El cambio fue registrado en system_audit_log con actor_role=DIRECT_DB.
+            Verificar: SELECT * FROM db_tamper_log ORDER BY detected_at DESC LIMIT 10;
+            Acción requerida según Ley 21.719 — evaluar si corresponde notificar al CPDT.
+        labels:
+          severity: critical
+          compliance: ley21719
+        isPaused: false
+
+      # Regla 3 (ex 2): backend inaccesible por más de 2 minutos
       - uid: backend-service-down
         title: "Backend LeyData Inaccesible"
         condition: threshold

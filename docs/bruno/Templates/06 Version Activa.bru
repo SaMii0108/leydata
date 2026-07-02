@@ -1,0 +1,27 @@
+meta {
+  name: Versión Activa (por templateKey)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/templates/active/<templateKey>?domainId={{domainId}}
+  body: none
+  auth: bearer
+}
+
+params:query {
+  domainId: {{domainId}}
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Devuelve la versión ACTIVE del templateKey indicado, dentro del dominio dado.
+  Reemplazar <templateKey> por el key real, ej: bienvenida-clientes
+  domainId es obligatorio (query param).
+  Retorna 404 si no hay ninguna versión activa.
+  Requiere rol DPO o ADMIN.
+}

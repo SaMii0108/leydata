@@ -3,14 +3,17 @@
 #
 # Uso (PowerShell, desde la raíz del proyecto):
 #   .\scripts\setup-empresa-cliente-realm.ps1
+#   .\scripts\setup-empresa-cliente-realm.ps1 -DomainId "<uuid>"    # también agrega el mapper
 #
-# Qué hace:
-#   1. Crea el realm "empresa-cliente"
-#   2. Crea el cliente público "crm-sistema" (direct access grants)
-#   3. Crea el usuario de prueba operador@empresa.cl / operador123
-#   4. Muestra la JWKS URL y el curl de prueba
+# El claim 'leydata_domain' es requerido por POST /consent/capture.
+# Para agregarlo se necesita un UUID de dominio real creado en el backend.
+# Si no se pasa -DomainId, el script imprime las instrucciones al final.
 #
 # Prerequisito: Keycloak corriendo en http://localhost:8180
+
+param(
+    [string]$DomainId = ""
+)
 
 $KC_URL     = "http://localhost:8180"
 $REALM      = "empresa-cliente"
@@ -90,6 +93,7 @@ $existingClients = Invoke-RestMethod -Method Get `
     -Headers $headers
 if ($existingClients.Count -gt 0) {
     Write-Host "   El cliente '$CLIENT_ID' ya existe. Omitiendo." -ForegroundColor Yellow
+    $clientUUID = $existingClients[0].id
 } else {
     Write-Host "-> Creando cliente '$CLIENT_ID'..."
     $clientBody = @{
@@ -103,6 +107,11 @@ if ($existingClients.Count -gt 0) {
         Invoke-RestMethod -Method Post -Uri "$KC_URL/admin/realms/$REALM/clients" `
             -Headers $headers -Body $clientBody -ErrorAction Stop | Out-Null
         Write-Host "   Cliente '$CLIENT_ID' creado." -ForegroundColor Green
+        # Obtener UUID del cliente recién creado
+        $existingClients = Invoke-RestMethod -Method Get `
+            -Uri "$KC_URL/admin/realms/$REALM/clients?clientId=$CLIENT_ID" `
+            -Headers $headers
+        $clientUUID = $existingClients[0].id
     } catch {
         Write-Host "ERROR al crear cliente: $_" -ForegroundColor Red
         exit 1
@@ -140,12 +149,69 @@ if ($existingUsers.Count -gt 0) {
     }
 }
 
+# ── 4. Agregar claim leydata_domain (si se proporcionó DomainId) ───────────────
+if ($DomainId -ne "") {
+    Write-Host ""
+    Write-Host "-> Configurando protocol mapper 'leydata_domain' (domain-id: $DomainId)..."
+
+    $mapperBody = @{
+        name           = "leydata-domain-mapper"
+        protocol       = "openid-connect"
+        protocolMapper = "oidc-hardcoded-claim-mapper"
+        config         = @{
+            "claim.name"         = "leydata_domain"
+            "claim.value"        = $DomainId
+            "jsonType.label"     = "String"
+            "id.token.claim"     = "true"
+            "access.token.claim" = "true"
+            "userinfo.token.claim" = "false"
+        }
+    } | ConvertTo-Json -Depth 5
+
+    try {
+        Invoke-RestMethod -Method Post `
+            -Uri "$KC_URL/admin/realms/$REALM/clients/$clientUUID/protocol-mappers/models" `
+            -Headers $headers -Body $mapperBody -ErrorAction Stop | Out-Null
+        Write-Host "   Mapper 'leydata_domain' agregado OK." -ForegroundColor Green
+    } catch {
+        if ($_.Exception.Response.StatusCode.value__ -eq 409) {
+            Write-Host "   El mapper ya existe. Actualizando valor..." -ForegroundColor Yellow
+            $existingMappers = Invoke-RestMethod -Method Get `
+                -Uri "$KC_URL/admin/realms/$REALM/clients/$clientUUID/protocol-mappers/models" `
+                -Headers $headers
+            $mapper = $existingMappers | Where-Object { $_.name -eq "leydata-domain-mapper" }
+            if ($mapper) {
+                $mapperBody2 = @{
+                    id             = $mapper.id
+                    name           = "leydata-domain-mapper"
+                    protocol       = "openid-connect"
+                    protocolMapper = "oidc-hardcoded-claim-mapper"
+                    config         = @{
+                        "claim.name"         = "leydata_domain"
+                        "claim.value"        = $DomainId
+                        "jsonType.label"     = "String"
+                        "id.token.claim"     = "true"
+                        "access.token.claim" = "true"
+                        "userinfo.token.claim" = "false"
+                    }
+                } | ConvertTo-Json -Depth 5
+                Invoke-RestMethod -Method Put `
+                    -Uri "$KC_URL/admin/realms/$REALM/clients/$clientUUID/protocol-mappers/models/$($mapper.id)" `
+                    -Headers $headers -Body $mapperBody2 -ErrorAction Stop | Out-Null
+                Write-Host "   Mapper actualizado OK." -ForegroundColor Green
+            }
+        } else {
+            Write-Host "ERROR al agregar mapper: $_" -ForegroundColor Red
+        }
+    }
+}
+
 # ── Resumen ────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "====================================================================" -ForegroundColor Cyan
 Write-Host "Realm '$REALM' listo." -ForegroundColor Green
 Write-Host ""
-Write-Host "JWKS URL (valor para EXTERNAL_JWKS_URI en docker-compose.override.yml):"
+Write-Host "JWKS URL (valor para EXTERNAL_JWKS_URI):"
 Write-Host "  $KC_URL/realms/$REALM/protocol/openid-connect/certs" -ForegroundColor White
 Write-Host ""
 Write-Host "Obtener token de prueba (pegar en Bruno / Postman / curl):"
@@ -156,4 +222,20 @@ Write-Host ""
 Write-Host "Credenciales del usuario de prueba:"
 Write-Host "  Email:    $TEST_USER"
 Write-Host "  Password: $TEST_PASS"
+
+if ($DomainId -eq "") {
+    Write-Host ""
+    Write-Host "--------------------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host "PENDIENTE: Agregar el claim 'leydata_domain' (requerido para /consent/capture)" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  1. Obtener un UUID de dominio desde el backend (necesita el backend corriendo):"
+    Write-Host "     Ver GET /api/domains en Swagger: http://localhost:8080/swagger-ui.html"
+    Write-Host ""
+    Write-Host "  2. Volver a correr este script con el UUID:"
+    Write-Host "     .\scripts\setup-empresa-cliente-realm.ps1 -DomainId `"<uuid-del-dominio>`"" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  O ver la seccion 8 de GUIA-INSTALACION.md para el proceso manual."
+    Write-Host "--------------------------------------------------------------------" -ForegroundColor Yellow
+}
+
 Write-Host "====================================================================" -ForegroundColor Cyan

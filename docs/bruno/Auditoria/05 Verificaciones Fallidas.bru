@@ -1,0 +1,22 @@
+meta {
+  name: Verificaciones Fallidas
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/audit/integrity/failed
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Lista todas las verificaciones con isValid = false de cualquier entidad.
+  Filtro opcional: ?entityType=AGREEMENT|TEMPLATE|DOCUMENT|PURPOSE
+  Sin filtro devuelve fallos de todas las entidades del sistema.
+  Requiere rol ADMIN.
+}

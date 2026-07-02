@@ -1,0 +1,22 @@
+meta {
+  name: Historial de Integridad
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/audit/integrity/log?entityType=AGREEMENT&entityId=<uuid-agreement>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Historial completo de verificaciones de integridad del agreement.
+  Cada entrada incluye hash almacenado, hash recalculado e isValid.
+  Endpoint movido a /api/audit/integrity/log (feature/trazabilidad).
+  Requiere rol ADMIN.
+}

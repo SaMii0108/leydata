@@ -1,0 +1,27 @@
+meta {
+  name: Consultar Logs de Auditoría
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/audit/logs?page=0&size=20
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Consulta el log de auditoría inmutable del sistema.
+  Parámetros opcionales de filtro (query string):
+    - action: nombre de la acción (ej. USER_CREATED, DOCUMENT_PUBLISHED)
+    - table: nombre de la tabla afectada
+    - actorEmail: email del actor que realizó la acción
+    - page: número de página (default 0)
+    - size: tamaño de página (default 20)
+  Los registros de audit_log son de solo lectura — no se pueden modificar ni eliminar.
+  Requiere rol ADMIN o DPO.
+}

@@ -1,0 +1,26 @@
+meta {
+  name: Traza Completa Agreement
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/audit/trace/agreement/<uuid-agreement>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Traza la cadena completa de un agreement:
+    - Template: hash actual del template al momento de la consulta
+    - Documento: hash actual del documento de privacidad
+    - Purposes: para cada purpose incluida en el agreement, compara el
+      purposeHash (snapshot al consentir) con el hash actual de la finalidad.
+      Si difieren = drift posterior al consentimiento.
+  overallIntegrity: OK | MISMATCH | PARTIAL
+  Requiere rol ADMIN.
+}

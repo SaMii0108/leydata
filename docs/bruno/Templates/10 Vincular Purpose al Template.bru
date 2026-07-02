@@ -1,0 +1,33 @@
+meta {
+  name: Vincular Purpose al Template
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/templates/<uuid-template>/purposes
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "purposeId": "<uuid-finalidad>",
+    "orderPosition": 1,
+    "isVisible": true
+  }
+}
+
+docs {
+  Vincula una finalidad aprobada al template.
+  Solo aplica a templates en estado DRAFT.
+  La finalidad debe estar aprobada (isActive=true y approvedBy != null).
+  orderPosition: entero que determina el orden de presentación al titular.
+  isVisible: si false, la purpose existe en el template pero no se muestra.
+  Retorna 204 No Content.
+  Requiere rol DPO o ADMIN.
+}

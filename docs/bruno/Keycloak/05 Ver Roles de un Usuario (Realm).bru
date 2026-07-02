@@ -1,0 +1,28 @@
+meta {
+  name: Ver Roles de un Usuario (Realm)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{keycloakUrl}}/admin/realms/{{realm}}/users/<keycloak_id_aqui>/role-mappings/realm
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+docs {
+  Obtiene los realm roles asignados a un usuario específico en Keycloak.
+  Reemplazar <keycloak_id_aqui> por el UUID de Keycloak del usuario (campo "id" en el endpoint 04).
+
+  Requiere el token de service account en la variable `adminToken` (obtenerlo con el endpoint 03).
+
+  Roles de negocio que pueden aparecer: ADMIN, DPO, JEFE_DOMINIO, USER, TITULAR
+  Roles del sistema que se filtran: default-roles-leydata, offline_access, uma_authorization
+
+  Este es el mismo endpoint que llama el backend en GET /api/users y GET /api/users/{id}
+  para obtener los roles de cada usuario.
+}

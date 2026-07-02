@@ -143,6 +143,11 @@ public class AuditController {
     @PostMapping("/integrity/verify")
     @Operation(summary = "Verificar integridad de una entidad bajo demanda [ADMIN]",
             description = "entityType: AGREEMENT, PURPOSE, TEMPLATE o DOCUMENT.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Resultado de verificación de integridad"),
+            @ApiResponse(responseCode = "400", description = "entityType inválido"),
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
+    })
     public EntityIntegrityLogResponse verifyEntityIntegrity(@RequestBody VerifyIntegrityRequest req) {
         String checkType = req.getCheckType() != null ? req.getCheckType() : "MANUAL";
         String actorId = securityContextHelper.getKeycloakId();
@@ -151,6 +156,10 @@ public class AuditController {
 
     @GetMapping("/integrity/log")
     @Operation(summary = "Historial de verificaciones de integridad de una entidad [ADMIN]")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Historial de verificaciones"),
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
+    })
     public List<EntityIntegrityLogResponse> getEntityIntegrityLog(
             @RequestParam String entityType,
             @RequestParam UUID entityId) {
@@ -160,6 +169,10 @@ public class AuditController {
 
     @GetMapping("/integrity/failed")
     @Operation(summary = "Listar verificaciones de integridad fallidas [ADMIN]")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista de verificaciones fallidas"),
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
+    })
     public List<EntityIntegrityLogResponse> listFailedIntegrityChecks(
             @RequestParam(required = false) String entityType) {
         List<com.leydata.backend.entity.EntityIntegrityLog> logs = (entityType != null && !entityType.isBlank())
@@ -171,6 +184,11 @@ public class AuditController {
     @GetMapping("/trace/agreement/{id}")
     @Operation(summary = "Reconstruir la cadena AGREEMENT → DOCUMENT → TEMPLATE → PURPOSES [ADMIN]",
             description = "Solo lectura — no escribe en ningún log. Verifica integridad por eslabón.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Traza completa del agreement"),
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN"),
+            @ApiResponse(responseCode = "404", description = "Agreement no encontrado")
+    })
     public AgreementTraceResponse traceAgreement(@PathVariable UUID id) {
         return agreementTraceService.trace(id);
     }

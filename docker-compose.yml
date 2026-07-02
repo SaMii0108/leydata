@@ -12,7 +12,6 @@ services:
       - "5433:5432"
     volumes:
       - postgres_primary_data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d
       - ./docker/postgres-primary/init-replication.sh:/docker-entrypoint-initdb.d/99-init-replication.sh
     networks:
       - leydata-consent-network
@@ -129,7 +128,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      LEYDATA_BACKEND_URL: http://backend:8080
+      LEYDATA_BACKEND_URL: ${LEYDATA_BACKEND_URL:-http://host.docker.internal:8080}
       REDIS_HOST: redis
       # M2M hacia Keycloak — usa la red Docker interna (keycloak:8080), no localhost:8180
       KC_TOKEN_URI: http://keycloak:8080/realms/leydata/protocol/openid-connect/token

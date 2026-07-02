@@ -1,0 +1,26 @@
+meta {
+  name: Historial de Versiones (por templateKey)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/templates/family/<templateKey>?domainId={{domainId}}
+  body: none
+  auth: bearer
+}
+
+params:query {
+  domainId: {{domainId}}
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Devuelve todas las versiones de un templateKey en orden ascendente de version, dentro del dominio dado.
+  Reemplazar <templateKey> por el key real, ej: bienvenida-clientes
+  domainId es obligatorio (query param).
+  Requiere rol DPO o ADMIN.
+}

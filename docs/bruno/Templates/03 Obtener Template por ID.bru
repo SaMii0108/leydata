@@ -1,0 +1,21 @@
+meta {
+  name: Obtener Template por ID
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/templates/<uuid-template>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Obtiene un template por su UUID.
+  status en la respuesta: DRAFT | APPROVED | ACTIVE
+  Requiere rol DPO o ADMIN.
+}

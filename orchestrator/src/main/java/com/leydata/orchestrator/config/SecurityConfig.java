@@ -42,7 +42,7 @@ public class SecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(ex -> ex
-                        .pathMatchers("/actuator/health").permitAll()
+                        .pathMatchers("/actuator/health", "/actuator/prometheus", "/actuator/metrics").permitAll()
                         .pathMatchers("/consent/**").authenticated()
                         .pathMatchers("/api/**").authenticated()
                         .anyExchange().denyAll()

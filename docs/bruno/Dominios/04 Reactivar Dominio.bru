@@ -1,0 +1,20 @@
+meta {
+  name: Reactivar Dominio
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/domains/<uuid-aqui>/reactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Reactiva un dominio previamente desactivado.
+  Requiere rol ADMIN.
+}

@@ -1,0 +1,22 @@
+meta {
+  name: Verificar Integridad SHA-256
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/templates/<uuid-template>/verify
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Recalcula el SHA-256 del template y lo compara con el hash sellado en activación.
+  Responde con: { "templateId": "...", "storedHash": "...", "computedHash": "...", "valid": true/false }
+  Solo aplica a templates en estado ACTIVE.
+  Requiere rol DPO o ADMIN.
+}

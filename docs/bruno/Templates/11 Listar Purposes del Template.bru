@@ -1,0 +1,21 @@
+meta {
+  name: Listar Purposes del Template
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/templates/<uuid-template>/purposes
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Devuelve las purposes vinculadas al template ordenadas por orderPosition.
+  Incluye: purposeId, purposeName, orderPosition, isVisible.
+  Requiere rol DPO o ADMIN.
+}

@@ -1,0 +1,28 @@
+meta {
+  name: Lifecycle Check (Estado Ciclo de Vida)
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/agreements/lifecycle-check?subjectIdentifier=RUT:12345678-9&domainId={{domainId}}&templateKey=ONBOARDING_CLIENTE
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Evalúa el estado del ciclo de vida del consentimiento de un titular para un template.
+  Usado internamente por el Orquestador en el flujo CHECK cuando hay cache miss en Redis.
+  Estados posibles:
+    ALLOWED           — consentimiento activo y vigente
+    EXPIRED           — vencido según política de retención (expiresAt < now)
+    REQUIRES_RECONSENT — template actualizado con forceReconsent=true, agreement de versión anterior
+    PENDING           — no existe consentimiento para este titular y finalidad
+  subjectIdentifier: identificador opaco del titular (ej. "RUT:12345678-9")
+  Respuesta: { subjectIdentifier, templateKey, status, agreementId, agreementTemplateVersion, currentTemplateVersion, earliestExpiresAt }
+  Accesible por cualquier rol autenticado.
+}
