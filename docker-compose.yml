@@ -98,6 +98,27 @@ services:
     networks:
       - leydata-consent-network
 
+  # NGINX — capa perimetral: rate limiting, security headers, routing
+  # Entrada pública en :80. El orquestador y el backend siguen expuestos
+  # directamente (:8081, :8080) para debugging en desarrollo.
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: leydata-nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - orchestrator
+    # host.docker.internal → IP del host (igual que prometheus)
+    # Necesario para rutear /api/* al backend que corre en el host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - leydata-consent-network
+
   # Orquestador — único punto de entrada externo (API Gateway / BFF)
   orchestrator:
     build:
@@ -110,7 +131,13 @@ services:
     environment:
       LEYDATA_BACKEND_URL: http://backend:8080
       REDIS_HOST: redis
-      KC_ISSUER_URI: http://keycloak:8080/realms/leydata
+      # M2M hacia Keycloak — usa la red Docker interna (keycloak:8080), no localhost:8180
+      KC_TOKEN_URI: http://keycloak:8080/realms/leydata/protocol/openid-connect/token
+      KC_ORCHESTRATOR_CLIENT_SECRET: ${KC_ORCHESTRATOR_CLIENT_SECRET}
+      LOGGING_FILE_PATH: /app/logs
+      LOKI_URL: http://loki:3100
+    volumes:
+      - ./logs/orchestrator:/app/logs
     depends_on:
       - redis
       - keycloak
@@ -128,6 +155,79 @@ services:
     networks:
       - leydata-consent-network
 
+  # ── Observabilidad ────────────────────────────────────────────────────────────
+
+  loki:
+    image: grafana/loki:2.9.9
+    container_name: leydata-loki
+    restart: always
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - leydata-consent-network
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: leydata-prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - leydata-consent-network
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: leydata-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/leydata.json
+      # Alertas — webhook (Slack / Teams / Discord / endpoint propio)
+      GF_ALERT_WEBHOOK_URL: ${GRAFANA_ALERT_WEBHOOK_URL:-}
+      # Alertas — email (requiere GF_SMTP_ENABLED=true)
+      GF_ALERT_EMAIL_TO: ${GRAFANA_ALERT_EMAIL_TO:-}
+      # SMTP para alertas por email
+      GF_SMTP_ENABLED: ${GRAFANA_SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${GRAFANA_SMTP_HOST:-smtp.gmail.com:587}
+      GF_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM_ADDRESS:-alertas@leydata.cl}
+      GF_SMTP_FROM_NAME: "LeyData Alertas"
+      GF_SMTP_USER: ${GRAFANA_SMTP_USER:-}
+      GF_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:-}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana-dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - leydata-consent-network
+    depends_on:
+      - prometheus
+      - loki
+
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: leydata-zipkin
+    restart: always
+    ports:
+      - "9411:9411"
+    networks:
+      - leydata-consent-network
+
 networks:
   leydata-consent-network:
     driver: bridge
@@ -137,3 +237,6 @@ volumes:
   redis_data:
   postgres_primary_data:
   postgres_replica_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:

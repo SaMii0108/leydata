@@ -11,7 +11,9 @@
 #   4. Crea el cliente "leydata-backend" (confidential, service account)
 #   5. Asigna manage-users + view-realm al service account de leydata-backend
 #   6. Crea el usuario admin@leydata.cl con contraseña Admin1234! y rol ADMIN
-#   7. Muestra el KC_BACKEND_SECRET generado
+#   7. Crea usuarios de prueba (dpo, jefe)
+#   8. Crea el cliente "leydata-orchestrator" (M2M para el orquestador)
+#   9. Muestra KC_BACKEND_SECRET y KC_ORCHESTRATOR_CLIENT_SECRET
 #
 # Prerequisito: Keycloak corriendo en http://localhost:8180
 
@@ -253,8 +255,30 @@ create_user_with_role() {
 create_user_with_role "dpo" "dpo@leydata.cl" "DPO" "LeyData" "DPO"
 create_user_with_role "jefe" "jefe@test.cl" "Jefe" "Dominio" "JEFE_DOMINIO"
 
-# ── 8. Mostrar el KC_BACKEND_SECRET ──────────────────────────────────────────
+# ── 8. Crear cliente leydata-orchestrator (M2M) ─────────────────────────────
+echo "→ Creando cliente 'leydata-orchestrator' (service account M2M)..."
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X POST "$KC_URL/admin/realms/$REALM/clients" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientId": "leydata-orchestrator",
+    "enabled": true,
+    "publicClient": false,
+    "serviceAccountsEnabled": true,
+    "standardFlowEnabled": false,
+    "directAccessGrantsEnabled": false
+  }')
+[ "$CODE" = "201" ] && echo "  Creado." || echo "  HTTP $CODE (puede que ya exista)"
+
+ORCH_ID=$(curl -s "$KC_URL/admin/realms/$REALM/clients?clientId=leydata-orchestrator" \
+  -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+
+# ── 9. Mostrar los secrets ───────────────────────────────────────────────────
 SECRET=$(curl -s "$KC_URL/admin/realms/$REALM/clients/$BACKEND_ID/client-secret" \
+  -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
+
+ORCH_SECRET=$(curl -s "$KC_URL/admin/realms/$REALM/clients/$ORCH_ID/client-secret" \
   -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
 
 echo ""
@@ -267,8 +291,9 @@ echo "   App admin:  admin@leydata.cl     / Admin1234!  (rol ADMIN)"
 echo "   App DPO:    dpo@leydata.cl       / Test1234!   (rol DPO)"
 echo "   App prueba: jefe@test.cl         / Test1234!   (rol JEFE_DOMINIO)"
 echo ""
-echo " Variable de entorno para el backend:"
+echo " Variables de entorno — copiar en .env:"
 echo "   KC_BACKEND_SECRET=$SECRET"
+echo "   KC_ORCHESTRATOR_CLIENT_SECRET=$ORCH_SECRET"
 echo ""
 echo " Arrancar el backend con:"
 echo "   DB_USER=admin DB_PASS=admin DB_NAME=leydata_db \\"

@@ -44,10 +44,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,metrics,prometheus
   endpoint:
     health:
-      show-details: never
+      show-details: when-authorized
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 
 leydata:
   backend-url: ${LEYDATA_BACKEND_URL:http://localhost:8080}

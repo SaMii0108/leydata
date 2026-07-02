@@ -1,6 +1,6 @@
 # Guía de Instalación — Ley Data
 
-**Stack:** Java 21 · Spring Boot 3.x · PostgreSQL 15 (primary + replica) · PgBouncer · Keycloak 26 · Redis 7 · Docker  
+**Stack:** Java 21 · Spring Boot 4.x · PostgreSQL 15 (primary + replica) · PgBouncer · Keycloak 26 · Redis 7 · NGINX 1.25 · Prometheus · Grafana · Loki · Zipkin · Docker  
 **Repositorio:** https://github.com/SaMii0108/leydata  
 **Arquitectura:** Modular DDD — cada módulo tiene capas `web/`, `application/`, `infrastructure/`, `domain/` — ver [ESTRUCTURA-PROYECTO.md](ESTRUCTURA-PROYECTO.md)
 
@@ -17,9 +17,10 @@
 7. [Levantar el backend](#7-levantar-el-backend)
 8. [Levantar el Orquestador](#8-levantar-el-orquestador)
 9. [Verificar que todo funciona](#9-verificar-que-todo-funciona)
-10. [Actualizar el proyecto](#10-actualizar-el-proyecto)
-11. [Comandos del día a día](#11-comandos-del-día-a-día)
-12. [Problemas frecuentes](#12-problemas-frecuentes)
+10. [Observabilidad](#10-observabilidad)
+11. [Actualizar el proyecto](#11-actualizar-el-proyecto)
+12. [Comandos del día a día](#12-comandos-del-día-a-día)
+13. [Problemas frecuentes](#13-problemas-frecuentes)
 
 ---
 
@@ -72,11 +73,10 @@ DB_USER=admin
 DB_PASS=admin
 DB_NAME=leydata_db
 KC_BACKEND_SECRET=
+KC_ORCHESTRATOR_CLIENT_SECRET=
 ```
 
-Las primeras tres variables son fijas para el entorno de desarrollo local y no necesitan cambiarse. `KC_BACKEND_SECRET` se rellena en el paso 5. Dejar vacío por ahora.
-
-> **¿Y el secret del Orquestador?** `KC_ORCHESTRATOR_CLIENT_SECRET` **no va en el `.env`**. Va en `docker-compose.override.yml` o se exporta como variable de entorno antes de `docker-compose up`. El `.env` es solo para el backend y la base de datos. Ver paso 6.
+Las primeras tres variables son fijas para el entorno de desarrollo local y no necesitan cambiarse. Las dos variables `KC_*` se rellenan en el paso 5 con los valores que imprime el script `setup-keycloak.sh`. Dejarlas vacías por ahora.
 
 ---
 
@@ -90,7 +90,23 @@ docker-compose up -d db db-replica pgbouncer keycloak-db keycloak redis
 
 Docker Compose lee el `.env` automáticamente para las credenciales de la base de datos. No es necesario pasar variables adicionales a este comando.
 
-> El Orquestador se levanta **después** del paso 6 (cuando ya tenés el secret). Intentar `docker-compose up -d` completo antes de ese paso levanta el Orquestador con `KC_ORCHESTRATOR_CLIENT_SECRET=dev-secret-placeholder`, que no funciona contra Keycloak real.
+> El Orquestador se levanta **después** del paso 5 (cuando ya tenés el secret). Intentar `docker-compose up -d` completo antes de ese paso levanta el Orquestador con `KC_ORCHESTRATOR_CLIENT_SECRET` vacío, que no funciona contra Keycloak real.
+
+**Opcional — observabilidad (Loki, Prometheus, Grafana, Zipkin):**
+
+```bash
+docker-compose up -d loki prometheus grafana zipkin
+```
+
+Esto levanta el stack de monitoreo en paralelo. No bloquea ningún otro paso — podés levantarlo ahora o después. Ver [sección 10](#10-observabilidad) para instrucciones de uso.
+
+**Opcional — capa perimetral NGINX (rate limiting + security headers en `:80`):**
+
+```bash
+docker-compose up -d nginx
+```
+
+NGINX rutea `/api/*` → backend y `/consent/*` → orquestador. El backend y el orquestador siguen accesibles directamente en sus puertos para desarrollo. Ver [docs/nginx-module.md](../../docs/nginx-module.md).
 
 Verificar que los contenedores estén corriendo:
 
@@ -192,8 +208,14 @@ Cliente confidencial con service account habilitado. El backend lo usa para llam
 **5. Asigna permisos al service account de `leydata-backend`**  
 Le otorga los roles `manage-users` y `view-realm` del cliente interno `realm-management`. Estos permisos son los que le permiten al backend crear, leer y modificar usuarios en Keycloak.
 
-**6. Crea el usuario administrador**  
-Crea `admin@leydata.cl` con contraseña `Admin1234!` y le asigna el rol `ADMIN`. Este es el único usuario que se crea directamente en Keycloak. Los demás usuarios del sistema (DPO, JEFE_DOMINIO) se crean desde la API del backend con `POST /api/users`, que los registra simultáneamente en Keycloak y en la base de datos local.
+**6. Crea los usuarios de prueba**  
+Crea `admin@leydata.cl` (Admin1234!), `dpo@leydata.cl` (Test1234!) y `jefe@test.cl` (Test1234!) con sus roles respectivos. Los demás usuarios del sistema se crean desde la API del backend con `POST /api/users`, que los registra simultáneamente en Keycloak y en la base de datos local.
+
+**7. Crea el cliente M2M `leydata-orchestrator`**  
+Cliente confidencial con `serviceAccountsEnabled: true`, `standardFlowEnabled: false`. El Orquestador lo usa para el flujo `client_credentials` al llamar al Backend LeyData. Si el cliente ya existe (ejecución repetida), el script omite la creación.
+
+**8. Imprime ambos secrets**  
+Al finalizar imprime `KC_BACKEND_SECRET` y `KC_ORCHESTRATOR_CLIENT_SECRET`. Ambos deben copiarse al `.env` antes de arrancar los servicios.
 
 ### Salida esperada al finalizar
 
@@ -205,23 +227,22 @@ Crea `admin@leydata.cl` con contraseña `Admin1234!` y le asigna el rol `ADMIN`.
    Admin UI:  http://localhost:8180  (admin / admin)
    App admin: admin@leydata.cl / Admin1234!
 
- Variable de entorno para el backend:
+ Variables de entorno — copiar al .env:
    KC_BACKEND_SECRET=<valor generado>
-
- Arrancar el backend con:
-   export $(cat .env | xargs) && cd backend && ./mvnw spring-boot:run
+   KC_ORCHESTRATOR_CLIENT_SECRET=<valor generado>
 ======================================================
 ```
 
-### Actualizar el .env con el secret
+### Actualizar el .env con los secrets
 
-Copiar el valor de `KC_BACKEND_SECRET` que imprime el script y pegarlo en el `.env`:
+Copiar ambos valores que imprime el script y pegarlos en el `.env`:
 
 ```
 KC_BACKEND_SECRET=<valor copiado aquí>
+KC_ORCHESTRATOR_CLIENT_SECRET=<valor copiado aquí>
 ```
 
-Este valor cambia cada vez que se recrea el cliente `leydata-backend` (es decir, después de cada reset completo). Si el backend arranca con un secret incorrecto, `POST /api/users` retornará 500.
+Estos valores cambian cada vez que se recrean los clientes en Keycloak (es decir, después de `docker-compose down -v`). Si el backend arranca con `KC_BACKEND_SECRET` incorrecto, `POST /api/users` retornará 500. Si el Orquestador arranca con `KC_ORCHESTRATOR_CLIENT_SECRET` incorrecto, fallará silenciosamente al llamar al backend (M2M con 401).
 
 ---
 
@@ -258,47 +279,7 @@ Este valor ya viene en el `.env` como `EXTERNAL_JWKS_URI`. No hay que cambiarlo 
 
 El script también imprime el comando `curl` para obtener un token de prueba, que en Bruno corresponde al archivo **Orquestador → 01 Obtener Token Sistema Externo**.
 
-### El Orquestador necesita un client secret M2M
-
-El Orquestador usa el flujo `client_credentials` para obtener tokens Bearer antes de cada llamada al Backend LeyData. Para eso necesita un cliente confidencial `leydata-orchestrator` en el realm `leydata`.
-
-**El script `setup-keycloak.sh` no crea este cliente.** Hay que crearlo manualmente una sola vez con los siguientes comandos:
-
-```bash
-# Obtener token de admin de Keycloak
-MASTER_TOKEN=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
-  -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-
-# Crear el cliente (confidential, solo client_credentials)
-curl -s -X POST http://localhost:8180/admin/realms/leydata/clients \
-  -H "Authorization: Bearer $MASTER_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "clientId": "leydata-orchestrator",
-    "enabled": true,
-    "publicClient": false,
-    "serviceAccountsEnabled": true,
-    "standardFlowEnabled": false,
-    "directAccessGrantsEnabled": false
-  }'
-
-# Obtener el UUID interno del cliente recién creado
-CLIENT_UUID=$(curl -s "http://localhost:8180/admin/realms/leydata/clients?clientId=leydata-orchestrator" \
-  -H "Authorization: Bearer $MASTER_TOKEN" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
-
-# Exportar el secret directamente en la sesión actual (para el paso 8)
-export KC_ORCHESTRATOR_CLIENT_SECRET=$(curl -s \
-  "http://localhost:8180/admin/realms/leydata/clients/$CLIENT_UUID/client-secret" \
-  -H "Authorization: Bearer $MASTER_TOKEN" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
-
-echo "KC_ORCHESTRATOR_CLIENT_SECRET=$KC_ORCHESTRATOR_CLIENT_SECRET"
-echo "↑ Guardalo — se necesita cada vez que se levanta el contenedor del Orquestador."
-```
-
-> **¿Dónde va el secret?** No va en el `.env`. Se exporta como variable de entorno en la misma terminal donde se ejecuta `docker-compose up` (paso 8). El `docker-compose.override.yml` ya tiene `${KC_ORCHESTRATOR_CLIENT_SECRET:-dev-secret-placeholder}` y Docker Compose lee la variable del sistema automáticamente.
+> **El cliente M2M `leydata-orchestrator` es creado automáticamente por `setup-keycloak.sh`** (paso 5). El secret queda impreso al final del script y debe copiarse al `.env` como `KC_ORCHESTRATOR_CLIENT_SECRET`. No hay ningún paso manual adicional.
 
 ---
 
@@ -426,7 +407,7 @@ El Orquestador es un servicio Spring WebFlux en el directorio `orchestrator/`. C
 - El backend está corriendo en `localhost:8080` (paso 7)
 - Redis y Keycloak están corriendo (verificar con `docker ps`)
 - El realm `empresa-cliente` existe (paso 6)
-- `KC_ORCHESTRATOR_CLIENT_SECRET` fue exportado en la sesión actual (paso 6)
+- `KC_ORCHESTRATOR_CLIENT_SECRET` está en el `.env` (copiado desde la salida del paso 5)
 
 ### ⚠️ Si estás en WSL — actualizar la URL del backend
 
@@ -455,8 +436,7 @@ LEYDATA_BACKEND_URL: http://172.30.171.177:8080   # ← tu IP de WSL
 
 ```bash
 # Desde la raíz del proyecto (donde está docker-compose.yml)
-# Asegurarse de que KC_ORCHESTRATOR_CLIENT_SECRET está exportado (ver paso 6)
-echo $KC_ORCHESTRATOR_CLIENT_SECRET   # debe mostrar el secret, no vacío
+# Docker Compose lee KC_ORCHESTRATOR_CLIENT_SECRET del .env automáticamente
 
 # Construir la imagen y levantar el contenedor
 docker-compose up -d --build orchestrator
@@ -490,7 +470,7 @@ docker-compose up -d --build orchestrator
 | Variable | Valor en desarrollo | Descripción |
 |---|---|---|
 | `KC_ORCHESTRATOR_CLIENT_ID` | `leydata-orchestrator` | Client ID M2M en realm leydata |
-| `KC_ORCHESTRATOR_CLIENT_SECRET` | del sistema (`$KC_ORCHESTRATOR_CLIENT_SECRET`) | Secret del cliente M2M — se exporta antes del up |
+| `KC_ORCHESTRATOR_CLIENT_SECRET` | del `.env` (`${KC_ORCHESTRATOR_CLIENT_SECRET}`) | Secret del cliente M2M — generado por `setup-keycloak.sh`, guardado en `.env` |
 | `KC_TOKEN_URI` | `http://keycloak:8080/realms/leydata/...` | Token endpoint interno de Keycloak |
 | `LEYDATA_BACKEND_URL` | `http://host.docker.internal:8080` (ajustar en WSL) | URL del backend LeyData |
 | `EXTERNAL_JWKS_URI` | `http://keycloak:8080/realms/empresa-cliente/...` | JWKS del IdP externo para validar tokens entrantes |
@@ -596,11 +576,29 @@ Resultado esperado: JSON con `access_token`. El token comienza con `eyJ`.
 ### Probar un endpoint protegido
 
 ```bash
+# Directo al backend
 curl -X GET http://localhost:8080/api/users \
+  -H "Authorization: Bearer <access_token>"
+
+# A través de NGINX (si está corriendo en :80)
+curl -X GET http://localhost/api/users \
   -H "Authorization: Bearer <access_token>"
 ```
 
-Resultado esperado: `200 OK` con la lista de usuarios.
+Resultado esperado: `200 OK` con la lista de usuarios. Verificar además que la respuesta vía NGINX incluye el header `X-Frame-Options: DENY`.
+
+### Verificar NGINX (si está levantado)
+
+```bash
+# Routing funciona — debe devolver 401 sin token, pero con headers de seguridad
+curl -I http://localhost/api/audit/logs
+
+# Path no declarado → 404 de NGINX
+curl -I http://localhost/foo
+
+# Headers de seguridad presentes
+curl -sI http://localhost/api/audit/logs | grep -E "X-Frame|X-Content|Referrer"
+```
 
 ### Documentación interactiva
 
@@ -629,7 +627,169 @@ En Postman / Bruno: **Import → Link** y pegar la URL. La colección incluye el
 
 ---
 
-## 10. Actualizar el proyecto
+## 10. Observabilidad
+
+> Ver documentación completa en [docs/monitoring-module.md](../../docs/monitoring-module.md).
+
+El sistema tiene tres capas de observabilidad. Los logs funcionan siempre (sin Docker extra). Prometheus, Grafana y Zipkin son opcionales y requieren los contenedores del paso 4.
+
+### Logs — activos desde el arranque, sin configuración adicional
+
+Cada vez que el backend o el orquestador arrancan, empiezan a escribir logs automáticamente en dos lugares:
+
+- **Consola** — texto plano, para leer en desarrollo
+- **Archivo JSON** — para diagnóstico y evidencia de cumplimiento
+
+**Dónde se guardan:**
+
+```
+backend/logs/leydata-backend.log              ← se crea al arrancar el backend
+logs/orchestrator/leydata-orchestrator.log    ← se crea al arrancar el orquestador (Docker)
+```
+
+Ninguno va a git (están en `.gitignore`). Logback los **rota automáticamente**: comprime en `.log.gz` al llegar a 100 MB o al cambiar el día, y borra los más viejos al superar 2 GB (backend) o 1 GB (orquestador). No hay que hacer nada manual.
+
+**Leer los logs:**
+
+```bash
+# Backend — ver en vivo
+tail -f backend/logs/leydata-backend.log
+
+# Buscar un request específico por su ID
+grep "a3f1c2d4" backend/logs/leydata-backend.log
+
+# Orquestador — desde Docker
+docker logs leydata-orchestrator --tail 100 -f
+
+# Orquestador — desde el archivo en el host
+tail -f logs/orchestrator/leydata-orchestrator.log
+```
+
+Cada línea del archivo es un JSON con `@timestamp`, `level`, `message`, `requestId` y `app`. El `requestId` es el mismo valor que aparece en Zipkin, lo que permite cruzar ambas herramientas sobre un mismo request.
+
+### Levantar el stack de monitoreo (opcional)
+
+```bash
+docker-compose up -d loki prometheus grafana zipkin
+```
+
+| Servicio | URL | Credenciales |
+|---|---|---|
+| NGINX | `http://localhost:80` | sin auth — entrada pública con rate limiting |
+| Grafana | `http://localhost:3000` | admin / admin (o `GRAFANA_PASSWORD` del `.env`) |
+| Loki | `http://localhost:3100` | sin auth (API interna — se usa desde Grafana) |
+| Prometheus | `http://localhost:9090` | sin auth |
+| Zipkin | `http://localhost:9411` | sin auth |
+
+### Loki — explorar logs desde Grafana
+
+Con el backend y el orquestador corriendo, los logs llegan a Loki automáticamente via `loki4j`.
+
+**Explorar en Grafana:**
+1. Abrir `http://localhost:3000` → **Explore** → seleccionar datasource **Loki**
+2. Queries más usadas:
+
+```logql
+# Todos los logs del backend
+{app="leydata-backend"}
+
+# Solo errores
+{app="leydata-backend", level="ERROR"}
+
+# Buscar un request por ID (correlacionar con Zipkin)
+{app="leydata-backend"} |= "requestId=<traceId-de-zipkin>"
+
+# Logs del orquestador
+{app="leydata-orchestrator"}
+```
+
+Si Loki no está corriendo, los logs siguen escribiéndose en `backend/logs/` y `logs/orchestrator/` — no hay pérdida de datos.
+
+### Grafana — dashboard de compliance
+
+Abrir `http://localhost:3000`. El dashboard **"LeyData — Compliance & Consent"** carga automáticamente. Incluye:
+
+- **Mismatches en cadena de auditoría** — debe ser siempre 0. Si sube, hay un problema de integridad que debe notificarse al CPDT (requisito Ley 21.719).
+- Consentimientos capturados vs revocados en el tiempo
+- Latencia p50/p95/p99 de `/consent/check`
+- Eventos de auditoría por acción
+- HTTP errors 5xx del backend
+
+### Prometheus — verificar targets
+
+Abrir `http://localhost:9090` → **Status → Targets**. Deben aparecer `backend` y `orchestrator` en estado `UP`.
+
+Si `backend` aparece en `DOWN`, el backend no está corriendo o el endpoint `/actuator/prometheus` no responde. Verificar con:
+
+```bash
+curl http://localhost:8080/actuator/prometheus | head -5
+```
+
+### Zipkin — trazas distribuidas
+
+Cada request al Orquestador genera un trace que abarca todos los saltos:
+
+```
+CRM → Orquestador → Backend → PostgreSQL / Redis
+```
+
+Abrir `http://localhost:9411` → clic en **"Run Query"** → seleccionar el servicio → clic en un trace para ver el desglose por span. El `traceId` que muestra Zipkin coincide con el `requestId` de los logs — se pueden cruzar para ver el detalle completo de cualquier request.
+
+### Alertas automáticas
+
+Grafana tiene dos reglas de alerta pre-configuradas que se cargan al arrancar:
+
+| Alerta | Cuándo dispara |
+|---|---|
+| **Ruptura en Cadena de Auditoría** | Si aparece algún mismatch SHA-256 en el audit log — dispara inmediatamente |
+| **Backend Inaccesible** | Si el backend no responde más de 2 minutos |
+
+Las alertas aparecen en `http://localhost:3000/alerting` aunque no se configure ningún canal externo. Para recibir notificaciones fuera de Grafana, agregar al `.env` antes de levantar Grafana:
+
+```bash
+# Webhook (Slack, Teams, Discord, endpoint propio)
+GRAFANA_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../...
+
+# Email (requiere también las variables GRAFANA_SMTP_*)
+GRAFANA_SMTP_ENABLED=true
+GRAFANA_SMTP_HOST=smtp.gmail.com:587
+GRAFANA_SMTP_USER=cuenta@gmail.com
+GRAFANA_SMTP_PASSWORD=app-password
+GRAFANA_ALERT_EMAIL_TO=ops@leydata.cl;dpo@leydata.cl
+```
+
+Después de editar el `.env`:
+```bash
+docker-compose up -d grafana
+```
+
+Ver detalle completo de configuración en [docs/monitoring-module.md](../../docs/monitoring-module.md) §4.
+
+### Health check del audit log
+
+```bash
+curl -s http://localhost:8080/actuator/health | python3 -m json.tool
+```
+
+Respuesta esperada incluye el componente `auditChain`:
+
+```json
+{
+  "status": "UP",
+  "components": {
+    "auditChain": {
+      "status": "UP",
+      "details": { "totalRecords": 142, "lastRecord": "2026-07-01T10:23:11" }
+    },
+    "db":    { "status": "UP" },
+    "redis": { "status": "UP" }
+  }
+}
+```
+
+---
+
+## 11. Actualizar el proyecto
 
 Cuando alguien del equipo hace `git pull` para traer cambios nuevos, es necesario limpiar el directorio `target/` antes de volver a levantar el backend. El `target/` contiene las clases Java compiladas de la versión anterior. Si no se limpia, Maven puede levantar el backend con código viejo mezclado con código nuevo, causando errores difíciles de diagnosticar.
 
@@ -673,24 +833,103 @@ Genera el JAR en `target/`. Útil para verificar que el código compila antes de
 
 En cualquiera de esos casos, detener el backend, ejecutar `./mvnw clean spring-boot:run` y volver a probar.
 
+
 ---
 
-## 11. Comandos del día a día
+## 11.1 Migración para entornos existentes — Julio 2026
+
+Si ya tenés el proyecto funcionando y hacés `git pull` de esta versión, necesitás un paso extra porque se agregó el cliente M2M `leydata-orchestrator` al setup de Keycloak.
+
+### ¿Te afecta este cambio?
+
+**Mac / WSL:**
+```bash
+MASTER_TOKEN=$(curl -s http://localhost:8180/realms/master/protocol/openid-connect/token \
+  -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -s "http://localhost:8180/admin/realms/leydata/clients?clientId=leydata-orchestrator" \
+  -H "Authorization: Bearer $MASTER_TOKEN" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print('EXISTE' if d else 'NO EXISTE')"
+```
+
+- **"NO EXISTE"** → seguir los pasos de abajo
+- **"EXISTE"** → nada que hacer, el Orquestador ya tiene su cliente M2M
+
+### Pasos para entornos existentes (sin reset completo)
+
+**Mac / WSL:**
+```bash
+# 1. Con Keycloak corriendo, re-ejecutar el script (es idempotente)
+bash scripts/setup-keycloak.sh
+
+# 2. Copiar KC_ORCHESTRATOR_CLIENT_SECRET de la salida del script al .env
+#    KC_BACKEND_SECRET no cambia si el volumen de Keycloak no fue borrado
+
+# 3. Reiniciar el Orquestador con el nuevo secret
+docker-compose up -d orchestrator
+```
+
+**Windows PowerShell:**
+```powershell
+# 1. Re-ejecutar el script con Keycloak corriendo
+.\scripts\setup-keycloak.ps1
+
+# 2. Copiar KC_ORCHESTRATOR_CLIENT_SECRET de la salida
+#    Abrir .env y agregar la línea:
+Add-Content .env "KC_ORCHESTRATOR_CLIENT_SECRET=<valor-del-script>"
+
+# 3. Reiniciar el Orquestador
+docker-compose up -d orchestrator
+```
+
+### Bugs de código corregidos en esta versión
+
+Estos bugs están corregidos en el código fuente. Con `git pull` + `./mvnw clean spring-boot:run` ya quedan aplicados:
+
+| Bug | Síntoma anterior | Estado |
+|---|---|---|
+| **Bug 1 — KC_BACKEND_SECRET inválido** | `POST /api/users` → 500 genérico sin contexto | ✅ Devuelve mensaje claro sobre secret inválido |
+| **Bug 2 — `legalBasisCode` null** | `POST /api/purposes` → respuesta con campos de relación null | ✅ Todos los campos de relación poblados correctamente |
+| **Bug 3 — `dataCategoryCode` null** | `POST /api/purposes/{id}/data-categories` → `dataCategoryCode: null` | ✅ Campos poblados correctamente |
+| **Bug 4 — Archivado imposible en PUBLISHED** | `PATCH /api/privacy-documents/{id}/archive` → 409 aunque no hay estado al que pasar | ✅ El archivado funciona sin remover finalidades |
+| **Bug 5 — Orquestador M2M** | Orquestador no podía obtener token M2M para llamar al backend | ✅ Corregido (requiere paso manual de migración arriba) |
+
+
+---
+
+## 12. Comandos del día a día
 
 ### Levantar el entorno completo
 
-El orquestador necesita `KC_ORCHESTRATOR_CLIENT_SECRET` exportado **antes** de `docker-compose up`. Si no lo tenés en tu sesión actual, obtenerlo de Keycloak (ver paso 6):
+El `.env` debe tener `KC_BACKEND_SECRET` y `KC_ORCHESTRATOR_CLIENT_SECRET` con valores reales (copiados del paso 5). Docker Compose los lee automáticamente.
 
+**Mac / WSL:**
 ```bash
-# 1. Exportar el secret del cliente M2M (si no está en la sesión)
-export KC_ORCHESTRATOR_CLIENT_SECRET="<secret-obtenido-en-paso-6>"
-
-# 2. Levantar infraestructura + orquestador
+# 1. Levantar infraestructura + orquestador
 docker-compose up -d
 
-# 3. Levantar el backend (fuera de Docker)
+# 1b. Opcional — observabilidad (Loki :3100, Prometheus :9090, Grafana :3000, Zipkin :9411)
+docker-compose up -d loki prometheus grafana zipkin
+
+# 1c. Opcional — NGINX como entrada pública en :80 (rate limiting + security headers)
+docker-compose up -d nginx
+
+# 2. Levantar el backend (fuera de Docker)
 cd backend
-DB_USER=admin DB_PASS=admin DB_NAME=leydata_db KC_BACKEND_SECRET=<valor-del-script> ./mvnw spring-boot:run
+export $(cat ../.env | xargs) && ./mvnw spring-boot:run
+```
+
+**Windows PowerShell:**
+```powershell
+# 1. Levantar infraestructura + orquestador
+docker-compose up -d
+
+# 2. Levantar el backend
+Get-Content ..\.env | Where-Object { $_ -notmatch '^#' -and $_ -match '=' } | ForEach-Object {
+    $key, $value = $_ -split '=', 2
+    [System.Environment]::SetEnvironmentVariable($key.Trim(), $value.Trim(), 'Process')
+}
+cd backend; .\mvnw.cmd spring-boot:run
 ```
 
 > **WSL:** si la IP de WSL cambió desde la última vez (ej. después de reiniciar), actualizar `LEYDATA_BACKEND_URL` en `docker-compose.override.yml` antes del `docker-compose up`. Ver sección 8.
@@ -718,7 +957,7 @@ bash scripts/setup-keycloak.sh   # o .\scripts\setup-keycloak.ps1 en Windows
 
 > Borrar `postgres_replica_data` es necesario para que la replica haga `pg_basebackup` desde cero al volver a levantar.
 
-Después del reset, actualizar `KC_BACKEND_SECRET` en el `.env` con el nuevo valor que imprime el script.
+Después del reset, actualizar `KC_BACKEND_SECRET` y `KC_ORCHESTRATOR_CLIENT_SECRET` en el `.env` con los nuevos valores que imprime el script.
 
 ### Ver logs de un contenedor
 
@@ -763,7 +1002,7 @@ cd backend
 
 ---
 
-## 12. Problemas frecuentes
+## 13. Problemas frecuentes
 
 ---
 
@@ -781,7 +1020,9 @@ bash scripts/setup-keycloak.sh
 
 ### `POST /api/users` retorna 500 — `Invalid client or Invalid client credentials`
 
-El `KC_BACKEND_SECRET` que usa el backend no coincide con el que tiene Keycloak. Ocurre típicamente después de un reset de contenedores, cuando el script genera un nuevo secret y el `.env` todavía tiene el valor anterior.
+El `KC_BACKEND_SECRET` que usa el backend no coincide con el que tiene Keycloak. Ocurre típicamente después de un reset de contenedores (`docker-compose down -v`), cuando el script genera un nuevo secret y el `.env` todavía tiene el valor anterior.
+
+> Desde la versión actual del código, si el secret es incorrecto el backend devuelve un 500 con el mensaje `"Las credenciales del cliente Keycloak son inválidas (KC_BACKEND_SECRET)"` en lugar del genérico anterior, lo que facilita el diagnóstico.
 
 **El secret NO cambia en reinicios normales.** Solo cambia cuando se hace `docker-compose down -v` o se borra el volumen `keycloak_data`. `GET /api/users` y otros endpoints siguen funcionando porque solo validan el JWT del usuario — no necesitan el service account.
 
@@ -1003,6 +1244,51 @@ Reiniciar el backend.
 - **Opción correcta (producción):** configurar el primary recuperado como nueva replica del nodo promovido usando `pg_basebackup`, luego re-registrarlo como standby.
 
 > En producción esto lo gestiona Patroni automáticamente. Ver Fase 3 en ARQUITECTURA-PROBLEMAS-PENDIENTES.md.
+
+---
+
+### NGINX devuelve `502 Bad Gateway` en `/api/*`
+
+El backend no está corriendo o `host.docker.internal` no resuelve desde el contenedor de NGINX.
+
+```bash
+# Verificar que el backend está UP
+curl http://localhost:8080/actuator/health
+
+# Verificar resolución desde dentro del contenedor de NGINX
+docker exec leydata-nginx wget -qO- http://host.docker.internal:8080/actuator/health
+```
+
+Si el segundo comando falla en WSL, confirmar que `extra_hosts: host.docker.internal:host-gateway` está en el servicio `nginx` del docker-compose. Ver [docs/nginx-module.md](../../docs/nginx-module.md).
+
+---
+
+### NGINX devuelve `404` en todos los endpoints
+
+Verificar que la configuración se montó correctamente:
+
+```bash
+docker exec leydata-nginx nginx -t
+docker exec leydata-nginx cat /etc/nginx/conf.d/leydata.conf
+```
+
+Si el archivo está vacío o no existe, el volumen `./nginx/conf.d` no se montó. Asegurarse de estar ejecutando `docker-compose` desde la raíz del proyecto.
+
+---
+
+### Puerto 80 ya en uso
+
+```bash
+# WSL / macOS
+sudo lsof -i :80
+sudo kill -9 <PID>
+
+# PowerShell
+netstat -ano | findstr :80
+taskkill /PID <PID> /F
+```
+
+Candidatos frecuentes: Apache, otro NGINX local, IIS (Windows). Si el puerto 80 no está disponible, cambiar el mapeo en docker-compose.yml: `"8000:80"` y acceder en `http://localhost:8000`.
 
 ---
 

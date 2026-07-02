@@ -1,7 +1,7 @@
 # LeyData — Problemas Arquitectónicos y Deuda Técnica Pendiente
 
 **Fecha de análisis:** 2026-06-27  
-**Última actualización:** 2026-06-30  
+**Última actualización:** 2026-07-01 (bugs de lógica y M2M corregidos)  
 **Branch:** feature/orchestrator-module  
 **Contexto:** Evaluación pre-producción. La Ley 21.719 entra en vigor en diciembre de 2026.
 
@@ -13,7 +13,7 @@
 2. [Altos — deben resolverse antes de go-live](#2-altos--deben-resolverse-antes-de-go-live)
 3. [Medios — mejoran resiliencia y trazabilidad](#3-medios--mejoran-resiliencia-y-trazabilidad)
 4. [Infraestructura proyectada — componentes faltantes](#4-infraestructura-proyectada--componentes-faltantes)
-5. [Bugs de API pendientes de resolver](#5-bugs-de-api-ya-corregidos-en-código--pendientes-de-verificación-completa)
+5. [Bugs de API y lógica — corregidos](#5-bugs-de-api-y-lógica--corregidos)
 6. [Deuda técnica menor](#6-deuda-técnica-menor)
 
 ---
@@ -94,11 +94,11 @@ Failover automático con **Patroni** (coordina etcd + PostgreSQL para promover l
 - `SystemAuditLog.java` — campo `requestId` agregado (Hibernate crea la columna automáticamente con `ddl-auto=update`)
 - `AuditService.java` — método `extractRequestId()` lee el header `X-Request-ID` del request HTTP y lo persiste en cada log
 
-**Pendiente de infra:** NGINX/WAF deben configurarse para generar y propagar `X-Request-ID`. Mientras tanto el campo quedará `null` en los registros — sin impacto funcional.
+**Fix de infra aplicado (Julio 2026):** NGINX implementado en `:80` con `$request_id` generado y propagado al backend. El campo `requestId` del audit log ya recibe el valor desde el header.
 
 ```nginx
-# nginx.conf — cuando se configure
-add_header X-Request-ID $request_id;
+# nginx/conf.d/leydata.conf — activo
+add_header X-Request-ID $request_id always;
 proxy_set_header X-Request-ID $request_id;
 log_format main '$remote_addr - $request_id - $request - $status';
 ```
@@ -224,9 +224,9 @@ Estado actual del diseño vs. lo que se necesita:
 
 [Internet]
     │
-  [WAF]                              ✅ planificado
+  [WAF]                              ❌ pendiente (producción)
     │
-[API Gateway / NGINX]                ✅ planificado (SSL, rate limiting)
+[API Gateway / NGINX]                ✅ implementado (rate limiting, security headers, X-Request-ID — puerto :80)
     │
 [Load Balancer]                      ✅ planificado
    /|\
@@ -242,23 +242,25 @@ Estado actual del diseño vs. lo que se necesita:
     │
   [Redis Replica / Sentinel]         ❌ replica NO planificada
 
-Componentes de observabilidad (ninguno planificado):
-  ❌ Centralización de logs (ELK / Loki+Grafana)
-  ❌ Métricas de aplicación (Micrometer → Prometheus → Grafana)
-  ❌ Alertas de disponibilidad (uptime del endpoint /health)
-  ❌ Trazas distribuidas (OpenTelemetry) para correlacionar WAF + App + BD
+Componentes de observabilidad:
+  ✅ Logs estructurados JSON (Logback + LogstashEncoder) — backend y orquestador
+  ✅ Métricas de aplicación (Micrometer → Prometheus → Grafana) — dashboard pre-configurado
+  ✅ Trazas distribuidas (Zipkin/Brave) — correlaciona Orquestador → Backend → BD
+  ✅ Health indicator del audit log (`/actuator/health` componente `auditChain`)
+  ✅ Métricas de dominio: consentimientos capturados/revocados, integridad del audit log, latencia `/consent/check`
+  ✅ Centralización de logs con Loki — loki4j appender en backend y orquestador, servicio Loki en docker-compose, datasource en Grafana
+  ✅ Alertas automáticas en Grafana (audit integrity mismatch + backend DOWN) — webhook y email configurables vía .env
+  ✅ NGINX access log en Docker (formato estándar) — integración con Loki pendiente (no hay loki4j en NGINX; requiere Promtail o similar)
 ```
 
 ---
 
-## 5. Bugs de API — todos corregidos y verificados
+## 5. Bugs de API y lógica — corregidos
 
-Todos los bugs fueron corregidos y verificados contra el backend en ejecución:
+### 5.1 Bugs de protocolo HTTP — corregidos iteración anterior
 
-| # | Endpoint | Problema original | Fix aplicado | Archivo |
-|---|----------|-------------------|--------------|---------|
-| # | Endpoint | Problema original | Fix aplicado | Estado |
-|---|----------|-------------------|--------------|--------|
+| # | Endpoint | Problema | Fix | Estado |
+|---|----------|----------|-----|--------|
 | 1 | `POST /api/privacy-documents` sin `name` | 500 → 400 | Handler `MethodArgumentNotValidException` en `GlobalExceptionHandler` | ✅ Verificado |
 | 2 | `GET /api/purpose-requests` (ADMIN) | 403 → 200 | `hasAnyRole('DPO','ADMIN')` en `PurposeRequestController` | ✅ Verificado |
 | 3 | `GET /api/purpose-requests/pending` (ADMIN) | 403 → 200 | `hasAnyRole('DPO','ADMIN')` en `PurposeRequestController` | ✅ Verificado |
@@ -272,6 +274,34 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 
 ---
 
+### 5.2 Bugs de lógica y configuración — corregidos Julio 2026
+
+Identificados y corregidos en `feature/orchestrator-module`. Verificados contra el backend en ejecución.
+
+| # | Área | Síntoma | Causa raíz | Archivo corregido | Estado |
+|---|------|---------|-----------|-------------------|--------|
+| 1 | Keycloak admin | `POST /api/users` → 500 genérico cuando `KC_BACKEND_SECRET` es inválido | `getAdminToken()` sin try/catch — 401 de Keycloak propagaba como `HttpClientErrorException` sin contexto | `KeycloakAdminService.java` | ✅ Corregido |
+| 2 | Finalidades | `POST /api/purposes` → `legalBasisCode`, `domainCode`, `dataCategoryCode` null en respuesta | JPA L1 cache: `save()` retorna entidad del cache con relaciones `@ManyToOne` lazy no inicializadas; `findById()` devuelve el mismo objeto cacheado sin ir a BD | `PurposeService.java` | ✅ Corregido |
+| 3 | Data-categories | `POST /api/purposes/{id}/data-categories` → `dataCategoryCode`, `isSensitive` null | Mismo patrón JPA L1 cache — `loadDataCategoryActive()` cargaba la entidad pero no se seteaba en el objeto guardado | `PurposeDataCategoryService.java` | ✅ Corregido |
+| 4 | Documentos de privacidad | `PATCH /api/privacy-documents/{id}/archive` → 409 en documentos PUBLISHED | Catch-22: `publish()` requiere finalidades activas, `archive()` bloqueaba si había finalidades activas, `removePurpose()` solo funciona en DRAFT → estado inalcanzable | `PrivacyDocumentService.java` | ✅ Corregido |
+| 5 | Orquestador M2M | Orquestador no podía obtener token para llamar al backend | `KC_TOKEN_URI` apuntaba a `localhost:8180` (inaccesible desde Docker); cliente `leydata-orchestrator` no existía en Keycloak | `docker-compose.yml`, `setup-keycloak.sh/.ps1` | ✅ Corregido |
+
+**Patrón JPA a evitar (causa de bugs 2 y 3):**
+```java
+// ❌ INCORRECTO — findById() devuelve objeto del L1 cache, relaciones lazy siguen null
+Entity saved = repo.save(entity);
+Entity reloaded = repo.findById(saved.getId()).orElseThrow(); // L1 cache hit, no SQL
+
+// ✅ CORRECTO — guardar la referencia cargada en validación y setearla manualmente
+var relacion = relacionRepo.findById(req.getRelacionId()).orElseThrow(...);
+Entity saved = repo.save(entity);
+saved.setRelacion(relacion); // poblar en memoria con objeto ya cargado
+```
+
+Ver documentación de este patrón: `DEVELOPMENT_GUARDRAILS.md` §9.
+
+---
+
 ## 6. Deuda técnica menor
 
 | Item | Descripción | Archivo |
@@ -280,6 +310,7 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 | ~~`PATCH /api/purpose-requests/{id}/review` con ID inexistente~~ | ✅ Resuelto — cambiado `IllegalArgumentException` por `NoSuchElementException` (handler 404 existente). | `PurposeRequestService.java` |
 | ~~`TemplateNotFoundException` sin handler en `GlobalExceptionHandler`~~ | ✅ Resuelto — `GET /api/templates/{id}` con ID inexistente devolvía 500, ahora 404. | `GlobalExceptionHandler.java` |
 | ~~Usuarios de prueba JEFE_DOMINIO y DPO no existían en el script~~ | ✅ Resuelto — `setup-keycloak.sh` ahora crea `jefe@test.cl` (JEFE_DOMINIO) y `dpo@leydata.cl` (DPO). | `scripts/setup-keycloak.sh` |
+| **JPA L1 cache con relaciones lazy** | Patrón documentado en `DEVELOPMENT_GUARDRAILS.md` §9 — cualquier método `@Transactional` que haga `save()` y necesite retornar relaciones `@ManyToOne` debe guardar las referencias cargadas durante validación y setearlas manualmente tras el save. `findById()` post-save devuelve el objeto del L1 cache sin inicializar las relaciones. | `PurposeService.java`, `PurposeDataCategoryService.java` (ejemplo del patrón correcto) |
 | `AuditService` es un god node (26 edges en el grafo) | Considerar separar en `AuditWriter` (persistencia) y `AuditHashChain` (integridad) para facilitar testing unitario y futura migración a un servicio separado. | `AuditService.java` |
 | `ddl-auto=update` en producción | Hibernate gestiona el esquema automáticamente — válido para desarrollo, peligroso en producción (no hay rollback, no hay historial, riesgo con múltiples instancias). Antes del go-live migrar a **Flyway**: (1) exportar esquema actual como `V1__baseline.sql`, (2) cambiar a `ddl-auto=validate`, (3) todo cambio futuro en scripts `V2__...sql`. | `application.properties` |
 | `DomainsPage.tsx` permite asignar un jefe de dominio que ya lidera otro dominio sin advertirlo | El backend (`UserService.assignUserDomains()`/`createUser()`) ahora rechaza con 400 si a un usuario `JEFE_DOMINIO` se le intenta asignar más de un dominio (regla: un jefe de dominio = un dominio). El flujo "Asignar responsable" de `DomainsPage.tsx` (función `handleAssignSave`, ~línea 140-181) sigue armando el payload `domainIds` por **agregación** (`[...currentDomainIds, assignDomain.id]`) en vez de **reemplazo** — si un admin intenta asignar a un jefe que ya administra otro dominio, el request falla con un 400 poco claro en vez de mostrar la advertencia adecuada o reemplazar la asignación. Pendiente: (1) cambiar la llamada a `updateUser(newJefeId, { domainIds: [assignDomain.id] }, ...)` para que reemplace en vez de agregar, (2) en el `<select>` de "Responsable asignado" (~línea 394-407), marcar visualmente a los jefes que ya administran otro dominio para que el admin entienda que reasignarlos los mueve de dominio. | `frontend/src/pages/DomainsPage.tsx` |
@@ -297,7 +328,7 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 - [x] Crear endpoint de consulta de consentimiento B2B (`GET /consent/check` en el Orquestador, con caché Redis y JWT externo)
 - [x] Implementar `AgreementRevokedEvent` para invalidación activa de Redis (`AgreementRevocationCacheListener` con `@TransactionalEventListener(phase = AFTER_COMMIT)`)
 - [x] Migraciones Flyway V5–V7 agregadas (feature/trazabilidad): trigger de inmutabilidad para `entity_integrity_log`, backfill de versionado de purposes, drop de UNIQUE en `purposes.code` — **aplicar manualmente** con psql (ver `docs/audit-module.md`)
-- [ ] Migrar gestión de esquema completo de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)
+- [x] Migrar gestión de esquema completo de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)
 - [ ] Correr corrida completa de pruebas de endpoints post todos los fixes
 
 ### Infraestructura
@@ -306,16 +337,22 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 - [x] Enrutar lecturas Spring Boot a la replica (`AbstractRoutingDataSource`) — Fase 2b
 - [ ] Failover automático con Patroni — Fase 3
 - [x] Agregar Redis al Docker Compose (redis:7-alpine, puerto 6379)
+- [x] Crear cliente M2M `leydata-orchestrator` en Keycloak — ahora automatizado por `setup-keycloak.sh/.ps1` (Julio 2026)
 - [ ] Configurar Redis Sentinel o Cluster (para producción)
-- [ ] Implementar WAF con `X-Request-ID` generado y propagado
-- [ ] Configurar NGINX para log con `X-Request-ID`
+- [ ] Implementar WAF real con inspección de payload (producción)
+- [x] Configurar NGINX con `X-Request-ID` generado y propagado al backend — implementado en `nginx/conf.d/leydata.conf`, puerto :80
 - [ ] Definir TTL de keys de consentimiento en Redis (recomendado: 30–60s)
 
 ### Observabilidad (para trazabilidad exigida por Ley 21.719)
-- [ ] Centralización de logs: WAF + NGINX + Spring Boot → mismo destino (ELK o Loki)
-- [ ] Campo `request_id` como campo de correlación en todos los logs
-- [ ] Dashboard de métricas: latencia del endpoint de consent check, tasa de error, uso de Redis
-- [ ] Alerta si la cadena de hashes del audit log se rompe (endpoint `/api/audit/logs/verify`)
+- [x] Logs estructurados JSON en backend y orquestador (Logback + LogstashEncoder, rotación automática) — ver [`docs/monitoring-module.md`](../../docs/monitoring-module.md)
+- [x] Campo `requestId` como campo de correlación en todos los logs (`RequestIdFilter` — propaga `X-Request-ID` al MDC)
+- [x] Dashboard de métricas en Grafana: latencia de `/consent/check`, consentimientos capturados/revocados, tasa de error 5xx, estado UP/DOWN
+- [x] Métricas de integridad: panel Grafana con `audit_integrity_check_total{result="mismatch"}` — debe ser 0 siempre
+- [x] Trazas distribuidas con Zipkin: correlaciona Orquestador → Backend → BD por `traceId`
+- [x] Health indicator `auditChain` en `/actuator/health`
+- [x] Centralización de logs con Loki — loki4j en backend y orquestador, `grafana/loki:2.9.9` en docker-compose, datasource Grafana provisionado
+- [x] Alertas automáticas en Grafana: ruptura SHA-256 en audit log + backend DOWN — webhook y email configurables vía `.env` (ver [`docs/monitoring-module.md`](../../docs/monitoring-module.md) §4)
+- [ ] Integración de logs NGINX → Loki (NGINX no usa loki4j; requiere Promtail o fluent-bit como sidecar — pendiente para producción)
 - [ ] Documentar el SLA de propagación de revocación (TTL de Redis) para incluir en el aviso de privacidad
 
 ### Legal / Compliance

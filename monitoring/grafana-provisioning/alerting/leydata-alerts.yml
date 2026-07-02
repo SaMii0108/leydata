@@ -1,0 +1,156 @@
+apiVersion: 1
+
+# ── Contact points ────────────────────────────────────────────────────────────
+# Canal 1: Webhook (Slack / Teams / Discord / webhook propio)
+# Activar: poner GRAFANA_ALERT_WEBHOOK_URL en el .env
+#
+# Canal 2: Email
+# Activar: poner GRAFANA_SMTP_ENABLED=true + credenciales SMTP en el .env
+#          y GRAFANA_ALERT_EMAIL_TO con las direcciones destino
+
+contactPoints:
+  - orgId: 1
+    name: LeyData Ops — Webhook
+    receivers:
+      - uid: leydata-webhook
+        type: webhook
+        settings:
+          url: ${GF_ALERT_WEBHOOK_URL}
+          httpMethod: POST
+          maxAlerts: 0
+        disableResolveMessage: false
+
+  - orgId: 1
+    name: LeyData Ops — Email
+    receivers:
+      - uid: leydata-email
+        type: email
+        settings:
+          addresses: ${GF_ALERT_EMAIL_TO}
+          singleEmail: false
+        disableResolveMessage: false
+
+# ── Notification policy ───────────────────────────────────────────────────────
+# Alertas etiquetadas con compliance=ley21719 van a ambos canales.
+# Si un canal no está configurado (URL vacía / SMTP desactivado),
+# Grafana loguea un warning pero no falla — el otro canal sigue funcionando.
+
+policies:
+  - orgId: 1
+    receiver: grafana-default-email
+    group_by: ['grafana_folder', 'alertname']
+    routes:
+      - receiver: LeyData Ops — Webhook
+        matchers:
+          - compliance = ley21719
+        continue: true
+      - receiver: LeyData Ops — Email
+        matchers:
+          - compliance = ley21719
+        continue: false
+
+# ── Alert rules ───────────────────────────────────────────────────────────────
+
+groups:
+  - orgId: 1
+    name: Compliance LeyData
+    folder: LeyData
+    interval: 1m
+    rules:
+
+      # Regla 1: ruptura en la cadena de auditoría
+      # Dispara si aparece aunque sea 1 mismatch SHA-256 en los últimos 5 minutos.
+      # Según Ley 21.719, cualquier alteración del audit log debe notificarse al CPDT.
+      - uid: audit-integrity-mismatch
+        title: "Ruptura en Cadena de Auditoría (Ley 21.719)"
+        condition: threshold
+        data:
+          - refId: mismatches
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              expr: 'increase(audit_integrity_check_total{result="mismatch"}[5m])'
+              instant: false
+              range: true
+              refId: mismatches
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: mismatches
+              refId: threshold
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [mismatches]
+                  reducer:
+                    type: last
+                    params: []
+                  type: query
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Ruptura SHA-256 en el audit log"
+          description: >
+            Se detectaron {{ $value }} mismatch(es) en los hash SHA-256 del audit log
+            durante los últimos 5 minutos. La cadena de integridad está comprometida.
+            Acción requerida según Ley 21.719 art. 14 — evaluar si corresponde
+            notificar al CPDT. Verificar: curl http://localhost:8080/actuator/health
+        labels:
+          severity: critical
+          compliance: ley21719
+        isPaused: false
+
+      # Regla 2: backend inaccesible por más de 2 minutos
+      # noDataState=Alerting: si Prometheus no puede scrapearlo, también es DOWN.
+      - uid: backend-service-down
+        title: "Backend LeyData Inaccesible"
+        condition: threshold
+        data:
+          - refId: backend_up
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              expr: 'up{job="backend"}'
+              instant: true
+              refId: backend_up
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: backend_up
+              refId: threshold
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+                  operator:
+                    type: and
+                  query:
+                    params: [backend_up]
+                  reducer:
+                    type: last
+                    params: []
+                  type: query
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: "Backend LeyData caído"
+          description: >
+            El backend LeyData no responde desde hace más de 2 minutos.
+            Prometheus no puede scrapearlo en /actuator/prometheus.
+            Verificar: docker ps | grep leydata y los logs del proceso Java.
+        labels:
+          severity: critical
+          compliance: ley21719
+        isPaused: false

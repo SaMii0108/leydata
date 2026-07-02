@@ -4,6 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import com.leydata.backend.audit.application.dto.AuditContext;
 import com.leydata.backend.audit.infrastructure.persistence.SystemAuditLogRepository;
 import com.leydata.backend.entity.SystemAuditLog;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +35,7 @@ public class AuditService {
 
     private final SystemAuditLogRepository auditLogRepository;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
 
     // Self-injection con @Lazy: permite llamar a log() a través del proxy AOP de
     // Spring.
@@ -98,6 +100,7 @@ public class AuditService {
         // Necesario porque el ID se asigna manualmente antes de persistir (para
         // incluirlo en el hash SHA-256).
         auditLogRepository.save(auditLog);
+        meterRegistry.counter("audit.logs", "action", context.getAction()).increment();
         log.info("Auditoría registrada: accion={} tabla={} actor={}", context.getAction(), context.getTableName(),
                 context.getActorId());
     }
@@ -126,18 +129,21 @@ public class AuditService {
         for (SystemAuditLog entry : logs) {
             if (!expectedPreviousHash.equals(entry.getPreviousLogHash())) {
                 log.warn("Cadena de auditoría rota en registro: {}", entry.getId());
+                meterRegistry.counter("audit.integrity.check", "result", "mismatch").increment();
                 return false;
             }
 
             String recomputedHash = recomputeHash(entry);
             if (!recomputedHash.equals(entry.getLogHash())) {
                 log.warn("Hash inválido en registro de auditoría: {}", entry.getId());
+                meterRegistry.counter("audit.integrity.check", "result", "mismatch").increment();
                 return false;
             }
 
             expectedPreviousHash = entry.getLogHash();
         }
 
+        meterRegistry.counter("audit.integrity.check", "result", "ok").increment();
         return true;
     }
 
