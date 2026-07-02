@@ -13,13 +13,19 @@ import java.util.UUID;
 @Setter
 public class CreateAgreementRequest {
 
-    @NotNull(message = "El dataSubjectId es obligatorio")
+    // UUID interno del titular (uso directo por la app web)
     private UUID dataSubjectId;
+
+    // Identificador opaco del titular (uso B2B vía Orquestador, ej: "RUT:12345678-9")
+    // Si dataSubjectId es null, se hace findOrCreate por este campo
+    private String subjectIdentifier;
 
     @NotNull(message = "El templateId es obligatorio")
     private UUID templateId;
 
-    @NotNull(message = "El documentId es obligatorio")
+    // Opcional: si no se envía, se resuelve automáticamente el documento PUBLISHED
+    // vinculado al template (ver AgreementService.create()). Se mantiene como override
+    // explícito por retrocompatibilidad con integraciones que ya lo envían.
     private UUID documentId;
 
     @NotEmpty(message = "Debe incluir al menos una decisión de purpose")

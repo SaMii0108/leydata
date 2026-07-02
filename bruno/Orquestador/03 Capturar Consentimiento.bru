@@ -1,0 +1,38 @@
+meta {
+  name: Capturar Consentimiento
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{orchestratorUrl}}/consent/capture
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{externalToken}}
+}
+
+body:json {
+  {
+    "subjectId": "<opaque-subject-id>",
+    "templateKey": "<templateKey-de-negocio>",
+    "purposes": [
+      { "purposeId": "<uuid-finalidad>", "accepted": true }
+    ]
+  }
+}
+
+docs {
+  Registra el consentimiento de un titular a través del Orquestador.
+  templateKey es el identificador de negocio (ej. "ONBOARDING_CLIENTE"), no un UUID interno.
+  El Orquestador extrae domainId del claim leydata_domain del JWT externo (ver archivo 01) y
+  resuelve templateKey contra GET /api/templates/resolve en LeyData para obtener el templateId
+  ACTIVE y el documentId publicado de ese dominio.
+  documentId puede enviarse opcional como override explícito si ya se conoce.
+  El Orquestador llama a POST /api/agreements en LeyData con credenciales M2M (client_credentials).
+  Pre-calienta Redis con ALLOWED por cada purpose aceptada, incluyendo legalBasisCode y validUntil reales.
+  Respuesta: { subjectId, agreementId, status: ALLOWED }
+  Requiere JWT del sistema externo (realm empresa-cliente) con claim leydata_domain configurado. Ver archivo 01.
+}

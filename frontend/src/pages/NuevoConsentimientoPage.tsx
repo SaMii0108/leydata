@@ -1,49 +1,114 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AREAS } from '../features/auth/mockUsers';
+import { useAuth } from '../features/auth/AuthContext';
 import Button from '../components/common/Button';
+import {
+  getTemplates,
+  getTemplatePurposes,
+  ApiError,
+  type TemplateResponse,
+  type TemplatePurposeResponse,
+} from '../api/templatesApi';
+import { createAgreement } from '../api/agreementsApi';
 import styles from './NuevoConsentimientoPage.module.css';
-
-const FINALIDADES = [
-  'Marketing directo',
-  'Análisis de datos internos',
-  'Transferencia a terceros',
-  'Investigación académica',
-  'Publicidad personalizada',
-];
-
-const DOMINIOS = ['Marketing', 'Publicidad', 'Análisis', 'Funcional'] as const;
-
-interface FormState {
-  area: string;
-  finalidad: string;
-  dominio: string;
-  fechaExpiracion: string;
-  notas: string;
-}
-
-const INITIAL: FormState = {
-  area: AREAS[0],
-  finalidad: FINALIDADES[0],
-  dominio: '',
-  fechaExpiracion: '',
-  notas: '',
-};
 
 const NuevoConsentimientoPage = () => {
   const navigate = useNavigate();
-  const [form, setForm] = useState<FormState>(INITIAL);
+  const { accessToken } = useAuth();
+
+  const [templates, setTemplates]               = useState<TemplateResponse[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatesError, setTemplatesError]     = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+
+  const [purposes, setPurposes]             = useState<TemplatePurposeResponse[]>([]);
+  const [purposesLoading, setPurposesLoading] = useState(false);
+  const [purposesError, setPurposesError]   = useState<string | null>(null);
+  const [decisions, setDecisions]           = useState<Record<string, boolean>>({});
+
+  const [subjectIdentifier, setSubjectIdentifier] = useState('');
+
+  const [loading, setLoading]   = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  useEffect(() => {
+    let cancelled = false;
+    setTemplatesLoading(true);
+    setTemplatesError(null);
+    getTemplates({ isActive: true }, accessToken)
+      .then((data) => { if (!cancelled) setTemplates(data); })
+      .catch((err) => {
+        if (!cancelled)
+          setTemplatesError(
+            err instanceof ApiError ? err.message : 'No se pudieron cargar las plantillas activas.',
+          );
+      })
+      .finally(() => { if (!cancelled) setTemplatesLoading(false); });
+    return () => { cancelled = true; };
+  }, [accessToken]);
 
-  const isValid = form.area && form.finalidad && form.fechaExpiracion;
+  useEffect(() => {
+    if (!selectedTemplateId) {
+      setPurposes([]);
+      setDecisions({});
+      return;
+    }
+    let cancelled = false;
+    setPurposesLoading(true);
+    setPurposesError(null);
+    getTemplatePurposes(selectedTemplateId, accessToken)
+      .then((data) => {
+        if (!cancelled) {
+          const sorted = [...data].sort((a, b) => a.orderPosition - b.orderPosition);
+          setPurposes(sorted);
+          const init: Record<string, boolean> = {};
+          sorted.forEach((p) => { init[p.purposeId] = true; });
+          setDecisions(init);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setPurposesError(
+            err instanceof ApiError ? err.message : 'No se pudieron cargar las finalidades de la plantilla.',
+          );
+      })
+      .finally(() => { if (!cancelled) setPurposesLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedTemplateId, accessToken]);
 
-  const handleSubmit = () => {
-    if (!isValid) return;
-    setSubmitted(true);
-    setTimeout(() => navigate('/consentimientos'), 2000);
+  const setDecision = (purposeId: string, accepted: boolean) => {
+    setDecisions((prev) => ({ ...prev, [purposeId]: accepted }));
+    setApiError(null);
+  };
+
+  const canSubmit = !!(selectedTemplateId && purposes.length > 0 && !loading && !purposesLoading);
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setLoading(true);
+    setApiError(null);
+    try {
+      await createAgreement(
+        {
+          templateId: selectedTemplateId,
+          ...(subjectIdentifier.trim() ? { subjectIdentifier: subjectIdentifier.trim() } : {}),
+          purposes: purposes.map((p) => ({
+            purposeId: p.purposeId,
+            accepted: decisions[p.purposeId] ?? true,
+          })),
+        },
+        accessToken,
+      );
+      setSubmitted(true);
+      setTimeout(() => navigate('/consentimientos'), 2000);
+    } catch (err) {
+      setApiError(
+        err instanceof ApiError ? err.message : 'Error al registrar el consentimiento. Intenta nuevamente.',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (submitted) {
@@ -51,12 +116,14 @@ const NuevoConsentimientoPage = () => {
       <div className={styles.successWrap}>
         <div className={styles.successCard}>
           <span className={styles.successIcon}>✓</span>
-          <h2 className={styles.successTitle}>Consentimiento creado</h2>
-          <p className={styles.successHint}>Redirigiendo al registro de consentimientos...</p>
+          <h2 className={styles.successTitle}>Consentimiento registrado</h2>
+          <p className={styles.successHint}>Redirigiendo al registro de consentimientos…</p>
         </div>
       </div>
     );
   }
+
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
 
   return (
     <div className={styles.page}>
@@ -66,144 +133,123 @@ const NuevoConsentimientoPage = () => {
             ← Volver
           </button>
           <h2 className={styles.title}>Nuevo Consentimiento</h2>
-          <p className={styles.subtitle}>Registra un nuevo consentimiento bajo Ley 21.719</p>
+          <p className={styles.subtitle}>Registra un acuerdo de consentimiento bajo Ley 21.719</p>
         </div>
       </div>
 
-      <div className={styles.layout}>
-        <div className={styles.form}>
-          {/* Área */}
-          <Section title="Área responsable">
-            <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel} htmlFor="nc-area">Área organizacional</label>
+      <div className={styles.form}>
+        <Section title="Plantilla de consentimiento">
+          <div className={styles.fieldGroup}>
+            <label className={styles.fieldLabel} htmlFor="nc-template">
+              Plantilla activa <span className={styles.required}>*</span>
+            </label>
+            {templatesError ? (
+              <p className={styles.submitError}>{templatesError}</p>
+            ) : (
               <select
-                id="nc-area"
+                id="nc-template"
                 className={styles.select}
-                value={form.area}
-                onChange={(e) => update('area', e.target.value)}
+                value={selectedTemplateId}
+                onChange={(e) => { setSelectedTemplateId(e.target.value); setApiError(null); }}
+                disabled={templatesLoading || loading}
               >
-                {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
+                <option value="">
+                  {templatesLoading ? 'Cargando plantillas…' : templates.length === 0 ? 'No hay plantillas activas' : 'Selecciona una plantilla'}
+                </option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
               </select>
-            </div>
-          </Section>
+            )}
+            {selectedTemplate && (selectedTemplate.description || selectedTemplate.title) && (
+              <p className={styles.hint}>{selectedTemplate.description ?? selectedTemplate.title}</p>
+            )}
+          </div>
+        </Section>
 
-          {/* Finalidad */}
-          <Section title="Finalidad del tratamiento">
-            <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel} htmlFor="nc-finalidad">Finalidad</label>
-              <select
-                id="nc-finalidad"
-                className={styles.select}
-                value={form.finalidad}
-                onChange={(e) => update('finalidad', e.target.value)}
-              >
-                {FINALIDADES.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
-            </div>
+        <Section title="Identificación del titular">
+          <div className={styles.fieldGroup}>
+            <label className={styles.fieldLabel} htmlFor="nc-subject">
+              Identificador del titular{' '}
+              <span className={styles.hintInline}>(opcional — RUT, email u otro)</span>
+            </label>
+            <input
+              id="nc-subject"
+              type="text"
+              className={styles.input}
+              placeholder="Ej: 12345678-9"
+              value={subjectIdentifier}
+              onChange={(e) => setSubjectIdentifier(e.target.value)}
+              disabled={loading}
+            />
+          </div>
+        </Section>
 
-            <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel}>Dominio</label>
-              <div className={styles.chips}>
-                {DOMINIOS.map((d) => (
-                  <button
-                    key={d}
-                    className={[styles.chip, form.dominio === d ? styles.chipActive : ''].join(' ')}
-                    onClick={() => update('dominio', form.dominio === d ? '' : d)}
-                    type="button"
-                  >
-                    {d}
-                  </button>
+        {selectedTemplateId && (
+          <Section title="Decisión por finalidad">
+            {purposesLoading ? (
+              <p className={styles.hint}>Cargando finalidades de la plantilla…</p>
+            ) : purposesError ? (
+              <p className={styles.submitError}>{purposesError}</p>
+            ) : purposes.length === 0 ? (
+              <p className={styles.hintWarn}>
+                Esta plantilla no tiene finalidades configuradas. Selecciona otra plantilla.
+              </p>
+            ) : (
+              <div className={styles.purposeList}>
+                {purposes.map((p) => (
+                  <div key={p.purposeId} className={styles.purposeItem}>
+                    <div className={styles.purposeInfo}>
+                      <span className={styles.purposeName}>{p.purposeName}</span>
+                    </div>
+                    <div className={styles.decisionBtns}>
+                      <button
+                        type="button"
+                        className={[
+                          styles.decisionBtn,
+                          decisions[p.purposeId] === true ? styles.decisionAccept : '',
+                        ].join(' ')}
+                        onClick={() => setDecision(p.purposeId, true)}
+                        disabled={loading}
+                      >
+                        Aceptar
+                      </button>
+                      <button
+                        type="button"
+                        className={[
+                          styles.decisionBtn,
+                          decisions[p.purposeId] === false ? styles.decisionReject : '',
+                        ].join(' ')}
+                        onClick={() => setDecision(p.purposeId, false)}
+                        disabled={loading}
+                      >
+                        Rechazar
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel} htmlFor="nc-notas">Notas adicionales (opcional)</label>
-              <textarea
-                id="nc-notas"
-                className={styles.textarea}
-                rows={3}
-                placeholder="Describe el contexto o condiciones especiales de este consentimiento..."
-                value={form.notas}
-                onChange={(e) => update('notas', e.target.value)}
-                maxLength={400}
-              />
-              <p className={styles.charCount}>{form.notas.length}/400</p>
-            </div>
+            )}
           </Section>
+        )}
 
-          {/* Fechas */}
-          <Section title="Vigencia">
-            <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel} htmlFor="nc-expiracion">
-                Fecha de expiración <span className={styles.required}>*</span>
-              </label>
-              <input
-                id="nc-expiracion"
-                type="date"
-                className={styles.input}
-                value={form.fechaExpiracion}
-                onChange={(e) => update('fechaExpiracion', e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-              />
-            </div>
-          </Section>
-
-          {/* Marco legal */}
-          <div className={styles.legalNotice}>
-            <p className={styles.legalText}>
-              Este consentimiento se registrará bajo la <strong>Ley 21.719</strong> de Protección de
-              Datos Personales de Chile. Base legal: consentimiento expreso del titular (Art. 12).
-            </p>
-          </div>
-
-          <div className={styles.actions}>
-            <Button variant="ghost" onClick={() => navigate('/consentimientos')}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSubmit} disabled={!isValid}>
-              Registrar consentimiento
-            </Button>
-          </div>
+        <div className={styles.legalNotice}>
+          <p className={styles.legalText}>
+            Este consentimiento se registrará bajo la <strong>Ley 21.719</strong> de Protección de
+            Datos Personales de Chile. Base legal: consentimiento expreso del titular (Art. 12).
+          </p>
         </div>
 
-        {/* Preview */}
-        <aside className={styles.preview}>
-          <p className={styles.previewLabel}>Vista previa del registro</p>
-          <div className={styles.previewCard}>
-            <div className={styles.previewRow}>
-              <span className={styles.previewKey}>ID</span>
-              <span className={styles.previewVal}>C-{String(Date.now()).slice(-4)}</span>
-            </div>
-            <div className={styles.previewRow}>
-              <span className={styles.previewKey}>Área</span>
-              <span className={styles.previewVal}>{form.area || '—'}</span>
-            </div>
-            <div className={styles.previewRow}>
-              <span className={styles.previewKey}>Finalidad</span>
-              <span className={styles.previewVal}>{form.finalidad || '—'}</span>
-            </div>
-            <div className={styles.previewRow}>
-              <span className={styles.previewKey}>Dominio</span>
-              <span className={styles.previewVal}>{form.dominio || '—'}</span>
-            </div>
-            <div className={styles.previewRow}>
-              <span className={styles.previewKey}>Estado</span>
-              <span className={styles.statusPill}>Pendiente</span>
-            </div>
-            <div className={styles.previewRow}>
-              <span className={styles.previewKey}>Otorgamiento</span>
-              <span className={styles.previewVal}>{new Date().toLocaleDateString('es-CL')}</span>
-            </div>
-            <div className={styles.previewRow}>
-              <span className={styles.previewKey}>Expiración</span>
-              <span className={styles.previewVal}>
-                {form.fechaExpiracion
-                  ? new Date(form.fechaExpiracion).toLocaleDateString('es-CL')
-                  : '—'}
-              </span>
-            </div>
-          </div>
-          <p className={styles.previewHint}>El registro se creará con estado <strong>Pendiente</strong> hasta su validación.</p>
-        </aside>
+        {apiError && <p className={styles.submitError}>{apiError}</p>}
+
+        <div className={styles.actions}>
+          <Button variant="ghost" onClick={() => navigate('/consentimientos')} disabled={loading}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={handleSubmit} disabled={!canSubmit}>
+            {loading ? 'Registrando…' : 'Registrar consentimiento'}
+          </Button>
+        </div>
       </div>
     </div>
   );

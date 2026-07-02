@@ -27,6 +27,24 @@
   margin: 0;
 }
 
+/* Búsqueda */
+.searchInput {
+  width: 100%;
+  padding: 9px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.searchInput::placeholder { color: var(--color-text-muted); }
+.searchInput:focus { border-color: var(--color-primary); }
+
 /* Filtros */
 .filters {
   display: flex;
@@ -113,12 +131,13 @@
   letter-spacing: 0.04em;
 }
 
-.badge_activa   { background: var(--color-success-bg);  color: var(--color-success); }
-.badge_inactiva { background: var(--color-danger-bg);   color: var(--color-danger); }
-.badge_borrador { background: var(--color-warning-bg);  color: var(--color-warning); }
+.badge_active   { background: var(--color-success-bg);  color: var(--color-success); }
+.badge_approved { background: var(--color-primary-light); color: var(--color-primary); }
+.badge_draft    { background: var(--color-warning-bg);  color: var(--color-warning); }
 
-.cardDomain {
+.cardKey {
   font-size: var(--text-xs);
+  font-family: var(--font-mono, monospace);
   color: var(--color-text-secondary);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
@@ -130,14 +149,6 @@
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--color-text-muted);
-}
-
-.colorDot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid rgba(0,0,0,0.08);
-  flex-shrink: 0;
 }
 
 .cardName {
@@ -175,6 +186,61 @@
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+/* Estados de carga y error */
+.stateMsg {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  padding: 32px 0;
+  text-align: center;
+  margin: 0;
+}
+
+.errorMsg {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin: 0;
+}
+
+/* Card procesando */
+.cardBusy {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* Fila de acciones de workflow */
+.workflowRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0 4px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.workflowActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.successMsg {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-success);
+}
+
+.workflowError {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-danger);
 }
 
 /* Empty */

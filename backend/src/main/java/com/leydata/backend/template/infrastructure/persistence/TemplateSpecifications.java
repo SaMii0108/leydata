@@ -1,12 +1,18 @@
 package com.leydata.backend.template.infrastructure.persistence;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import org.springframework.data.jpa.domain.Specification;
 
 import com.leydata.backend.entity.Templates;
 
 public class TemplateSpecifications {
+
+    public static Specification<Templates> hasDomainId(UUID domainId) {
+        return (root, query, cb) -> domainId == null ? null :
+            cb.equal(root.get("domainId"), domainId);
+    }
 
     public static Specification<Templates> hasTemplateKey(String templateKey) {
         return (root, query, cb) -> templateKey == null ? null :

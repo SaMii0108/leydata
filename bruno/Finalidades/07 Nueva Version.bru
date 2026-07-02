@@ -1,0 +1,24 @@
+meta {
+  name: Nueva Version de Finalidad
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/purposes/<uuid-purpose>/new-version
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Crea una nueva versión de una finalidad bloqueada (locked = true).
+  La versión anterior pasa a estado SUPERSEDED en la misma transacción.
+  La nueva versión hereda purposeFamilyId y code, con version + 1 y status = ACTIVE.
+  Si la finalidad NO está bloqueada, usar PUT /api/purposes/{id} en su lugar.
+  Lanza 409 CONFLICT si locked = false (PurposeNotLockedException).
+  Requiere rol DPO o ADMIN.
+}

@@ -1,23 +1,27 @@
 package com.leydata.backend.agreement.application.service;
 
 import com.leydata.backend.agreement.application.dto.*;
+import com.leydata.backend.agreement.domain.event.AgreementRevokedEvent;
 import com.leydata.backend.agreement.domain.exception.AgreementNotFoundException;
-import com.leydata.backend.agreement.infrastructure.persistence.AgreementIntegrityLogRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementMetadataRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementsPurposesRepository;
 import com.leydata.backend.agreement.infrastructure.persistence.AgreementsRepository;
 import com.leydata.backend.audit.application.dto.AuditContext;
 import com.leydata.backend.audit.application.service.AuditService;
 import com.leydata.backend.entity.*;
+import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
+import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
+import com.leydata.backend.purposedatacategory.infrastructure.persistence.RetentionPolicyRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.repository.DataSubjectsRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.template.infrastructure.persistence.TemplatePurposesRepository;
 import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,7 +43,6 @@ public class AgreementService {
     private final AgreementsRepository agreementsRepo;
     private final AgreementsPurposesRepository agreementsPurposesRepo;
     private final AgreementMetadataRepository agreementMetadataRepo;
-    private final AgreementIntegrityLogRepository integrityLogRepo;
 
     private final DataSubjectsRepository dataSubjectsRepo;
     private final TemplatesRepository templatesRepo;
@@ -47,10 +50,13 @@ public class AgreementService {
     private final PrivacyDocumentsRepository privacyDocumentsRepo;
     private final DocumentPurposesRepository documentPurposesRepo;
     private final PurposesRepository purposesRepo;
+    private final PurposeDataCategoryRepository purposeDataCategoryRepo;
+    private final RetentionPolicyRepository retentionPolicyRepo;
 
     private final AuditService auditService;
     private final SecurityContextHelper securityContextHelper;
     private final jakarta.persistence.EntityManager entityManager;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ── CREACIÓN ─────────────────────────────────────────────────────────────────
 
@@ -60,9 +66,22 @@ public class AgreementService {
         // Se normaliza acá para que el hash calculado en memoria coincida con el que se relee de la BD.
         ipOrigin = normalizeIp(ipOrigin);
 
-        DataSubjects dataSubject = dataSubjectsRepo.findById(req.getDataSubjectId())
-                .orElseThrow(() -> new BusinessValidationException(
-                        "El data subject " + req.getDataSubjectId() + " no existe"));
+        DataSubjects dataSubject;
+        if (req.getDataSubjectId() != null) {
+            dataSubject = dataSubjectsRepo.findById(req.getDataSubjectId())
+                    .orElseThrow(() -> new BusinessValidationException(
+                            "El data subject " + req.getDataSubjectId() + " no existe"));
+        } else if (req.getSubjectIdentifier() != null && !req.getSubjectIdentifier().isBlank()) {
+            dataSubject = dataSubjectsRepo.findByIdentifier(req.getSubjectIdentifier())
+                    .orElseGet(() -> {
+                        DataSubjects s = new DataSubjects();
+                        s.setIdentifier(req.getSubjectIdentifier());
+                        s.setCreatedAt(java.time.LocalDateTime.now());
+                        return dataSubjectsRepo.save(s);
+                    });
+        } else {
+            throw new BusinessValidationException("Se requiere dataSubjectId o subjectIdentifier");
+        }
 
         Templates template = templatesRepo.findById(req.getTemplateId())
                 .orElseThrow(() -> new BusinessValidationException(
@@ -73,9 +92,17 @@ public class AgreementService {
                     "Solo se puede crear un agreement contra un template ACTIVE");
         }
 
-        PrivacyDocuments document = privacyDocumentsRepo.findById(req.getDocumentId())
-                .orElseThrow(() -> new BusinessValidationException(
-                        "El documento " + req.getDocumentId() + " no existe"));
+        PrivacyDocuments document;
+        if (req.getDocumentId() != null) {
+            document = privacyDocumentsRepo.findById(req.getDocumentId())
+                    .orElseThrow(() -> new BusinessValidationException(
+                            "El documento " + req.getDocumentId() + " no existe"));
+        } else {
+            document = privacyDocumentsRepo
+                    .findByTemplateIdAndStatusAndIsActiveTrue(template.getId(), DocumentStatus.PUBLISHED)
+                    .orElseThrow(() -> new BusinessValidationException(
+                            "El template " + template.getId() + " no tiene un documento publicado asociado"));
+        }
 
         // Regla 4: el set de purposeId del request debe coincidir exactamente con las purposes
         // visibles del template (ni falta ni sobra ninguna)
@@ -161,7 +188,7 @@ public class AgreementService {
             ap.setPurposeHash(purpose.getHashSha256()); // Regla 7
             ap.setLegalBasisCode(purpose.getLegalBasis() != null ? purpose.getLegalBasis().getCode() : null);
             ap.setStatus("ACTIVE");
-            ap.setExpiresAt(null); // Regla 6.1: pendiente del futuro cálculo por política de retención
+            ap.setExpiresAt(calculateExpiresAt(decision.getPurposeId(), now));
             ap.setCreatedAt(now);
 
             // Cadena de hash propia de AGREEMENTS_PURPOSES (Regla 17)
@@ -226,6 +253,48 @@ public class AgreementService {
                 .build());
     }
 
+    // ── REVOCACIÓN EXPLÍCITA (llamada por el Orquestador) ────────────────────────
+
+    @Transactional
+    public AgreementResponse revoke(UUID agreementId, String subjectId, String realIp) {
+        Agreements agreement = findOrThrow(agreementId);
+
+        if (!"ACTIVE".equals(agreement.getStatus())) {
+            throw new IllegalStateException("Solo se puede revocar un agreement en estado ACTIVE");
+        }
+
+        // Validar que el agreement pertenece al subjectId opaco enviado por el Orquestador
+        DataSubjects dataSubject = dataSubjectsRepo.findById(agreement.getDataSubjectId())
+                .orElseThrow(() -> new IllegalStateException("DataSubject no encontrado para este agreement"));
+        if (!dataSubject.getIdentifier().equals(subjectId)) {
+            throw new IllegalStateException("El agreement no pertenece al subjectId indicado");
+        }
+
+        agreement.setStatus("REVOKED");
+        agreementsRepo.save(agreement);
+
+        List<AgreementsPurposes> purposes = agreementsPurposesRepo.findByAgreementId(agreementId);
+        purposes.forEach(ap -> ap.setStatus("REVOKED"));
+        agreementsPurposesRepo.saveAll(purposes);
+
+        String actorId = resolveActorIdOrNull();
+        auditService.log(AuditContext.builder()
+                .tableName("agreements")
+                .recordId(agreementId)
+                .action("REVOCAR_AGREEMENT")
+                .oldData(Map.of("status", "ACTIVE"))
+                .newData(Map.of("status", "REVOKED", "revokedBySubject", subjectId, "ipAddress", realIp != null ? realIp : "unknown"))
+                .actorId(actorId)
+                .actorRole(actorId != null ? securityContextHelper.getActorRole() : "ORCHESTRATOR")
+                .build());
+
+        // Publica el evento — el listener elimina Redis DESPUÉS del commit (AFTER_COMMIT)
+        List<UUID> purposeIds = purposes.stream().map(AgreementsPurposes::getPurposeId).toList();
+        eventPublisher.publishEvent(new AgreementRevokedEvent(dataSubject.getIdentifier(), purposeIds));
+
+        return toResponse(agreement);
+    }
+
     // ── CONSULTA ─────────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
@@ -261,47 +330,223 @@ public class AgreementService {
                 .toList();
     }
 
+    // ── CICLO DE VIDA (para el Orquestador) ──────────────────────────────────────
+
+    /**
+     * CHECK con estado completo del ciclo de vida: ALLOWED, EXPIRED, REQUIRES_RECONSENT, PENDING.
+     * Usa subjectIdentifier (string opaco del CRM) y templateKey + domainId.
+     */
+    @Transactional(readOnly = true)
+    public ConsentLifecycleResponse getLifecycleStatus(String subjectIdentifier, UUID domainId, String templateKey) {
+        Templates currentTemplate = templatesRepo
+                .findByDomainIdAndTemplateKeyAndIsActiveTrue(domainId, templateKey.toUpperCase())
+                .orElseThrow(() -> new BusinessValidationException(
+                        "No hay una versión activa para el template " + templateKey + " en este dominio"));
+
+        Optional<Agreements> agreementOpt = agreementsRepo
+                .findActiveBySubjectIdentifierAndTemplateId(subjectIdentifier, currentTemplate.getId());
+
+        // Si el acuerdo existía en una versión anterior (ya fue re-consented y el nuevo es el activo)
+        // buscamos también en templates anteriores del mismo key
+        if (agreementOpt.isEmpty()) {
+            // Buscar en versiones anteriores del mismo templateKey para detectar REQUIRES_RECONSENT
+            List<Templates> allVersions = templatesRepo
+                    .findByDomainIdAndTemplateKeyOrderByVersionDesc(domainId, templateKey.toUpperCase());
+            for (Templates olderTemplate : allVersions) {
+                if (olderTemplate.getId().equals(currentTemplate.getId())) continue;
+                Optional<Agreements> older = agreementsRepo
+                        .findActiveBySubjectIdentifierAndTemplateId(subjectIdentifier, olderTemplate.getId());
+                if (older.isPresent()) {
+                    agreementOpt = older;
+                    break;
+                }
+            }
+        }
+
+        if (agreementOpt.isEmpty()) {
+            return ConsentLifecycleResponse.builder()
+                    .subjectIdentifier(subjectIdentifier)
+                    .templateKey(templateKey)
+                    .status("PENDING")
+                    .currentTemplateVersion(currentTemplate.getVersion())
+                    .build();
+        }
+
+        Agreements agreement = agreementOpt.get();
+        List<AgreementsPurposes> purposes = agreementsPurposesRepo.findByAgreementId(agreement.getId());
+        LocalDateTime now = LocalDateTime.now();
+
+        // REQUIRES_RECONSENT: template activo es más nuevo Y tiene forceReconsent=true
+        boolean requiresReconsent = Boolean.TRUE.equals(currentTemplate.getForceReconsent())
+                && agreement.getTemplateVersion() < currentTemplate.getVersion();
+
+        if (requiresReconsent) {
+            return ConsentLifecycleResponse.builder()
+                    .subjectIdentifier(subjectIdentifier)
+                    .templateKey(templateKey)
+                    .status("REQUIRES_RECONSENT")
+                    .agreementId(agreement.getId())
+                    .agreementTemplateVersion(agreement.getTemplateVersion())
+                    .currentTemplateVersion(currentTemplate.getVersion())
+                    .build();
+        }
+
+        // EXPIRED: alguna purpose ACTIVE tiene expiresAt en el pasado
+        LocalDateTime earliestExpiry = purposes.stream()
+                .filter(p -> "ACTIVE".equals(p.getStatus()) && p.getExpiresAt() != null)
+                .map(AgreementsPurposes::getExpiresAt)
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+
+        if (earliestExpiry != null && earliestExpiry.isBefore(now)) {
+            return ConsentLifecycleResponse.builder()
+                    .subjectIdentifier(subjectIdentifier)
+                    .templateKey(templateKey)
+                    .status("EXPIRED")
+                    .agreementId(agreement.getId())
+                    .agreementTemplateVersion(agreement.getTemplateVersion())
+                    .currentTemplateVersion(currentTemplate.getVersion())
+                    .earliestExpiresAt(earliestExpiry)
+                    .build();
+        }
+
+        return ConsentLifecycleResponse.builder()
+                .subjectIdentifier(subjectIdentifier)
+                .templateKey(templateKey)
+                .status("ALLOWED")
+                .agreementId(agreement.getId())
+                .agreementTemplateVersion(agreement.getTemplateVersion())
+                .currentTemplateVersion(currentTemplate.getVersion())
+                .earliestExpiresAt(earliestExpiry)
+                .build();
+    }
+
+    /**
+     * Resumen de estado de todas las purposes de un titular en un dominio.
+     * Usado por el portal del titular para pintar los switches.
+     */
+    @Transactional(readOnly = true)
+    public List<SubjectSummaryResponse> getSubjectSummary(String subjectIdentifier, UUID domainId) {
+        List<Agreements> agreements = agreementsRepo
+                .findActiveBySubjectIdentifierAndDomainId(subjectIdentifier, domainId);
+
+        LocalDateTime now = LocalDateTime.now();
+
+        return agreements.stream().map(agreement -> {
+            List<AgreementsPurposes> purposes = agreementsPurposesRepo.findByAgreementId(agreement.getId());
+            Templates template = templatesRepo.findById(agreement.getTemplateId()).orElse(null);
+
+            List<PurposeSummaryItem> purposeItems = purposes.stream().map(ap -> {
+                String purposeStatus = ap.getExpiresAt() != null && ap.getExpiresAt().isBefore(now)
+                        ? "EXPIRED"
+                        : ap.getStatus();
+                return PurposeSummaryItem.builder()
+                        .purposeId(ap.getPurposeId())
+                        .purposeCode(ap.getPurposeCode())
+                        .purposeName(ap.getPurposeName())
+                        .accepted(Boolean.TRUE.equals(ap.getAccepted()))
+                        .status(purposeStatus)
+                        .expiresAt(ap.getExpiresAt())
+                        .acceptedAt(ap.getCreatedAt())
+                        .required(Boolean.TRUE.equals(ap.getPurposeRequired()))
+                        .revocable(Boolean.TRUE.equals(ap.getPurposeRevocable()))
+                        .build();
+            }).toList();
+
+            return SubjectSummaryResponse.builder()
+                    .subjectIdentifier(subjectIdentifier)
+                    .domainId(domainId)
+                    .agreementId(agreement.getId())
+                    .templateId(agreement.getTemplateId())
+                    .templateKey(template != null ? template.getTemplateKey() : null)
+                    .templateVersion(agreement.getTemplateVersion())
+                    .documentId(agreement.getDocumentId())
+                    .purposes(purposeItems)
+                    .build();
+        }).toList();
+    }
+
+    /**
+     * Lista de purposes vencidas pendientes de eliminación de datos en el CRM.
+     * Cubre el deber de supresión de la Ley 21.719.
+     */
+    @Transactional(readOnly = true)
+    public List<PendingDeletionItem> getPendingDeletions(UUID domainId) {
+        LocalDateTime now = LocalDateTime.now();
+        List<AgreementsPurposes> expired = agreementsPurposesRepo.findExpiredByDomainId(domainId, now);
+
+        return expired.stream().map(ap -> {
+            Agreements agreement = agreementsRepo.findById(ap.getAgreementId()).orElse(null);
+            DataSubjects subject = agreement != null
+                    ? dataSubjectsRepo.findById(agreement.getDataSubjectId()).orElse(null)
+                    : null;
+
+            // Resolver anonymizeAfter desde la política de retención de la purpose
+            boolean anonymize = purposeDataCategoryRepo.findByPurposeId(ap.getPurposeId()).stream()
+                    .anyMatch(pdc -> {
+                        var policy = retentionPolicyRepo.findByPurposeDataCategoryId(pdc.getId());
+                        return policy.map(p -> Boolean.TRUE.equals(p.getAnonymizeAfter())).orElse(false);
+                    });
+
+            return PendingDeletionItem.builder()
+                    .subjectIdentifier(subject != null ? subject.getIdentifier() : null)
+                    .purposeId(ap.getPurposeId())
+                    .purposeCode(ap.getPurposeCode())
+                    .purposeName(ap.getPurposeName())
+                    .agreementId(ap.getAgreementId())
+                    .expiredAt(ap.getExpiresAt())
+                    .anonymizeAfter(anonymize)
+                    .build();
+        }).toList();
+    }
+
+    /**
+     * El CRM confirma que eliminó los datos del titular para una purpose vencida.
+     * Marca la fila como EXPIRED y registra en auditoría (evidencia ante fiscalización).
+     */
+    @Transactional
+    public void confirmDeletion(ConfirmDeletionRequest req) {
+        DataSubjects subject = dataSubjectsRepo.findByIdentifier(req.getSubjectIdentifier())
+                .orElseThrow(() -> new BusinessValidationException(
+                        "Titular no encontrado: " + req.getSubjectIdentifier()));
+
+        // Buscar todos los acuerdos ACTIVE del titular y encontrar la purpose correcta
+        List<Agreements> agreements = agreementsRepo.findByDataSubjectIdOrderByCreatedAtDesc(subject.getId());
+        AgreementsPurposes target = agreements.stream()
+                .flatMap(a -> agreementsPurposesRepo.findByAgreementId(a.getId()).stream())
+                .filter(ap -> req.getPurposeId().equals(ap.getPurposeId()) && "ACTIVE".equals(ap.getStatus()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessValidationException(
+                        "No se encontró purpose activa para eliminar: " + req.getPurposeId()));
+
+        target.setStatus("EXPIRED");
+        agreementsPurposesRepo.save(target);
+
+        LocalDateTime deletedAt = req.getDeletedAt() != null ? req.getDeletedAt() : LocalDateTime.now();
+        auditService.log(AuditContext.builder()
+                .tableName("agreements_purposes")
+                .recordId(target.getId())
+                .action("CONFIRMAR_ELIMINACION_DATO")
+                .oldData(Map.of("status", "ACTIVE"))
+                .newData(Map.of(
+                        "status",      "EXPIRED",
+                        "purposeCode", target.getPurposeCode(),
+                        "deletedAt",   deletedAt.toString(),
+                        "subjectId",   req.getSubjectIdentifier()))
+                .actorId(resolveActorIdOrNull())
+                .actorRole("ORCHESTRATOR")
+                .build());
+    }
+
     // ── INTEGRIDAD ───────────────────────────────────────────────────────────────
 
-    public AgreementIntegrityLogResponse verifyIntegrity(UUID agreementId, String checkType, UUID actorId) {
+    /** Recalcula el hash combinado sin escribir log — usado por IntegrityVerifier. */
+    @Transactional(readOnly = true)
+    public String recalculateHash(UUID agreementId) {
         Agreements agreement = findOrThrow(agreementId);
         List<AgreementsPurposes> purposes = agreementsPurposesRepo.findByAgreementId(agreementId);
         AgreementMetadata metadata = agreementMetadataRepo.findByAgreementId(agreementId).orElse(null);
-
-        String storedHash = agreement.getHashSha256();
-        String recalculatedHash = computeAgreementHash(agreement, purposes, metadata);
-        boolean isValid = Objects.equals(storedHash, recalculatedHash);
-
-        AgreementIntegrityLog log = new AgreementIntegrityLog();
-        log.setAgreementId(agreementId);
-        log.setStoredHash(storedHash);
-        log.setRecalculatedHash(recalculatedHash);
-        log.setIsValid(isValid);
-        log.setCheckType(checkType);
-        log.setCreatedAt(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
-        log.setErrorDetail(isValid ? null : "El hash recalculado no coincide con el almacenado");
-        log.setCreatedBy(actorId);
-
-        String previousLogHash = integrityLogRepo.findTopByOrderByCreatedAtDesc()
-                .map(AgreementIntegrityLog::getHashSha256)
-                .orElse(null);
-        log.setPreviousHashSha256Id(previousLogHash);
-        log.setHashSha256(computeIntegrityLogRowHash(log));
-
-        return AgreementIntegrityLogResponse.from(integrityLogRepo.save(log));
-    }
-
-    @Transactional(readOnly = true)
-    public List<AgreementIntegrityLogResponse> getIntegrityLog(UUID agreementId) {
-        findOrThrow(agreementId);
-        return integrityLogRepo.findByAgreementIdOrderByCreatedAtDesc(agreementId)
-                .stream().map(AgreementIntegrityLogResponse::from).toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<AgreementIntegrityLogResponse> listFailedVerifications() {
-        return integrityLogRepo.findByIsValidFalse()
-                .stream().map(AgreementIntegrityLogResponse::from).toList();
+        return computeAgreementHash(agreement, purposes, metadata);
     }
 
     // ── HASHING ──────────────────────────────────────────────────────────────────
@@ -359,16 +604,6 @@ public class AgreementService {
         return sha256(content);
     }
 
-    private String computeIntegrityLogRowHash(AgreementIntegrityLog log) {
-        String content = String.join("|",
-                String.valueOf(log.getAgreementId()),
-                String.valueOf(log.getStoredHash()),
-                String.valueOf(log.getRecalculatedHash()),
-                String.valueOf(log.getIsValid()),
-                String.valueOf(log.getCheckType()),
-                String.valueOf(log.getCreatedAt()));
-        return sha256(content);
-    }
 
     private String sha256(String content) {
         try {
@@ -404,6 +639,29 @@ public class AgreementService {
     private Agreements findOrThrow(UUID id) {
         return agreementsRepo.findById(id)
                 .orElseThrow(() -> new AgreementNotFoundException(id));
+    }
+
+    /**
+     * Calcula el expiresAt de una purpose tomando el período de retención más corto
+     * entre todas sus categorías de dato (principio de minimización, Ley 21.719).
+     */
+    private LocalDateTime calculateExpiresAt(UUID purposeId, LocalDateTime base) {
+        return purposeDataCategoryRepo.findByPurposeId(purposeId).stream()
+                .map(pdc -> retentionPolicyRepo.findByPurposeDataCategoryId(pdc.getId()))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .filter(p -> Boolean.TRUE.equals(p.getIsActive()))
+                .map(p -> applyRetentionPeriod(base, p.getRetentionPeriod(), p.getRetentionUnit()))
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    private LocalDateTime applyRetentionPeriod(LocalDateTime base, Integer period, String unit) {
+        return switch (unit.toUpperCase()) {
+            case "MONTHS" -> base.plusMonths(period);
+            case "YEARS"  -> base.plusYears(period);
+            default       -> base.plusDays(period);
+        };
     }
 
     /** La creación de un agreement no siempre la dispara un usuario autenticado (puede ser el futuro orquestador). */

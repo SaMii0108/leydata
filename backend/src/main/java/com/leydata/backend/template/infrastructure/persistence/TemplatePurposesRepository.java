@@ -16,4 +16,5 @@ public interface TemplatePurposesRepository
     boolean existsByTemplate_IdAndOrderPosition(UUID templateId, Integer orderPosition);
     boolean existsByTemplate_IdAndIsVisibleTrue(UUID templateId);
     void deleteByTemplate_IdAndPurpose_Id(UUID templateId, UUID purposeId);
+    List<TemplatePurposes> findByPurpose_Id(UUID purposeId);
 }

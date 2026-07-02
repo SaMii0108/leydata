@@ -12,6 +12,7 @@ import lombok.Value;
 @Builder
 public class TemplateResponse {
     UUID id;
+    UUID domainId;
     String templateKey;
     Integer version;
     String name;
@@ -26,10 +27,12 @@ public class TemplateResponse {
     String approvedBy;
     OffsetDateTime approvedAt;
     OffsetDateTime activationDate;
+    Boolean forceReconsent;
 
     public static TemplateResponse from(Templates t) {
         return TemplateResponse.builder()
             .id(t.getId())
+            .domainId(t.getDomainId())
             .templateKey(t.getTemplateKey())
             .version(t.getVersion())
             .name(t.getName())
@@ -43,6 +46,7 @@ public class TemplateResponse {
             .approvedBy(t.getApprovedBy())
             .approvedAt(t.getApprovedAt())
             .activationDate(t.getActivationDate())
+            .forceReconsent(t.getForceReconsent())
             .build();
     }
 

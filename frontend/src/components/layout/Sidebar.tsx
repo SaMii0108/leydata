@@ -60,12 +60,6 @@ const IconDoc = () => (
     <line x1="9" y1="17" x2="13" y2="17"/>
   </svg>
 );
-const IconCheckCircle = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-    <polyline points="22 4 12 14.01 9 11.01"/>
-  </svg>
-);
 const IconAudit = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -84,6 +78,20 @@ const IconUser = () => (
     <circle cx="12" cy="7" r="4"/>
   </svg>
 );
+const IconRequest = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="12" y1="18" x2="12" y2="12"/>
+    <line x1="9" y1="15" x2="15" y2="15"/>
+  </svg>
+);
+const IconCheckSquare = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 11 12 14 22 4"/>
+    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+  </svg>
+);
 const IconLayers = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="12 2 2 7 12 12 22 7 12 2"/>
@@ -93,17 +101,19 @@ const IconLayers = () => (
 );
 
 const navItems: NavItem[] = [
-  { to: '/',                       label: 'Métricas Generales',  icon: <IconGrid />,        roles: ['ADMIN', 'DPO'] },
-  { to: '/consentimientos',        label: 'Consentimientos',     icon: <IconList />,        roles: ['DPO', 'JEFE_DOMINIO'] },
-  { to: '/usuarios',               label: 'Usuarios',            icon: <IconUsers />,       roles: ['ADMIN'] },
-  { to: '/dominios',               label: 'Dominios',            icon: <IconLayers />,      roles: ['ADMIN'] },
-  { to: '/auditoria',              label: 'Auditoría',           icon: <IconAudit />,       roles: ['ADMIN', 'DPO'] },
-  { to: '/cumplimiento',           label: 'Cumplimiento Legal',  icon: <IconShield />,      roles: ['ADMIN', 'DPO'] },
-  { to: '/finalidades',            label: 'Mis Solicitudes',     icon: <IconTarget />,      roles: ['JEFE_DOMINIO'] },
-  { to: '/finalidades/aprobacion', label: 'Finalidades',         icon: <IconCheckCircle />, roles: ['DPO'] },
-  { to: '/documentos',             label: 'Documentos',          icon: <IconDoc />,         roles: ['DPO'] },
-  { to: '/plantillas',             label: 'Plantillas',          icon: <IconPalette />,     roles: ['DPO'] },
-  { to: '/perfil',                 label: 'Mi Perfil',           icon: <IconUser />,        roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
+  { to: '/',                       label: 'Métricas Generales',        icon: <IconGrid />,        roles: ['ADMIN', 'DPO'] },
+  { to: '/consentimientos',        label: 'Consentimientos',           icon: <IconList />,        roles: ['DPO', 'JEFE_DOMINIO'] },
+  { to: '/solicitudes',            label: 'Mis Solicitudes',           icon: <IconRequest />,     roles: ['JEFE_DOMINIO'] },
+  { to: '/finalidades',            label: 'Finalidades',               icon: <IconTarget />,      roles: ['JEFE_DOMINIO'] },
+  { to: '/usuarios',               label: 'Usuarios',                  icon: <IconUsers />,       roles: ['ADMIN'] },
+  { to: '/dominios',               label: 'Dominios',                  icon: <IconLayers />,      roles: ['ADMIN'] },
+  { to: '/auditoria',              label: 'Auditoría',                 icon: <IconAudit />,       roles: ['ADMIN', 'DPO'] },
+  { to: '/cumplimiento',           label: 'Cumplimiento Legal',        icon: <IconShield />,      roles: ['ADMIN', 'DPO'] },
+  { to: '/aprobacion-solicitudes', label: 'Aprobación de Solicitudes', icon: <IconCheckSquare />, roles: ['DPO'] },
+  { to: '/finalidades',            label: 'Finalidades',               icon: <IconTarget />,      roles: ['DPO'] },
+  { to: '/documentos',             label: 'Documentos',                icon: <IconDoc />,         roles: ['DPO'] },
+  { to: '/plantillas',             label: 'Plantillas',                icon: <IconPalette />,     roles: ['DPO'] },
+  { to: '/perfil',                 label: 'Mi Perfil',                 icon: <IconUser />,        roles: ['ADMIN', 'DPO', 'JEFE_DOMINIO'] },
 ];
 
 const ROLE_COLOR: Record<Role, string> = {

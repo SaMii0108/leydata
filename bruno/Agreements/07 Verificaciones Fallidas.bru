@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/api/agreements/integrity-log/failed
+  url: {{baseUrl}}/api/audit/integrity/failed?entityType=AGREEMENT
   body: none
   auth: bearer
 }
@@ -15,7 +15,8 @@ auth:bearer {
 }
 
 docs {
-  Lista todas las verificaciones de integridad fallidas (isValid = false) de todos los agreements.
-  Útil para auditoría y detección de manipulación de datos.
-  Autenticado. Cualquier rol.
+  Lista todas las verificaciones de integridad fallidas (isValid = false) de agreements.
+  Sin filtro entityType devuelve fallos de todas las entidades.
+  Endpoint movido a /api/audit/integrity/failed (feature/trazabilidad).
+  Requiere rol ADMIN.
 }

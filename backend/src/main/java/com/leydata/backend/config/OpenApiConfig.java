@@ -177,9 +177,12 @@ public class OpenApiConfig {
                                 5. `DPO` crea un **Template** de consentimiento (`/api/templates`), lo vincula a sus Finalidades, lo aprueba y activa → SHA-256 sellado
                                 6. `DPO` crea un Documento de Privacidad, vincula la Finalidad, lo publica → PDF con SHA-256
                                 7. `JEFE_DOMINIO` recibe notificación de publicación
-                                8. El orquestador consulta `/api/agreements/active` para saber si el titular ya consintió
-                                9. Si no hay consentimiento activo, el titular firma → se crea el **Agreement** (`/api/agreements`) con hash SHA-256 encadenado
-                                10. Si el titular ya tenía un ACTIVE para el mismo template, se revoca automáticamente y se crea uno nuevo (reconsent)
+                                8. El orquestador obtiene los textos legales del template vía `/consent/template-content?templateKey=` y los muestra al titular
+                                9. El orquestador verifica el estado del ciclo de vida con `/consent/check` (cache Redis → backend `lifecycle-check` si miss)
+                                10. Si el estado es `PENDING`, el titular firma → se crea el **Agreement** (`/api/agreements`) con hash SHA-256 encadenado
+                                11. Si el estado es `REQUIRES_RECONSENT`, el titular debe reconsentir con el texto del template actualizado
+                                12. Si el estado es `EXPIRED`, el sistema cliente recibe la señal para iniciar la eliminación de datos y luego pedir reconsent
+                                13. Si el titular ya tenía un ACTIVE para el mismo template, se revoca automáticamente y se crea uno nuevo (reconsent)
 
                                 ---
 
@@ -195,7 +198,7 @@ public class OpenApiConfig {
                                 | `GET` | `/api/templates/active/{templateKey}` | Versión activa del TEMPLATE_KEY |
                                 | `GET` | `/api/templates/{id}/verify` | Verificar integridad SHA-256 |
                                 | `POST` | `/api/templates/{id}/approve` | Aprobar template (requiere ≥1 purpose visible) |
-                                | `POST` | `/api/templates/{id}/activate` | Activar → desactiva versión anterior |
+                                | `POST` | `/api/templates/{id}/activate` | Activar → desactiva versión anterior. Body opcional: `{ "forceReconsent": true }` para forzar reconsent en todos los acuerdos existentes con versión anterior |
                                 | `POST` | `/api/templates/{id}/purposes` | Vincular purpose al template (solo DRAFT) |
                                 | `DELETE` | `/api/templates/{id}/purposes/{purposeId}` | Desvincular purpose (solo DRAFT) |
                                 | `GET` | `/api/templates/{id}/purposes` | Listar purposes del template |
@@ -215,11 +218,19 @@ public class OpenApiConfig {
                                 | `GET` | `/api/agreements` | Listar agreements (filtros: dataSubjectId, templateId, status) |
                                 | `GET` | `/api/agreements/{id}` | Obtener agreement con detalle de purposes |
                                 | `GET` | `/api/agreements/active?dataSubjectId=&templateId=` | Verificar si hay consentimiento ACTIVE para un titular+template |
-                                | `POST` | `/api/agreements/{id}/verify-integrity` | Verificar integridad SHA-256 bajo demanda |
-                                | `GET` | `/api/agreements/{id}/integrity-log` | Historial de verificaciones de integridad del agreement |
-                                | `GET` | `/api/agreements/integrity-log/failed` | Listar todas las verificaciones fallidas (isValid=false) |
+                                | `PATCH` | `/api/agreements/{id}/revoke` | Revocar un agreement activo |
+                                | `GET` | `/api/agreements/lifecycle-check?subjectIdentifier=&domainId=&templateKey=` | Estado del ciclo de vida: ALLOWED, EXPIRED, REQUIRES_RECONSENT o PENDING |
+                                | `GET` | `/api/agreements/subject-summary?subjectIdentifier=&domainId=` | Estado de todas las finalidades del titular en un dominio (portal de preferencias) |
+                                | `GET` | `/api/agreements/pending-deletions?domainId=` | Finalidades vencidas cuyos datos aún no fueron eliminados |
+                                | `POST` | `/api/agreements/confirm-deletion` | Confirma eliminación de datos por parte del sistema cliente (registro en audit log) → 204 |
 
                                 **Estados del agreement:** `ACTIVE | REVOKED | EXPIRED`
+
+                                **Estados del ciclo de vida (`lifecycle-check`):**
+                                - `ALLOWED` — consentimiento activo y vigente
+                                - `EXPIRED` — vencido según política de retención de la finalidad (`expiresAt < now`)
+                                - `REQUIRES_RECONSENT` — el template tiene versión nueva con `forceReconsent = true`
+                                - `PENDING` — no existe consentimiento para este titular y finalidad
 
                                 Cada agreement encadena su SHA-256 al hash del agreement anterior (ledger de integridad).
                                 Si se crea un nuevo agreement para el mismo `(dataSubjectId, templateId)` con uno ACTIVE existente,
@@ -242,6 +253,31 @@ public class OpenApiConfig {
                                 ```
 
                                 Accesible por cualquier rol autenticado.
+
+                                ---
+
+                                ## Integridad de entidades y trazabilidad
+
+                                | Método | URL | Descripción |
+                                |---|---|---|
+                                | `POST` | `/api/audit/integrity/verify` | Verificar integridad SHA-256 de cualquier entidad (AGREEMENT, TEMPLATE, DOCUMENT, PURPOSE) |
+                                | `GET` | `/api/audit/integrity/log?entityType=&entityId=` | Historial de verificaciones de una entidad |
+                                | `GET` | `/api/audit/integrity/failed?entityType=` | Verificaciones fallidas (isValid=false); sin filtro: todas las entidades |
+                                | `GET` | `/api/audit/trace/agreement/{id}` | Traza completa: template + documento + purposes con drift check; devuelve overallIntegrity: OK/MISMATCH/PARTIAL |
+
+                                Requiere rol ADMIN.
+
+                                ---
+
+                                ## Finalidades — versionado
+
+                                | Método | URL | Descripción |
+                                |---|---|---|
+                                | `POST` | `/api/purposes/{id}/new-version` | Nueva versión de una finalidad bloqueada; la anterior pasa a SUPERSEDED |
+                                | `GET` | `/api/purposes/family/{purposeFamilyId}` | Historial de versiones de una familia, orden descendente |
+                                | `GET` | `/api/purposes/active/{purposeFamilyId}` | Versión ACTIVE de una familia |
+
+                                Requiere rol DPO o ADMIN. Lanza 409 CONFLICT si la finalidad no está bloqueada (`PurposeNotLockedException`).
                                 """)
                         .contact(new Contact()
                                 .name("Equipo Ley Data")

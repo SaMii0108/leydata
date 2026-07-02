@@ -6,7 +6,7 @@ meta {
 
 post {
   url: {{baseUrl}}/api/templates/<uuid-template>/activate
-  body: none
+  body: json
   auth: bearer
 }
 
@@ -14,10 +14,18 @@ auth:bearer {
   token: {{token}}
 }
 
+body:json {
+  {
+    "forceReconsent": false
+  }
+}
+
 docs {
   Activa un template en estado APPROVED.
   Calcula y sella el hash SHA-256 sobre el contenido y sus purposes.
   Desactiva automáticamente la versión anterior del mismo templateKey (si existía).
   Transición: APPROVED → ACTIVE
+  Body opcional. forceReconsent=true marca el template para exigir reconsent a titulares con
+  agreements de versiones anteriores — el orquestador detectará REQUIRES_RECONSENT en el próximo check.
   Requiere rol DPO o ADMIN.
 }

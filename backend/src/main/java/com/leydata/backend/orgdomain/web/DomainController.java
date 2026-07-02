@@ -62,6 +62,19 @@ public class DomainController {
         return Map.of("status", "success", "domains", domains);
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'DPO')")
+    @GetMapping("/active")
+    @Operation(summary = "Listar dominios activos [ADMIN, DPO]",
+            description = "Devuelve solo los dominios activos. Usado por el DPO para seleccionar dominio al crear una finalidad.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista de dominios activos"),
+            @ApiResponse(responseCode = "403", description = "Sin rol ADMIN o DPO")
+    })
+    public Map<String, Object> getActiveDomains() {
+        List<DomainResponse> domains = domainService.getActiveDomains();
+        return Map.of("status", "success", "domains", domains);
+    }
+
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{domainId}/deactivate")
     @Operation(

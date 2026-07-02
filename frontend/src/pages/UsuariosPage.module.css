@@ -287,3 +287,258 @@
   margin: 0;
   font-style: italic;
 }
+
+/* Missing role/avatar colors */
+.avatar_jefe_dominio { background: #fef3c7; color: #d97706; }
+.role_jefe_dominio   { background: #fef3c7; color: #d97706; }
+
+/* Status badges */
+.statusBadge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.statusBadge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.status_active   { background: #d1fae5; color: #059669; }
+.status_inactive { background: #fef3c7; color: #d97706; }
+.status_blocked  { background: #fee2e2; color: #dc2626; }
+
+/* Table action buttons */
+.actionsCell {
+  white-space: nowrap;
+  position: sticky;
+  right: 0;
+  background: var(--color-surface);
+  box-shadow: -1px 0 0 var(--color-border);
+}
+
+.actionsTh {
+  position: sticky;
+  right: 0;
+  background: var(--color-bg);
+  box-shadow: -1px 0 0 var(--color-border);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.tableActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.actionBtn {
+  font-size: var(--text-xs);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.actionBtn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.actionBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.actionBtnDanger {
+  font-size: var(--text-xs);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #fecaca;
+  background: var(--color-surface);
+  color: var(--color-danger);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.actionBtnDanger:hover:not(:disabled) {
+  background: #fff5f5;
+  border-color: var(--color-danger);
+}
+.actionBtnDanger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Edit drawer */
+.drawer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.drawerUserInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drawerUserName {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.25;
+}
+
+.drawerUserEmail {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-family: monospace;
+}
+
+.drawerBody {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawerSection {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sectionTitle {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+}
+
+.drawerFooter {
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dangerZone {
+  padding: 16px 24px 20px;
+  border-top: 2px solid #fecaca;
+  background: #fff5f5;
+  flex-shrink: 0;
+}
+
+.dangerTitle {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: #dc2626;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+}
+
+.dangerActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Checkbox list */
+.checkboxList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.checkboxItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkboxItem input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* Helper text */
+.noteText {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
+.errorMsg {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  margin: 0;
+  padding: 10px 12px;
+  background: #fff5f5;
+  border-left: 3px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+}
+
+.successBanner {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-success);
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--color-success-bg, #d1fae5);
+  border-left: 3px solid var(--color-success);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.dangerNote {
+  color: #dc2626;
+  margin-top: 0;
+}
+
+/* Empty table row */
+.emptyRow td {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

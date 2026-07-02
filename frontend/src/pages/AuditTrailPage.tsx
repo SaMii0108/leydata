@@ -1,81 +1,147 @@
-import { useState, useMemo } from 'react';
-import { auditEvents } from '../utils/mockData';
-import type { AuditAction, AuditEvent } from '../utils/mockData';
-import Button from '../components/common/Button';
-import { ACTION_LABEL } from '../constants/labels';
+import { useState, useMemo, useEffect } from 'react';
+import { useAuth } from '../features/auth/AuthContext';
+import { getAuditLogs, ApiError, type AuditLogDto } from '../api/auditApi';
 import { formatDate, formatTime } from '../utils/formatters';
 import styles from './AuditTrailPage.module.css';
 
-const ALL_ACTIONS: AuditAction[] = ['granted', 'revoked', 'updated', 'viewed', 'exported', 'deleted'];
+type ActionCategory = 'all' | 'usuarios' | 'dominios' | 'finalidades' | 'solicitudes' | 'acuerdos';
 
-const ActionBadge = ({ action }: { action: AuditAction }) => (
-  <span className={[styles.badge, styles[`badge_${action}`]].join(' ')}>
-    <span className={styles.badgeDot} />
-    {ACTION_LABEL[action]}
-  </span>
-);
+const CATEGORY_LABELS: Record<ActionCategory, string> = {
+  all:         'Todos',
+  usuarios:    'Usuarios',
+  dominios:    'Dominios',
+  finalidades: 'Finalidades',
+  solicitudes: 'Solicitudes',
+  acuerdos:    'Acuerdos',
+};
 
-const ActionIcon = ({ action }: { action: AuditAction }) => {
-  const icons: Record<AuditAction, string> = {
-    granted:  '✓',
-    revoked:  '✕',
-    updated:  '↻',
-    viewed:   '◎',
-    exported: '↑',
-    deleted:  '⊗',
-  };
-  return (
-    <span className={[styles.actionIcon, styles[`icon_${action}`]].join(' ')}>
-      {icons[action]}
-    </span>
-  );
+const ALL_CATEGORIES: ActionCategory[] = ['all', 'usuarios', 'dominios', 'finalidades', 'solicitudes', 'acuerdos'];
+
+const matchesCategory = (log: AuditLogDto, cat: ActionCategory): boolean => {
+  if (cat === 'all') return true;
+  const a = log.action.toUpperCase();
+  const t = log.tableName.toLowerCase();
+  switch (cat) {
+    case 'usuarios':    return a.includes('USUARIO')    || t.includes('user');
+    case 'dominios':    return a.includes('DOMINIO')    || t.includes('domain');
+    case 'finalidades': return a.includes('FINALIDAD')  || t.includes('purpose');
+    case 'solicitudes': return a.includes('SOLICITUD')  || t.includes('request');
+    case 'acuerdos':    return a.includes('AGREEMENT')  || a.includes('CONSENTIMIENTO') || t.includes('agreement');
+    default: return true;
+  }
+};
+
+const actionBadgeClass = (action: string): string => {
+  const a = action.toUpperCase();
+  if (a.includes('CREAR') || a.includes('APROBAR'))                                      return styles.badge_granted;
+  if (a.includes('EDITAR') || a.includes('ACTUALIZAR'))                                  return styles.badge_updated;
+  if (a.includes('RECHAZAR') || a.includes('BLOQUEAR') ||
+      a.includes('DESACTIVAR') || a.includes('REVOCAR') || a.includes('ELIMINAR'))       return styles.badge_revoked;
+  if (a.includes('EXPORTAR'))                                                             return styles.badge_exported;
+  return styles.badge_viewed;
+};
+
+const actionIconClass = (action: string): string => {
+  const a = action.toUpperCase();
+  if (a.includes('CREAR') || a.includes('APROBAR'))                                      return styles.icon_granted;
+  if (a.includes('EDITAR') || a.includes('ACTUALIZAR'))                                  return styles.icon_updated;
+  if (a.includes('RECHAZAR') || a.includes('BLOQUEAR') ||
+      a.includes('DESACTIVAR') || a.includes('REVOCAR') || a.includes('ELIMINAR'))       return styles.icon_revoked;
+  if (a.includes('EXPORTAR'))                                                             return styles.icon_exported;
+  return styles.icon_viewed;
+};
+
+const actionIconChar = (action: string): string => {
+  const a = action.toUpperCase();
+  if (a.includes('CREAR') || a.includes('APROBAR'))    return '✓';
+  if (a.includes('EDITAR') || a.includes('ACTUALIZAR')) return '↻';
+  if (a.includes('RECHAZAR') || a.includes('BLOQUEAR') ||
+      a.includes('DESACTIVAR') || a.includes('REVOCAR') || a.includes('ELIMINAR')) return '✕';
+  if (a.includes('EXPORTAR')) return '↑';
+  return '◎';
 };
 
 const AuditTrailPage = () => {
-  const [search, setSearch]           = useState('');
-  const [actionFilter, setActionFilter] = useState<AuditAction | 'all'>('all');
+  const { accessToken } = useAuth();
+
+  const [logs, setLogs]               = useState<AuditLogDto[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [loadError, setLoadError]     = useState<string | null>(null);
+
+  const [search, setSearch]       = useState('');
+  const [category, setCategory]   = useState<ActionCategory>('all');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingData(true);
+    setLoadError(null);
+    getAuditLogs({ size: 100 }, accessToken)
+      .then((res) => { if (!cancelled) setLogs(res.logs); })
+      .catch((err) => {
+        if (!cancelled)
+          setLoadError(
+            err instanceof ApiError
+              ? err.message
+              : 'No se pudo cargar el registro de auditoría.',
+          );
+      })
+      .finally(() => { if (!cancelled) setLoadingData(false); });
+    return () => { cancelled = true; };
+  }, [accessToken]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return auditEvents.filter((e) => {
-      if (actionFilter !== 'all' && e.action !== actionFilter) return false;
-      if (q && ![e.actor, e.actorEmail, e.consentId, e.description, e.id]
-        .some((v) => v.toLowerCase().includes(q))) return false;
+    return logs.filter((log) => {
+      if (!matchesCategory(log, category)) return false;
+      if (q) {
+        const searchable = [
+          log.action,
+          log.tableName,
+          log.recordId ?? '',
+          log.actorRole,
+          log.ipAddress ?? '',
+        ].join(' ').toLowerCase();
+        if (!searchable.includes(q)) return false;
+      }
       return true;
     });
-  }, [search, actionFilter]);
+  }, [logs, search, category]);
 
-  const hasFilters = search || actionFilter !== 'all';
+  const hasFilters = search || category !== 'all';
+  const clearFilters = () => { setSearch(''); setCategory('all'); };
 
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
         <div>
           <h2 className={styles.title}>Registro de Auditoría</h2>
-          <p className={styles.subtitle}>Registro completo de actividad para cumplimiento normativo — Ley 21.719</p>
+          <p className={styles.subtitle}>
+            Registro inmutable de actividad para cumplimiento normativo — Ley 21.719
+          </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => console.warn('Exportar registro: pendiente integración backend')}>
-          Exportar registro
-        </Button>
       </div>
 
+      {/* Category chips */}
       <div className={styles.statsRow}>
-        {ALL_ACTIONS.map((action) => {
-          const count = auditEvents.filter((e) => e.action === action).length;
-          return (
-            <button
-              key={action}
-              className={[styles.statChip, actionFilter === action ? styles.statChipActive : ''].join(' ')}
-              onClick={() => setActionFilter(actionFilter === action ? 'all' : action)}
-            >
-              <span className={[styles.statDot, styles[`dot_${action}`]].join(' ')} />
-              <span className={styles.statLabel}>{ACTION_LABEL[action]}</span>
-              <span className={styles.statCount}>{count}</span>
-            </button>
-          );
-        })}
+        {ALL_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            className={[styles.statChip, category === cat ? styles.statChipActive : ''].join(' ')}
+            onClick={() => setCategory(cat)}
+          >
+            <span className={styles.statLabel}>{CATEGORY_LABELS[cat]}</span>
+            {!loadingData && (
+              <span className={styles.statCount}>
+                {cat === 'all'
+                  ? logs.length
+                  : logs.filter((l) => matchesCategory(l, cat)).length}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
+      {/* Search / filter bar */}
       <div className={styles.filterBar}>
         <div className={styles.searchBox}>
           <svg className={styles.searchIcon} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -83,7 +149,7 @@ const AuditTrailPage = () => {
           </svg>
           <input
             type="text"
-            placeholder="Buscar por actor, ID de consentimiento o descripción..."
+            placeholder="Buscar por acción, tabla, entidad, rol o IP..."
             className={styles.searchInput}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -94,26 +160,35 @@ const AuditTrailPage = () => {
         </div>
         <div className={styles.filterRight}>
           <span className={styles.resultCount}>
-            {filtered.length} evento{filtered.length !== 1 ? 's' : ''}
-            {hasFilters && ' (filtrado)'}
+            {loadingData
+              ? 'Cargando…'
+              : `${filtered.length} evento${filtered.length !== 1 ? 's' : ''}`}
+            {hasFilters && !loadingData && ' (filtrado)'}
           </span>
           {hasFilters && (
-            <button className={styles.clearAll} onClick={() => { setSearch(''); setActionFilter('all'); }}>
-              Limpiar filtros
-            </button>
+            <button className={styles.clearAll} onClick={clearFilters}>Limpiar filtros</button>
           )}
         </div>
       </div>
 
+      {/* Table */}
       <section className={styles.tableSection}>
         <div className={styles.tableWrapper}>
-          {filtered.length === 0 ? (
+          {loadingData ? (
+            <div className={styles.empty}>
+              <p>Cargando eventos de auditoría…</p>
+            </div>
+          ) : loadError ? (
+            <div className={styles.empty}>
+              <p>{loadError}</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className={styles.empty}>
               <span className={styles.emptyIcon}>🔍</span>
-              <p>No se encontraron eventos con los filtros aplicados.</p>
-              <button className={styles.clearAll} onClick={() => { setSearch(''); setActionFilter('all'); }}>
-                Limpiar filtros
-              </button>
+              <p>No se encontraron eventos{hasFilters ? ' con los filtros aplicados.' : '.'}</p>
+              {hasFilters && (
+                <button className={styles.clearAll} onClick={clearFilters}>Limpiar filtros</button>
+              )}
             </div>
           ) : (
             <table className={styles.table}>
@@ -121,16 +196,53 @@ const AuditTrailPage = () => {
                 <tr>
                   <th>Evento</th>
                   <th>Acción</th>
-                  <th>Descripción</th>
+                  <th>Tabla · Entidad</th>
                   <th>Actor</th>
-                  <th>ID Consentimiento</th>
                   <th>Dirección IP</th>
                   <th>Fecha y hora</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((event) => (
-                  <EventRow key={event.id} event={event} />
+                {filtered.map((log) => (
+                  <tr key={log.id}>
+                    <td>
+                      <div className={styles.eventCell}>
+                        <span className={[styles.actionIcon, actionIconClass(log.action)].join(' ')}>
+                          {actionIconChar(log.action)}
+                        </span>
+                        <span className={styles.eventId}>{log.id.slice(0, 8).toUpperCase()}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={[styles.badge, actionBadgeClass(log.action)].join(' ')}>
+                        <span className={styles.badgeDot} />
+                        {log.action}
+                      </span>
+                    </td>
+                    <td>
+                      <div className={styles.actorCell}>
+                        <span className={styles.actorName}>{log.tableName.toUpperCase()}</span>
+                        <span className={styles.actorEmail}>
+                          {log.recordId ? log.recordId.slice(0, 8).toUpperCase() + '…' : '—'}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className={styles.actorCell}>
+                        <span className={styles.actorName}>{log.actorRole}</span>
+                        <span className={styles.actorEmail}>
+                          {log.actorId.slice(0, 8).toUpperCase()}…
+                        </span>
+                      </div>
+                    </td>
+                    <td className={styles.cellMono}>{log.ipAddress ?? '—'}</td>
+                    <td className={styles.cellDate}>
+                      <div className={styles.timestampCell}>
+                        <span>{formatDate(log.createdAt)}</span>
+                        <span className={styles.timestampTime}>{formatTime(log.createdAt)}</span>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -140,32 +252,5 @@ const AuditTrailPage = () => {
     </div>
   );
 };
-
-const EventRow = ({ event }: { event: AuditEvent }) => (
-  <tr>
-    <td>
-      <div className={styles.eventCell}>
-        <ActionIcon action={event.action} />
-        <span className={styles.eventId}>{event.id}</span>
-      </div>
-    </td>
-    <td><ActionBadge action={event.action} /></td>
-    <td className={styles.cellDesc}>{event.description}</td>
-    <td>
-      <div className={styles.actorCell}>
-        <span className={styles.actorName}>{event.actor}</span>
-        <span className={styles.actorEmail}>{event.actorEmail}</span>
-      </div>
-    </td>
-    <td className={styles.cellMono}>{event.consentId}</td>
-    <td className={styles.cellMono}>{event.ipAddress}</td>
-    <td className={styles.cellDate}>
-      <div className={styles.timestampCell}>
-        <span>{formatDate(event.timestamp)}</span>
-        <span className={styles.timestampTime}>{formatTime(event.timestamp)}</span>
-      </div>
-    </td>
-  </tr>
-);
 
 export default AuditTrailPage;

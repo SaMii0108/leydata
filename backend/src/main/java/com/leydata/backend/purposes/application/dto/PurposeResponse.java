@@ -26,7 +26,10 @@ public record PurposeResponse(
         String approvedBy,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
-        String hashSha256
+        String hashSha256,
+        UUID purposeFamilyId,
+        Integer version,
+        String status
 ) {
     public static PurposeResponse from(Purposes p, boolean locked) {
         return new PurposeResponse(
@@ -50,7 +53,10 @@ public record PurposeResponse(
                 p.getApprovedBy(),
                 p.getCreatedAt(),
                 p.getUpdatedAt(),
-                p.getHashSha256()
+                p.getHashSha256(),
+                p.getPurposeFamilyId(),
+                p.getVersion(),
+                p.getStatus()
         );
     }
 }

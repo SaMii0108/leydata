@@ -298,3 +298,115 @@
   .layout { grid-template-columns: 1fr; }
   .preview { position: static; }
 }
+
+/* Hint / error states */
+.hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 2px 0 0;
+  line-height: 1.5;
+}
+
+.hintInline {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin-left: 4px;
+}
+
+.hintWarn {
+  font-size: var(--text-sm);
+  color: var(--color-warning, #d97706);
+  background: var(--color-warning-bg, #fef3c7);
+  border: 1px solid var(--color-warning, #d97706);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.submitError {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg, #fee2e2);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin: 0;
+}
+
+/* Purpose decision list */
+.purposeList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.purposeItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.purposeInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.purposeName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.decisionBtns {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.decisionBtn {
+  padding: 5px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--text-xs);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.decisionBtn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.decisionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.decisionAccept {
+  background: #d1fae5;
+  border-color: #059669 !important;
+  color: #059669 !important;
+  font-weight: 600;
+}
+
+.decisionReject {
+  background: #fee2e2;
+  border-color: #dc2626 !important;
+  color: #dc2626 !important;
+  font-weight: 600;
+}

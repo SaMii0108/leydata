@@ -82,6 +82,11 @@ public class DomainService {
         return domainsRepository.findAll().stream().map(DomainResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<DomainResponse> getActiveDomains() {
+        return domainsRepository.findByActiveTrue().stream().map(DomainResponse::from).toList();
+    }
+
     @Transactional
     public DomainResponse deactivateDomain(UUID domainId) {
         securityContextHelper.requireAdmin();

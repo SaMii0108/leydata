@@ -44,15 +44,22 @@ public class UserService {
             throw new IllegalArgumentException("La contraseña es obligatoria para crear un usuario");
         }
 
+        // Validar dominios antes de crear en Keycloak para fallar temprano sin efecto secundario
+        if (request.getDomainIds() != null && !request.getDomainIds().isEmpty()) {
+            if (!"JEFE_DOMINIO".equals(request.getRoleCode())) {
+                throw new IllegalArgumentException("Solo los jefes de dominio pueden tener dominios asignados");
+            }
+            if (request.getDomainIds().size() > 1) {
+                throw new IllegalArgumentException("Un jefe de dominio solo puede tener un dominio asignado");
+            }
+        }
+
         // Keycloak lanza 409 si el email ya existe — no necesitamos chequeo local previo
         String keycloakId = keycloakAdminService.createUser(
                 request.getEmail(), request.getName(), request.getRoleCode(), request.getPassword());
 
         try {
             if (request.getDomainIds() != null && !request.getDomainIds().isEmpty()) {
-                if (!"JEFE_DOMINIO".equals(request.getRoleCode())) {
-                    throw new IllegalArgumentException("Solo los jefes de dominio pueden tener dominios asignados");
-                }
                 for (UUID domainId : request.getDomainIds()) {
                     Domains domain = domainsRepository.findById(domainId)
                             .orElseThrow(() -> new IllegalArgumentException("Dominio no encontrado: " + domainId));
@@ -253,6 +260,9 @@ public class UserService {
         }
         if (!currentRoles.contains("JEFE_DOMINIO")) {
             throw new IllegalArgumentException("No se pueden asignar dominios: el usuario no tiene rol JEFE_DOMINIO");
+        }
+        if (domainIds.size() > 1) {
+            throw new IllegalArgumentException("Un jefe de dominio solo puede tener un dominio asignado");
         }
         List<UserDomain> current = userDomainRepository.findByKeycloakId(keycloakId);
         current.stream()

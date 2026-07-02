@@ -1,0 +1,32 @@
+meta {
+  name: Verificar Integridad Entidad
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/audit/integrity/verify
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "entityType": "AGREEMENT",
+    "entityId": "<uuid-entidad>",
+    "checkType": "MANUAL"
+  }
+}
+
+docs {
+  Recalcula el hash SHA-256 de una entidad y lo compara con el almacenado.
+  Registra el resultado en entity_integrity_log.
+  entityType: AGREEMENT | TEMPLATE | DOCUMENT | PURPOSE
+  checkType: MANUAL | ON_DEMAND | SCHEDULED
+  Retorna isValid: true/false.
+  Requiere rol ADMIN.
+}

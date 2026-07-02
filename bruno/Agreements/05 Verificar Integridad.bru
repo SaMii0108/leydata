@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/api/agreements/<uuid-agreement>/verify-integrity
+  url: {{baseUrl}}/api/audit/integrity/verify
   body: json
   auth: bearer
 }
@@ -16,13 +16,17 @@ auth:bearer {
 
 body:json {
   {
+    "entityType": "AGREEMENT",
+    "entityId": "<uuid-agreement>",
     "checkType": "MANUAL"
   }
 }
 
 docs {
   Recalcula el SHA-256 del agreement y lo compara con el hash almacenado.
-  checkType: MANUAL | SCHEDULED | TRIGGERED (por defecto MANUAL si se omite el body)
-  Retorna isValid: true/false y registra el resultado en el ledger de integridad.
-  Autenticado. Cualquier rol.
+  Registra el resultado en entity_integrity_log.
+  entityType: AGREEMENT | TEMPLATE | DOCUMENT | PURPOSE
+  checkType: MANUAL | ON_DEMAND | SCHEDULED
+  Endpoint movido a /api/audit/integrity/verify (feature/trazabilidad).
+  Requiere rol ADMIN.
 }

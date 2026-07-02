@@ -16,6 +16,7 @@ auth:bearer {
 
 body:json {
   {
+    "domainId": "{{domainId}}",
     "templateKey": "bienvenida-clientes",
     "name": "Template de bienvenida para clientes",
     "title": "Gestión de tus datos personales",
@@ -27,8 +28,9 @@ body:json {
 
 docs {
   Crea un nuevo template en estado DRAFT.
-  templateKey identifica la familia de versiones (ej. "bienvenida-clientes").
-  Varios templates pueden compartir el mismo templateKey con distintos version.
-  Solo uno puede estar ACTIVE por templateKey.
+  domainId es obligatorio — TEMPLATE_KEY es único por dominio, no global.
+  templateKey identifica la familia de versiones dentro de ese dominio (ej. "bienvenida-clientes").
+  Varios templates pueden compartir el mismo templateKey en dominios distintos, cada uno con su propio ciclo de versiones.
+  Solo uno puede estar ACTIVE por (domainId, templateKey).
   Requiere rol DPO o ADMIN.
 }

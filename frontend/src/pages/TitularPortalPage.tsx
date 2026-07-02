@@ -1,39 +1,36 @@
 import { useState, useMemo } from 'react';
-import { consentRecords as initialRecords } from '../utils/mockData';
-import type { ConsentRecord, ConsentStatus } from '../utils/mockData';
+import type { AgreementResponse, AgreementStatus } from '../api/agreementsApi';
 import { useAuth } from '../features/auth/AuthContext';
 import RevokeModal from '../components/common/RevokeModal';
 import ConsentCard from '../components/common/ConsentCard';
 import styles from './TitularPortalPage.module.css';
 
-const ALL_STATUSES: { value: ConsentStatus | 'todos'; label: string }[] = [
-  { value: 'todos',    label: 'Todos' },
-  { value: 'activo',   label: 'Activos' },
-  { value: 'revocado', label: 'Revocados' },
-  { value: 'expirado', label: 'Expirados' },
-  { value: 'pendiente',label: 'Pendientes' },
+const ALL_STATUSES: { value: AgreementStatus | 'todos'; label: string }[] = [
+  { value: 'todos',   label: 'Todos' },
+  { value: 'ACTIVE',  label: 'Activos' },
+  { value: 'REVOKED', label: 'Revocados' },
+  { value: 'EXPIRED', label: 'Expirados' },
 ];
 
 const TitularPortalPage = () => {
   const { user } = useAuth();
-  const [records, setRecords] = useState<ConsentRecord[]>(
-    initialRecords.filter((r) => r.titularId === user?.id),
-  );
-  const [revokeTarget, setRevokeTarget] = useState<ConsentRecord | null>(null);
-  const [statusFilter, setStatusFilter] = useState<ConsentStatus | 'todos'>('todos');
+  // Integración con backend pendiente — se implementa fuera del sprint actual.
+  // La página muestra lista vacía hasta que se conecte GET /api/agreements/subject-summary.
+  const [records] = useState<AgreementResponse[]>([]);
+  const [revokeTarget, setRevokeTarget] = useState<AgreementResponse | null>(null);
+  const [statusFilter, setStatusFilter] = useState<AgreementStatus | 'todos'>('todos');
 
-  const handleConfirmRevoke = (recordId: string, reason: string) => {
-    setRecords((prev) =>
-      prev.map((r) => r.id === recordId ? { ...r, estado: 'revocado', motivoRevocacion: reason } : r),
-    );
+  const handleConfirmRevoke = (recordId: string, _reason: string) => {
+    // PATCH /api/agreements/{id}/revoke se conecta en el sprint de TitularPortal
+    void recordId;
     setRevokeTarget(null);
   };
 
-  const activos   = useMemo(() => records.filter((r) => r.estado === 'activo').length,   [records]);
-  const revocados = useMemo(() => records.filter((r) => r.estado === 'revocado').length, [records]);
+  const activos   = useMemo(() => records.filter((r) => r.status === 'ACTIVE').length,   [records]);
+  const revocados = useMemo(() => records.filter((r) => r.status === 'REVOKED').length, [records]);
 
   const filteredRecords = useMemo(
-    () => statusFilter === 'todos' ? records : records.filter((r) => r.estado === statusFilter),
+    () => statusFilter === 'todos' ? records : records.filter((r) => r.status === statusFilter),
     [records, statusFilter],
   );
 
