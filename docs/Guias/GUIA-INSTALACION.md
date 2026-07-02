@@ -74,9 +74,12 @@ DB_PASS=admin
 DB_NAME=leydata_db
 KC_BACKEND_SECRET=
 KC_ORCHESTRATOR_CLIENT_SECRET=
+BACKEND_HOST=
 ```
 
-Las primeras tres variables son fijas para el entorno de desarrollo local y no necesitan cambiarse. Las dos variables `KC_*` se rellenan en el paso 5 con los valores que imprime el script `setup-keycloak.sh`. Dejarlas vacías por ahora.
+Las primeras tres variables son fijas para el entorno de desarrollo local. Las dos variables `KC_*` se rellenan en el paso 5 con los valores que imprime el script `setup-keycloak.sh`. Dejarlas vacías por ahora.
+
+`BACKEND_HOST` es solo para **WSL2**: completar con la IP del adaptador `eth0` de WSL (`ip addr show eth0 | grep 'inet '`). En Mac, Linux nativo y Windows sin WSL se deja vacía — Prometheus usa `host-gateway` por defecto.
 
 ---
 
@@ -157,9 +160,13 @@ echo "LEYDATA_BACKEND_URL=http://$WSL_IP:8080" >> .env
 
 El `docker-compose.override.yml` ya lee esa variable con `${LEYDATA_BACKEND_URL:-http://host.docker.internal:8080}`, así que agregar la línea al `.env` es suficiente — no hay que editar el override directamente.
 
-> **La IP de WSL cambia con cada reinicio de Windows.** Actualizar el `.env` y recrear el orquestador con `docker-compose up -d --force-recreate orchestrator` si el orquestador dice "Connection refused" al backend.
-
-> **Prometheus también necesita la IP de WSL.** Ver sección 10.
+> **La IP de WSL cambia con cada reinicio de Windows.** Actualizar `LEYDATA_BACKEND_URL` y `BACKEND_HOST` en el `.env` y recrear el orquestador y Prometheus:
+> ```bash
+> WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+> sed -i "s|LEYDATA_BACKEND_URL=.*|LEYDATA_BACKEND_URL=http://$WSL_IP:8080|" .env
+> sed -i "s|BACKEND_HOST=.*|BACKEND_HOST=$WSL_IP|" .env
+> docker-compose up -d --force-recreate orchestrator prometheus
+> ```
 
 ---
 
@@ -789,13 +796,13 @@ Ver detalle completo de configuración en [docs/monitoring-module.md](../../docs
 curl -s http://localhost:8080/actuator/health | python3 -m json.tool
 ```
 
-Respuesta esperada incluye el componente `auditChain`:
+Respuesta esperada incluye el componente `audit`:
 
 ```json
 {
   "status": "UP",
   "components": {
-    "auditChain": {
+    "audit": {
       "status": "UP",
       "details": { "totalRecords": 142, "lastRecord": "2026-07-01T10:23:11" }
     },
@@ -1357,14 +1364,15 @@ docker-compose up -d --force-recreate orchestrator
 
 ### Prometheus `backend` en estado DOWN en WSL
 
-Mismo problema que arriba pero con Prometheus: `monitoring/prometheus.yml` apunta a `host.docker.internal:8080` que tampoco resuelve correctamente.
+En WSL2, `host.docker.internal` desde Docker no alcanza procesos corriendo en WSL. Prometheus usa la variable `BACKEND_HOST` del `.env` para sobreescribir el destino.
 
 ```bash
 WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
-sed -i "s|- '.*:8080'|- '$WSL_IP:8080'|" monitoring/prometheus.yml
+# Actualizar o agregar BACKEND_HOST en .env
+sed -i "s|BACKEND_HOST=.*|BACKEND_HOST=$WSL_IP|" .env
 
-# Recrear prometheus (restart no funciona en WSL con bind mounts)
-docker-compose down prometheus && docker-compose up -d prometheus
+# Recrear prometheus para que tome el nuevo valor (restart falla en WSL con bind mounts)
+docker-compose up -d --force-recreate prometheus
 ```
 
 Verificar en `http://localhost:9090/targets` que `backend` queda en estado `UP`.

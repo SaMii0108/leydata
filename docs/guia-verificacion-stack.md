@@ -92,7 +92,7 @@ Resultado esperado:
 {
   "status": "UP",
   "components": {
-    "auditChain": { "status": "UP" },
+    "audit": { "status": "UP" },
     "db": { "status": "UP" },
     "redis": { "status": "UP" }
   }
@@ -194,19 +194,14 @@ WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
 echo "IP WSL: $WSL_IP"
 
 # Ver IP configurada en .env
-grep LEYDATA_BACKEND_URL .env
+grep -E "LEYDATA_BACKEND_URL|BACKEND_HOST" .env
 
-# Si son distintas, actualizar:
+# Si cambió, actualizar ambas variables:
 sed -i "s|LEYDATA_BACKEND_URL=.*|LEYDATA_BACKEND_URL=http://$WSL_IP:8080|" .env
+sed -i "s|BACKEND_HOST=.*|BACKEND_HOST=$WSL_IP|" .env
 
-# Recrear el orquestador con la nueva URL
-docker-compose up -d --force-recreate orchestrator
-
-# También actualizar prometheus.yml para que Prometheus pueda scrapear el backend
-sed -i "s|- '.*:8080'|- '$WSL_IP:8080'|" monitoring/prometheus.yml
-
-# Recrear prometheus
-docker-compose down prometheus && docker-compose up -d prometheus
+# Recrear orquestador y prometheus con los nuevos valores
+docker-compose up -d --force-recreate orchestrator prometheus
 ```
 
 **Windows PowerShell (para editar .env):**
@@ -352,7 +347,7 @@ backend - up -
 orchestrator - up -
 ```
 
-Si `backend` aparece `down` en WSL, actualizar la IP en `monitoring/prometheus.yml` y recrear Prometheus (ver paso 4.1).
+Si `backend` aparece `down` en WSL, actualizar `BACKEND_HOST` en `.env` y recrear Prometheus (ver paso 4.1).
 
 ### 5.2 Grafana — verificar que carga el dashboard
 
@@ -423,7 +418,7 @@ curl -s http://localhost:9090/api/v1/targets | python3 -c \
 | Problema | Plataforma | Causa | Fix |
 |---|---|---|---|
 | Orquestador "Connection refused" al backend | WSL | IP de WSL cambió | Paso 4.1 |
-| Prometheus `backend` en DOWN | WSL | `host.docker.internal` → IP incorrecta | Paso 4.1 |
+| Prometheus `backend` en DOWN | WSL | `host.docker.internal` no llega a WSL | Setear `BACKEND_HOST` en `.env`, ver paso 4.1 |
 | `docker-compose restart` falla con error de mount | WSL | Bind mount path obsoleto | Usar `down && up` |
 | Grafana en loop de reinicios | Todos | Contact point con URL vacía | Ver 5.2 |
 | `/consent/capture` → `leydata_domain` claim faltante | Todos | Mapper no configurado en KC | Paso 4.3 |

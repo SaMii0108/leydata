@@ -183,7 +183,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${BACKEND_HOST:-host-gateway}"
     networks:
       - leydata-consent-network
 
