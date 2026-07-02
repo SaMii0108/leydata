@@ -3,9 +3,11 @@ package com.leydata.backend.orgdomain.infrastructure.persistence;
 import com.leydata.backend.entity.Domains;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface DomainsRepository extends JpaRepository<Domains, UUID> {
     Optional<Domains> findByCode(String code);
+    List<Domains> findByActiveTrue();
 }

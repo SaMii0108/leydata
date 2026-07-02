@@ -73,16 +73,17 @@ public class PurposeRequestService {
         PurposeRequests saved = purposeRequestsRepository.save(purposeRequest);
         saved.setDomain(domain);
 
+        Map<String, Object> auditData = new java.util.LinkedHashMap<>();
+        auditData.put("id", saved.getId());
+        auditData.put("title", saved.getTitle());
+        auditData.put("domainId", saved.getDomainId());
+        auditData.put("status", saved.getStatus());
         auditService.log(AuditContext.builder()
                 .tableName("purpose_requests")
                 .recordId(saved.getId())
                 .action("SOLICITAR_PROPOSITO")
                 .oldData(null)
-                .newData(Map.of(
-                        "id", saved.getId(),
-                        "title", saved.getTitle(),
-                        "domainId", saved.getDomainId(),
-                        "status", saved.getStatus()))
+                .newData(auditData)
                 .actorId(requesterId)
                 .actorRole(securityContextHelper.getActorRole())
                 .build());

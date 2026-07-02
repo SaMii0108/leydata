@@ -1,5 +1,6 @@
 package com.leydata.backend.user.web;
 
+import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.user.application.dto.CreateUserRequest;
 import com.leydata.backend.user.application.dto.UpdateUserByAdminRequest;
 import com.leydata.backend.user.application.dto.UserResponse;
@@ -29,6 +30,20 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final SecurityContextHelper securityContextHelper;
+
+    @GetMapping("/me")
+    @Operation(summary = "Obtener mi propio perfil [autenticado]",
+            description = "Devuelve el perfil del usuario autenticado, incluyendo sus dominios asignados. Disponible para todos los roles.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Perfil del usuario"),
+            @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
+    })
+    public Map<String, Object> getMe() {
+        String keycloakId = securityContextHelper.getKeycloakId();
+        UserResponse user = userService.getUserByKeycloakId(keycloakId);
+        return Map.of("status", "success", "user", user);
+    }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
