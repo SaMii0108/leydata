@@ -29,9 +29,8 @@ Esta arquitectura garantiza que, ante una brecha de seguridad, el Orquestador no
 | Componente | Rol |
 |---|---|
 | **Spring WebFlux + Netty** | Motor reactivo no bloqueante — soporta miles de conexiones concurrentes sin aumentar threads |
-| **Spring Cloud Gateway** | Proxy transparente hacia el backend LeyData para rutas `/api/**` |
-| **Redis** | Caché de estado de consentimiento — respuestas en milisegundos sin tocar la base de datos |
 | **Spring Security WebFlux** | Validación de JWT inbound (sistema cliente) y emisión de token outbound (M2M hacia LeyData) |
+| **Redis** | Caché de estado de consentimiento — respuestas en milisegundos sin tocar la base de datos |
 
 El Orquestador es el **único servicio expuesto al exterior**. El backend LeyData corre en red interna y no tiene puertos accesibles desde fuera.
 
@@ -56,8 +55,6 @@ El Orquestador opera con dos motores de autenticación completamente independien
 
 Los sistemas externos (CRM, ERP, aplicación del cliente) deben enviar un **JWT firmado por su propio sistema de identidad** en cada request.
 
-**Cómo funciona:**
-
 ```
 1. El sistema del cliente autentica a su usuario con su IdP propio
 2. Obtiene un JWT firmado por ese IdP
@@ -70,13 +67,11 @@ Los sistemas externos (CRM, ERP, aplicación del cliente) deben enviar un **JWT 
 
 **El JWKS del cliente** es una URL pública que expone las claves públicas de su IdP. El Orquestador la consulta automáticamente para verificar firmas criptográficas sin compartir secretos.
 
-**Claim obligatorio `leydata_domain`:** el JWT del sistema cliente debe incluir un claim `leydata_domain` con el UUID del dominio LeyData al que ese sistema está autorizado (ej. el dominio "Comercial" si el CRM es de ventas). LeyData lo configura al dar de alta la integración — el sistema cliente no lo elige ni lo declara en el body de sus requests, viene firmado en el token. `POST /consent/capture` lo usa para resolver a qué template/documento corresponde un `templateKey` dentro de ese dominio.
+**Claim obligatorio `leydata_domain`:** el JWT del sistema cliente debe incluir un claim `leydata_domain` con el UUID del dominio LeyData al que ese sistema está autorizado. LeyData lo configura al dar de alta la integración usando un _protocol mapper_ en Keycloak (tipo `oidc-hardcoded-claim-mapper`). El claim viene firmado en el token — el sistema cliente no lo declara en el body. `POST /consent/capture` lo usa para resolver a qué template/documento corresponde un `templateKey` dentro de ese dominio. Si el claim falta, el endpoint responde `500`.
 
 ### Outbound — El Orquestador habla con LeyData
 
 Cuando el Orquestador necesita consultar o escribir en LeyData (por cache miss, capture o revoke), obtiene automáticamente un token de servicio de Keycloak usando el flujo `client_credentials`.
-
-**Cómo funciona:**
 
 ```
 1. El Orquestador detecta que necesita llamar a LeyData
@@ -97,8 +92,8 @@ Este flujo ocurre en segundo plano. El sistema cliente nunca ve ni tiene acceso 
 
 | Variable | Descripción | Ejemplo |
 |---|---|---|
-| `EXTERNAL_JWKS_URI` | URL del JWKS del IdP del sistema cliente. El Orquestador valida todos los JWT inbound contra este endpoint. | `https://idp.empresa-cliente.cl/realms/produccion/protocol/openid-connect/certs` |
-| `KC_ORCHESTRATOR_CLIENT_SECRET` | Secret del cliente `leydata-orchestrator` en Keycloak realm `leydata`. Usado para el flujo M2M outbound. | `s3cr3t-generado-en-keycloak` |
+| `EXTERNAL_JWKS_URI` | URL del JWKS del IdP del sistema cliente. El Orquestador valida todos los JWT inbound contra este endpoint. | `https://idp.empresa-cliente.cl/realms/prod/protocol/openid-connect/certs` |
+| `KC_ORCHESTRATOR_CLIENT_SECRET` | Secret del cliente `leydata-orchestrator` en Keycloak realm `leydata`. Usado para el flujo M2M outbound. Generado por `setup-keycloak.sh`. | `s3cr3t-generado-en-keycloak` |
 | `LEYDATA_BACKEND_URL` | URL interna del backend LeyData. En producción apunta al nombre del contenedor. | `http://backend:8080` |
 | `KC_TOKEN_URI` | URL del endpoint de token de Keycloak para el flujo M2M. | `http://keycloak:8080/realms/leydata/protocol/openid-connect/token` |
 | `REDIS_HOST` | Host de Redis. | `redis` |
@@ -114,14 +109,23 @@ Este flujo ocurre en segundo plano. El sistema cliente nunca ve ni tiene acceso 
 
 ### Entorno de desarrollo local
 
-Para desarrollo local, el archivo `docker-compose.override.yml` ya configura estas variables apuntando a los servicios locales. El backend puede correr desde el IDE — el Orquestador lo alcanza via `host.docker.internal`.
+Para desarrollo local, `docker-compose.override.yml` configura estas variables apuntando a los servicios locales.
+
+> **WSL:** `host.docker.internal` en Docker Desktop + WSL2 resuelve a `192.168.65.254` (gateway de Docker Desktop), **no** a la VM de WSL donde corre el backend. Agregar la IP real de WSL al `.env` antes de levantar el orquestador:
+> ```bash
+> WSL_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+> echo "LEYDATA_BACKEND_URL=http://$WSL_IP:8080" >> .env
+> docker-compose up -d --force-recreate orchestrator
+> ```
+> La IP cambia con cada reinicio de Windows.
 
 ```bash
-# Una sola vez: crear el realm de prueba que simula el IdP externo
+# 1. Crear realm que simula el IdP externo (una sola vez)
 bash scripts/setup-empresa-cliente-realm.sh
 
-# Levantar el Orquestador
-KC_ORCHESTRATOR_CLIENT_SECRET=<secret> docker-compose up -d orchestrator
+# 2. Levantar el orquestador (lee KC_ORCHESTRATOR_CLIENT_SECRET del .env)
+docker-compose up -d orchestrator
+docker logs leydata-orchestrator -f   # listo cuando aparece "Started OrchestratorApplication"
 ```
 
 ---
@@ -135,11 +139,13 @@ Todos los endpoints requieren:
 Authorization: Bearer <JWT firmado por el IdP externo configurado en EXTERNAL_JWKS_URI>
 ```
 
+El orquestador **no** valida tokens de Keycloak `leydata` — solo valida tokens del IdP del sistema cliente.
+
 ---
 
 ### `GET /consent/check`
 
-Consulta el estado de consentimiento de un titular para un propósito específico. Responde desde Redis en milisegundos. Solo consulta LeyData si el estado no está en caché.
+Consulta el estado de consentimiento de un titular para un propósito específico. Responde desde Redis en milisegundos si hay cache hit. Solo consulta LeyData en cache miss y puebla Redis con el resultado.
 
 **Request:**
 ```
@@ -152,7 +158,9 @@ Authorization: Bearer <token>
 {
   "subjectId": "u-8f3a2c",
   "purposeId": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "ALLOWED"
+  "status": "ALLOWED",
+  "legalBasisCode": "CONSENTIMIENTO_EXPLICITO",
+  "validUntil": "2027-07-02T03:28:39"
 }
 ```
 
@@ -164,6 +172,8 @@ Authorization: Bearer <token>
 | `DENIED` | El consentimiento expiró | No procesar el dato |
 | `REVOKED` | El titular revocó explícitamente | No procesar el dato, notificar si aplica |
 | `PENDING` | No hay historial de consentimiento | Mostrar la pantalla de consentimiento al titular |
+
+> **Cache Redis:** la clave es `consent:<subjectId>:<purposeId>`. Se puebla en `/consent/check` (no en `/consent/capture`). El TTL por defecto es 300 segundos. Revocar un consentimiento via API elimina la clave inmediatamente; un cambio directo en la BD **no** invalida el cache.
 
 ---
 
@@ -188,34 +198,29 @@ Content-Type: application/json
 }
 ```
 
+> **Campo `accepted` es boolean, no string.** Mandar `"decision": "ACCEPTED"` guarda el consentimiento con `accepted=false`. El campo es `accepted: true/false`.
+
 **Response `201 Created`:**
 ```json
 {
-  "subjectId": "u-8f3a2c",
   "agreementId": "d4e5f6a7-b8c9-0123-def4-567890abcdef",
   "status": "ALLOWED"
 }
 ```
 
 **Notas:**
-- `templateKey` es el identificador de **negocio** acordado al integrarse (ej. `ONBOARDING_CLIENTE`), no un UUID interno de LeyData. El sistema cliente nunca necesita conocer `templateId` ni `documentId` directamente.
-- El Orquestador resuelve `templateKey` contra el **dominio** que el JWT del sistema cliente autoriza (claim `leydata_domain`, configurado por LeyData al dar de alta la integración) y obtiene el `documentId` del documento de privacidad `PUBLISHED` vigente de ese template. Si el template no tiene versión `ACTIVE` en ese dominio, o no tiene un documento publicado, la petición falla antes de llegar a LeyData.
-- `documentId` puede enviarse opcionalmente como override explícito si la integración ya lo conoce — no es necesario en el flujo estándar.
-- Si el titular ya tenía un consentimiento `ACTIVE` para el mismo template, se revoca automáticamente y se crea uno nuevo (reconsent)
-- La IP real del dispositivo del titular queda sellada en el hash SHA-256 del registro — no puede ser alterada posteriormente
+- `templateKey` es el identificador de negocio acordado al integrarse, no un UUID. El orquestador lo resuelve contra el dominio del JWT (`leydata_domain`).
+- El template debe tener un documento de privacidad `PUBLISHED` asociado. Sin documento publicado, la captura falla.
+- Si el titular ya tenía un consentimiento `ACTIVE` para el mismo template, se revoca automáticamente y se crea uno nuevo (reconsent).
+- `documentId` puede enviarse como override explícito — no es necesario en el flujo estándar.
 
 ---
 
 ### `POST /consent/revoke`
 
-Revoca un acuerdo de consentimiento existente. La revocación es inmediata: Redis se actualiza antes de responder al cliente, garantizando que cualquier consulta posterior devuelva `REVOKED` al instante.
+Revoca un acuerdo completo. Elimina la clave de Redis inmediatamente.
 
 **Request:**
-```
-POST /consent/revoke
-Authorization: Bearer <token>
-Content-Type: application/json
-```
 ```json
 {
   "subjectId": "u-8f3a2c",
@@ -226,13 +231,87 @@ Content-Type: application/json
 **Response `200 OK`:**
 ```json
 {
-  "subjectId": "u-8f3a2c",
   "agreementId": "d4e5f6a7-b8c9-0123-def4-567890abcdef",
   "status": "REVOKED"
 }
 ```
 
-**Garantía de consistencia:** el Orquestador sigue el patrón LeyData-primero. Primero persiste la revocación en el registro inmutable de LeyData y, solo si recibe confirmación, actualiza Redis. Si LeyData falla, el cliente recibe un error y puede reintentar — el estado nunca queda inconsistente.
+**Garantía de consistencia:** persiste la revocación en LeyData primero y solo si recibe confirmación actualiza Redis. Si LeyData falla, el cliente recibe error y puede reintentar — el estado nunca queda inconsistente.
+
+---
+
+### `POST /consent/revoke-purpose`
+
+Revoca el consentimiento para una finalidad específica sin revocar el agreement completo. Útil cuando el titular quiere retirar solo un permiso de los varios que otorgó.
+
+**Request:**
+```json
+{
+  "subjectId": "u-8f3a2c",
+  "purposeId": "550e8400-e29b-41d4-a716-446655440000",
+  "templateKey": "ONBOARDING_CLIENTE"
+}
+```
+
+**Response `200 OK`:**
+```json
+{
+  "status": "REVOKED"
+}
+```
+
+---
+
+### `GET /consent/template-content`
+
+Devuelve el contenido y los metadatos del template activo para un `templateKey` en el dominio del JWT. Útil para mostrar el texto del consentimiento al titular antes de capturar.
+
+**Request:**
+```
+GET /consent/template-content?templateKey=ONBOARDING_CLIENTE
+Authorization: Bearer <token>
+```
+
+---
+
+### `GET /consent/subject/{subjectId}`
+
+Devuelve el resumen completo de todos los consentimientos de un titular en el dominio del JWT: agreements activos, revocados, expirados y sus finalidades.
+
+**Request:**
+```
+GET /consent/subject/u-8f3a2c
+Authorization: Bearer <token>
+```
+
+---
+
+### `GET /consent/pending-deletions`
+
+Lista los titulares del dominio que tienen solicitudes de supresión pendientes (derecho al olvido, art. 16 Ley 21.719). Solo devuelve titulares del dominio autorizado por el JWT.
+
+**Request:**
+```
+GET /consent/pending-deletions
+Authorization: Bearer <token>
+```
+
+---
+
+### `POST /consent/confirm-deletion`
+
+Confirma que el sistema cliente ejecutó la supresión de los datos del titular. Cierra el ciclo del derecho al olvido en LeyData.
+
+**Request:**
+```json
+{
+  "subjectId": "u-8f3a2c",
+  "purposeId": "550e8400-e29b-41d4-a716-446655440000",
+  "deletedAt": "2026-07-02T10:30:00"
+}
+```
+
+**Response `204 No Content`**
 
 ---
 
@@ -246,9 +325,37 @@ Endpoint de salud. No requiere autenticación.
 
 ---
 
-### Rutas proxy `/api/**`
+## Integridad y Detección de Manipulación
 
-Todo el tráfico hacia `/api/**` se reenvía de forma transparente al backend LeyData. El Orquestador inyecta automáticamente el token M2M en estas peticiones. Los sistemas cliente pueden usar estas rutas para consultas administrativas que no pasan por la lógica de consentimiento.
+### Qué pasa si alguien modifica la BD directamente
+
+Cualquier `UPDATE` o `DELETE` directo en las tablas `agreements` o `agreements_purposes` (vía pgAdmin, psql, script SQL) es detectado automáticamente:
+
+```
+UPDATE directo en BD
+    │
+    ▼  (< 1 ms)
+Trigger PostgreSQL V8 → db_tamper_log (processed=false)
+    │
+    ▼  (≤ 30 seg)
+TamperDetectionScheduler → system_audit_log
+    action=TAMPER_DIRECTO_BD
+    actor_role=DIRECT_DB
+    actor_id=<usuario postgres>
+    │
+    ▼  (≤ 1 min)
+Grafana alerta "Mutación Directa en BD — Bypass de API (Ley 21.719)"
+    severity=critical, compliance=ley21719
+```
+
+**Lo que NO hace el sistema automáticamente:** invalidar el cache de Redis. Si un agreement fue modificado directo en la BD, Redis puede devolver un estado obsoleto hasta que expire el TTL (default 300 seg). Para forzar la invalidación:
+```bash
+docker exec leydata-redis redis-cli del "consent:<subjectId>:<purposeId>"
+```
+
+### Por qué importa (Ley 21.719)
+
+El sistema mantiene una **cadena de hashes SHA-256** en `system_audit_log` — cada entrada firma la anterior. Cualquier intento de borrar o modificar el historial de auditoría rompe la cadena y `verifyChainIntegrity()` lo detecta. La tabla `system_audit_log` tiene un trigger PostgreSQL que impide `UPDATE` y `DELETE`.
 
 ---
 
@@ -256,29 +363,47 @@ Todo el tráfico hacia `/api/**` se reenvía de forma transparente al backend Le
 
 ### En Keycloak — realm `leydata` (una sola vez)
 
-- [ ] Crear cliente `leydata-orchestrator`
-  - Client authentication: **ON** (confidential)
-  - Authentication flow: **Service accounts roles** únicamente
-  - Copiar el Client Secret generado → variable `KC_ORCHESTRATOR_CLIENT_SECRET`
-- [ ] Asignar rol `SYSTEM` al service account del cliente (o el rol que LeyData exija)
+El cliente `leydata-orchestrator` se crea automáticamente al ejecutar el script de configuración:
 
-### Por cada sistema cliente nuevo (CRM, ERP) que se integra
+```bash
+bash scripts/setup-keycloak.sh   # o .\scripts\setup-keycloak.ps1 en Windows
+```
 
-- [ ] En el IdP del cliente: agregar protocol mapper que incluya el claim `leydata_domain` en los tokens emitidos para ese client, con el UUID del dominio LeyData correspondiente
-- [ ] Confirmar con LeyData el `templateKey` de negocio que ese sistema va a usar en `POST /consent/capture` — debe existir como template `ACTIVE` en ese dominio
+Al finalizar imprime `KC_ORCHESTRATOR_CLIENT_SECRET` — copiarlo al `.env`.
+
+### Configurar el realm empresa-cliente (entorno de prueba)
+
+```bash
+# Solo el realm + usuario de prueba:
+bash scripts/setup-empresa-cliente-realm.sh
+
+# Con el claim leydata_domain ya configurado (necesario para /consent/capture):
+bash scripts/setup-empresa-cliente-realm.sh --domain-id <uuid-del-dominio>
+
+# PowerShell:
+.\scripts\setup-empresa-cliente-realm.ps1 -DomainId "<uuid-del-dominio>"
+```
+
+Si no se pasa el domain-id, el script imprime las instrucciones para agregarlo después.
+
+### Por cada sistema cliente nuevo (CRM, ERP) en producción
+
+- [ ] En el IdP del cliente: agregar protocol mapper `oidc-hardcoded-claim-mapper` con `claim.name=leydata_domain` y `claim.value=<uuid-dominio-LeyData>`
+- [ ] Confirmar con LeyData el `templateKey` que ese sistema va a usar — debe existir como template `ACTIVE` con documento `PUBLISHED` en ese dominio
+- [ ] Actualizar `EXTERNAL_JWKS_URI` con la URL del JWKS real del IdP del cliente
 
 ### En el servidor de producción
 
-- [ ] Configurar todas las variables de entorno requeridas
+- [ ] Configurar todas las variables de entorno requeridas en el `.env`
 - [ ] Verificar que `EXTERNAL_JWKS_URI` es alcanzable desde el contenedor del Orquestador
-- [ ] Verificar que el Orquestador puede alcanzar `LEYDATA_BACKEND_URL` en red interna
-- [ ] Confirmar que el puerto `8081` es el único expuesto al exterior
-- [ ] Confirmar que el puerto `8080` de LeyData **no** tiene mapping externo en `docker-compose.yml`
+- [ ] Verificar que el Orquestador alcanza `LEYDATA_BACKEND_URL` en red interna
+- [ ] Confirmar que solo el puerto `8081` está expuesto al exterior
+- [ ] Confirmar que el puerto `8080` de LeyData **no** tiene mapping externo
 
 ### Validación post-deploy
 
 ```bash
-# Health check
+# Health check del orquestador
 curl http://localhost:8081/actuator/health
 
 # Verificar que LeyData no es alcanzable desde fuera
@@ -286,4 +411,31 @@ curl http://localhost:8080/actuator/health  # debe fallar o no responder
 
 # Verificar que el JWKS externo es accesible desde el contenedor
 docker exec leydata-orchestrator wget -qO- $EXTERNAL_JWKS_URI
+
+# Obtener token del sistema externo y probar /consent/check
+TOKEN=$(curl -s -X POST "$EXTERNAL_TOKEN_URL" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials&client_id=$CLIENT_ID&client_secret=$CLIENT_SECRET" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s "http://localhost:8081/consent/check?subjectId=test&purposeId=<uuid>" \
+  -H "Authorization: Bearer $TOKEN"
+# Esperado: {"status":"PENDING"} o {"status":"ALLOWED"}
+
+# Verificar detección de tamper (solo en staging/dev)
+docker exec leydata-consent-db psql -U admin -d leydata_db \
+  -c "SELECT action, actor_role, created_at FROM system_audit_log WHERE action='TAMPER_DIRECTO_BD' LIMIT 3;"
 ```
+
+---
+
+## Errores comunes
+
+| Error | Causa | Fix |
+|---|---|---|
+| `401 Unauthorized` | JWT inválido o expirado | Renovar el token del IdP externo |
+| `500 "leydata_domain" claim faltante` | Protocol mapper no configurado en Keycloak | Ejecutar `setup-empresa-cliente-realm.sh --domain-id <uuid>` |
+| `Connection refused` al backend (en WSL) | `host.docker.internal` resuelve mal en WSL2 | `echo "LEYDATA_BACKEND_URL=http://<wsl-ip>:8080" >> .env` + recrear orquestador |
+| `/consent/capture` guarda `accepted=false` | Se mandó `"decision":"ACCEPTED"` en vez de `"accepted":true` | Usar el campo boolean `accepted` |
+| Cache devuelve estado obsoleto tras cambio directo en BD | Redis no fue invalidado | `redis-cli del "consent:<subjectId>:<purposeId>"` |
+| Grafana alerta `Mutación Directa en BD` | Alguien modificó `agreements` sin pasar por la API | Revisar `SELECT * FROM db_tamper_log ORDER BY detected_at DESC` |

@@ -63,7 +63,7 @@ public class PurposeService {
                     "Ya existe una finalidad con código: " + code);
         }
 
-        legalBasisRepo.findById(req.getLegalBasisId())
+        var legalBasis = legalBasisRepo.findById(req.getLegalBasisId())
                 .orElseThrow(() -> new BusinessValidationException(
                         "Base de licitud no encontrada: " + req.getLegalBasisId()));
 
@@ -105,6 +105,10 @@ public class PurposeService {
         // purpose_family_id = id propio: self-reference que agrupa futuras versiones de esta finalidad
         saved.setPurposeFamilyId(saved.getId());
         saved = purposesRepo.save(saved);
+        // Poblar relaciones lazy en memoria con los objetos ya cargados durante la validación.
+        // save() solo persiste FK IDs; getLegalBasis()/getDomain() devolverían null sin esto.
+        saved.setLegalBasis(legalBasis);
+        saved.setDomain(domain);
 
         auditService.log(AuditContext.builder()
                 .tableName("purposes")

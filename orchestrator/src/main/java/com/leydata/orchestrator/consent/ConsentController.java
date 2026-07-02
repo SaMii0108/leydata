@@ -1,6 +1,8 @@
 package com.leydata.orchestrator.consent;
 
 import com.leydata.orchestrator.consent.dto.*;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,12 +21,16 @@ import java.util.UUID;
 public class ConsentController {
 
     private final ConsentService consentService;
+    private final MeterRegistry meterRegistry;
 
     @GetMapping("/check")
     public Mono<ResponseEntity<ConsentCheckResponse>> check(
             @RequestParam String subjectId,
             @RequestParam UUID purposeId) {
+        Timer.Sample sample = Timer.start(meterRegistry);
         return consentService.check(subjectId, purposeId)
+                .doOnSuccess(r -> sample.stop(meterRegistry.timer("consent.check", "status", "ok")))
+                .doOnError(e -> sample.stop(meterRegistry.timer("consent.check", "status", "error")))
                 .map(ResponseEntity::ok);
     }
 

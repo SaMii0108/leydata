@@ -47,12 +47,22 @@ public class KeycloakAdminService {
                 + "&client_id=" + clientId
                 + "&client_secret=" + clientSecret;
 
-        String response = restClient.post()
-                .uri(serverUrl + "/realms/" + realm + "/protocol/openid-connect/token")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(body)
-                .retrieve()
-                .body(String.class);
+        String response;
+        try {
+            response = restClient.post()
+                    .uri(serverUrl + "/realms/" + realm + "/protocol/openid-connect/token")
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(body)
+                    .retrieve()
+                    .body(String.class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 401) {
+                throw new IllegalStateException(
+                    "Las credenciales del cliente Keycloak son inválidas (KC_BACKEND_SECRET). " +
+                    "Vuelve a ejecutar setup-keycloak.sh y actualiza .env con el nuevo valor.", e);
+            }
+            throw new RuntimeException("Error al autenticar con Keycloak: " + e.getMessage(), e);
+        }
 
         Map<?, ?> tokenResponse = objectMapper.readValue(response, Map.class);
         cachedToken = (String) tokenResponse.get("access_token");

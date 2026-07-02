@@ -7,6 +7,8 @@ import com.leydata.backend.entity.SystemAuditLog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -32,11 +34,12 @@ class AuditServiceTest {
     @Mock private SystemAuditLogRepository auditLogRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
     private AuditService service;
 
     @BeforeEach
     void setUp() {
-        service = new AuditService(auditLogRepository, objectMapper);
+        service = new AuditService(auditLogRepository, objectMapper, meterRegistry);
         ReflectionTestUtils.setField(service, "self", service);
     }
 

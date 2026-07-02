@@ -1,0 +1,157 @@
+apiVersion: 1
+
+# Contact points y notification policies deshabilitados en dev (sin SMTP ni webhook configurado).
+# Para activar notificaciones: configurar GRAFANA_ALERT_WEBHOOK_URL o GRAFANA_SMTP_* en .env
+# y agregar los contact points aquí.
+
+# ── Alert rules ───────────────────────────────────────────────────────────────
+
+groups:
+  - orgId: 1
+    name: Compliance LeyData
+    folder: LeyData
+    interval: 1m
+    rules:
+
+      # Regla 1: ruptura en la cadena de auditoría
+      - uid: audit-integrity-mismatch
+        title: "Ruptura en Cadena de Auditoría (Ley 21.719)"
+        condition: threshold
+        data:
+          - refId: mismatches
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              expr: 'increase(audit_integrity_check_total{result="mismatch"}[5m])'
+              instant: false
+              range: true
+              refId: mismatches
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: mismatches
+              refId: threshold
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [mismatches]
+                  reducer:
+                    type: last
+                    params: []
+                  type: query
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Ruptura SHA-256 en el audit log"
+          description: >
+            Se detectaron {{ $value }} mismatch(es) en los hash SHA-256 del audit log
+            durante los últimos 5 minutos. La cadena de integridad está comprometida.
+            Acción requerida según Ley 21.719 art. 14 — evaluar si corresponde
+            notificar al CPDT. Verificar: curl http://localhost:8080/actuator/health
+        labels:
+          severity: critical
+          compliance: ley21719
+        isPaused: false
+
+      # Regla 2: mutación directa en la BD (bypass de la API)
+      - uid: direct-db-tamper
+        title: "Mutación Directa en BD — Bypass de API (Ley 21.719)"
+        condition: threshold
+        data:
+          - refId: tamper_count
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              expr: 'increase(audit_tamper_detected_total[5m])'
+              instant: false
+              range: true
+              refId: tamper_count
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: tamper_count
+              refId: threshold
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [tamper_count]
+                  reducer:
+                    type: last
+                    params: []
+                  type: query
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Cambio directo en BD detectado — agreements modificados sin pasar por la API"
+          description: >
+            Se detectó una mutación directa (UPDATE o DELETE) en la tabla agreements
+            o agreements_purposes sin pasar por la API del orquestador.
+            El cambio fue registrado en system_audit_log con actor_role=DIRECT_DB.
+            Verificar: SELECT * FROM db_tamper_log ORDER BY detected_at DESC LIMIT 10;
+            Acción requerida según Ley 21.719 — evaluar si corresponde notificar al CPDT.
+        labels:
+          severity: critical
+          compliance: ley21719
+        isPaused: false
+
+      # Regla 3 (ex 2): backend inaccesible por más de 2 minutos
+      - uid: backend-service-down
+        title: "Backend LeyData Inaccesible"
+        condition: threshold
+        data:
+          - refId: backend_up
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              expr: 'up{job="backend"}'
+              instant: true
+              refId: backend_up
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: backend_up
+              refId: threshold
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+                  operator:
+                    type: and
+                  query:
+                    params: [backend_up]
+                  reducer:
+                    type: last
+                    params: []
+                  type: query
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: "Backend LeyData caído"
+          description: >
+            El backend LeyData no responde desde hace más de 2 minutos.
+            Prometheus no puede scrapearlo en /actuator/prometheus.
+            Verificar: docker ps | grep leydata y los logs del proceso Java.
+        labels:
+          severity: critical
+          compliance: ley21719
+        isPaused: false
