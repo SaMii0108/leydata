@@ -22,7 +22,7 @@ export type DocumentCategory =
 export interface PrivacyDocumentDto {
   id: string;
   documentFamilyId: string;
-  templateId: string | null;
+  templateIds: string[];
   category: DocumentCategory;
   status: DocumentStatus;
   version: number;
@@ -44,13 +44,11 @@ export interface CreateDocumentPayload {
   category: DocumentCategory;
   name: string;
   content?: string;
-  templateId?: string;
 }
 
 export interface UpdateDocumentPayload {
   name?: string;
   content?: string;
-  templateId?: string;
 }
 
 async function request<T>(
@@ -149,6 +147,22 @@ export const removeDocumentPurpose = (
   token?: string | null,
 ): Promise<void> =>
   requestVoid(`/api/privacy-documents/${docId}/purposes/${purposeId}`, { method: 'DELETE' }, token);
+
+// ── Templates ──────────────────────────────────────────────────────────────────
+
+export const addDocumentTemplate = (
+  docId: string,
+  templateId: string,
+  token?: string | null,
+): Promise<void> =>
+  requestVoid(`/api/privacy-documents/${docId}/templates/${templateId}`, { method: 'POST' }, token);
+
+export const removeDocumentTemplate = (
+  docId: string,
+  templateId: string,
+  token?: string | null,
+): Promise<void> =>
+  requestVoid(`/api/privacy-documents/${docId}/templates/${templateId}`, { method: 'DELETE' }, token);
 
 // ── Workflow ───────────────────────────────────────────────────────────────────
 

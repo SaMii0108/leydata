@@ -3,7 +3,9 @@ package com.leydata.backend.privacydoc.application.service;
 import com.leydata.backend.audit.application.dto.AuditContext;
 import com.leydata.backend.audit.application.service.AuditService;
 import com.leydata.backend.entity.DocumentPurposes;
+import com.leydata.backend.entity.DocumentTemplates;
 import com.leydata.backend.entity.PrivacyDocuments;
+import com.leydata.backend.entity.Templates;
 import com.leydata.backend.notification.application.service.NotificationService;
 import com.leydata.backend.notification.domain.enums.NotificationType;
 import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
@@ -16,6 +18,7 @@ import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionExceptio
 import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
 import com.leydata.backend.privacydoc.infrastructure.pdf.PdfGeneratorService;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
+import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentTemplatesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
 import com.leydata.backend.purposerequest.infrastructure.persistence.PurposeRequestsRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
@@ -44,6 +47,7 @@ public class PrivacyDocumentService {
 
     private final PrivacyDocumentsRepository documentRepo;
     private final DocumentPurposesRepository purposeRepo;
+    private final DocumentTemplatesRepository templateLinkRepo;
     private final DomainsRepository domainsRepo;
     private final PurposesRepository purposesRepo;
     private final PurposeRequestsRepository purposeRequestsRepo;
@@ -60,12 +64,8 @@ public class PrivacyDocumentService {
     public PrivacyDocumentResponse create(CreateDocumentRequest req) {
         String actorId = securityContextHelper.getKeycloakId();
         String actorName = securityContextHelper.getName();
-        if (req.getTemplateId() != null) {
-            validateTemplateActive(req.getTemplateId());
-        }
 
         PrivacyDocuments entity = PrivacyDocuments.builder()
-                .templateId(req.getTemplateId())
                 .category(req.getCategory())
                 .status(DocumentStatus.DRAFT)
                 .version(1)
@@ -131,10 +131,6 @@ public class PrivacyDocumentService {
 
         if (req.getName() != null)       doc.setName(req.getName());
         if (req.getContent() != null)    doc.setContent(req.getContent());
-        if (req.getTemplateId() != null) {
-            validateTemplateActive(req.getTemplateId());
-            doc.setTemplateId(req.getTemplateId());
-        }
 
         PrivacyDocuments saved = documentRepo.save(doc);
 
@@ -239,6 +235,71 @@ public class PrivacyDocumentService {
                 .oldData(Map.of(
                         "documentId", String.valueOf(documentId),
                         "purposeId",  String.valueOf(purposeId)))
+                .newData(null)
+                .actorId(securityContextHelper.getKeycloakId())
+                .actorRole(securityContextHelper.getActorRole())
+                .build());
+    }
+
+    // ── GESTIÓN DE TEMPLATES ─────────────────────────────────────────────────────
+    // El documento es el dueño del vínculo: se puede asociar/desasociar en cualquier
+    // estado y no se exige que el template esté ACTIVE. El documento se publica de
+    // forma independiente — no requiere ningún template asociado.
+
+    public void addTemplate(UUID documentId, UUID templateId) {
+        PrivacyDocuments doc = findOrThrow(documentId);
+
+        if (templateLinkRepo.existsByDocument_IdAndTemplate_IdAndIsActiveTrue(documentId, templateId)) {
+            throw new BusinessValidationException("El template ya está activamente vinculado a este documento");
+        }
+
+        Templates templateEntity = templatesRepo.findById(templateId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("La template " + templateId + " no existe"));
+
+        // Si existía un vínculo inactivo (soft-deleted), lo reactivamos en lugar de insertar
+        DocumentTemplates link = templateLinkRepo.findByDocument_IdAndTemplate_Id(documentId, templateId)
+                .orElseGet(() -> {
+                    DocumentTemplates newLink = new DocumentTemplates();
+                    newLink.setId(new DocumentTemplates.DocumentTemplatesId(documentId, templateId));
+                    newLink.setDocument(doc);
+                    newLink.setTemplate(templateEntity);
+                    return newLink;
+                });
+        link.setIsActive(true);
+        templateLinkRepo.save(link);
+
+        auditService.log(AuditContext.builder()
+                .tableName("privacy_documents")
+                .recordId(documentId)
+                .action("DOCUMENT_TEMPLATE_ADDED")
+                .oldData(null)
+                .newData(Map.of(
+                        "documentId", String.valueOf(documentId),
+                        "templateId", String.valueOf(templateId)))
+                .actorId(securityContextHelper.getKeycloakId())
+                .actorRole(securityContextHelper.getActorRole())
+                .build());
+    }
+
+    public void removeTemplate(UUID documentId, UUID templateId) {
+        findOrThrow(documentId);
+
+        DocumentTemplates link = templateLinkRepo.findByDocument_IdAndTemplate_Id(documentId, templateId)
+                .filter(l -> Boolean.TRUE.equals(l.getIsActive()))
+                .orElseThrow(() -> new BusinessValidationException(
+                        "El template no está activamente vinculado a este documento"));
+
+        // Soft delete: el vínculo queda en BD como registro histórico
+        link.setIsActive(false);
+        templateLinkRepo.save(link);
+
+        auditService.log(AuditContext.builder()
+                .tableName("privacy_documents")
+                .recordId(documentId)
+                .action("DOCUMENT_TEMPLATE_REMOVED")
+                .oldData(Map.of(
+                        "documentId", String.valueOf(documentId),
+                        "templateId", String.valueOf(templateId)))
                 .newData(null)
                 .actorId(securityContextHelper.getKeycloakId())
                 .actorRole(securityContextHelper.getActorRole())
@@ -364,26 +425,35 @@ public class PrivacyDocumentService {
                 "Todas las finalidades vinculadas deben estar en estado APPROVED para publicar el documento.");
         }
 
-        // Regla: a lo sumo un documento PUBLISHED por template. Si ya existe uno, se archiva
-        // automáticamente — mismo patrón que TemplateService.activate() con isActive.
-        if (doc.getTemplateId() != null) {
-            documentRepo.findByTemplateIdAndStatusAndIsActiveTrue(doc.getTemplateId(), DocumentStatus.PUBLISHED)
-                    .filter(previous -> !previous.getId().equals(doc.getId()))
-                    .ifPresent(previous -> {
-                        previous.setStatus(DocumentStatus.ARCHIVED);
-                        documentRepo.save(previous);
+        // Regla: a lo sumo un documento PUBLISHED por template. Por cada template vinculado,
+        // si ya existe otro documento PUBLISHED que lo comparte, se archiva automáticamente
+        // — mismo patrón que TemplateService.activate() con isActive.
+        List<UUID> linkedTemplateIds = templateLinkRepo.findByDocument_IdAndIsActiveTrue(id).stream()
+                .map(dt -> dt.getId().getTemplateId())
+                .toList();
 
-                        auditService.log(AuditContext.builder()
-                                .tableName("privacy_documents")
-                                .recordId(previous.getId())
-                                .action("DOCUMENT_ARCHIVED_POR_NUEVA_VERSION")
-                                .oldData(Map.of("status", "PUBLISHED"))
-                                .newData(Map.of("status", "ARCHIVED"))
-                                .actorId(publishedBy)
-                                .actorRole(securityContextHelper.getActorRole())
-                                .build());
-                    });
-        }
+        linkedTemplateIds.stream()
+                .flatMap(templateId -> templateLinkRepo
+                        .findByTemplate_IdAndIsActiveTrueAndDocument_StatusAndDocument_IsActiveTrue(
+                                templateId, DocumentStatus.PUBLISHED)
+                        .stream())
+                .map(DocumentTemplates::getDocument)
+                .filter(previous -> !previous.getId().equals(doc.getId()))
+                .distinct()
+                .forEach(previous -> {
+                    previous.setStatus(DocumentStatus.ARCHIVED);
+                    documentRepo.save(previous);
+
+                    auditService.log(AuditContext.builder()
+                            .tableName("privacy_documents")
+                            .recordId(previous.getId())
+                            .action("DOCUMENT_ARCHIVED_POR_NUEVA_VERSION")
+                            .oldData(Map.of("status", "PUBLISHED"))
+                            .newData(Map.of("status", "ARCHIVED"))
+                            .actorId(publishedBy)
+                            .actorRole(securityContextHelper.getActorRole())
+                            .build());
+                });
 
         // Generar PDF en memoria y almacenar bytes + hash
         doc.setPublishAt(LocalDateTime.now());
@@ -564,7 +634,6 @@ public class PrivacyDocumentService {
 
         PrivacyDocuments newDoc = PrivacyDocuments.builder()
                 .documentFamilyId(familyId)
-                .templateId(source.getTemplateId())
                 .category(source.getCategory())
                 .status(DocumentStatus.DRAFT)
                 .version(nextVersion)
@@ -576,6 +645,16 @@ public class PrivacyDocumentService {
                 .build();
 
         PrivacyDocuments saved = documentRepo.save(newDoc);
+
+        // Hereda los templates vinculados de la versión origen, igual que hacía con templateId
+        templateLinkRepo.findByDocument_IdAndIsActiveTrue(sourceId).forEach(sourceLink -> {
+            DocumentTemplates newLink = new DocumentTemplates();
+            newLink.setId(new DocumentTemplates.DocumentTemplatesId(saved.getId(), sourceLink.getId().getTemplateId()));
+            newLink.setDocument(saved);
+            newLink.setTemplate(sourceLink.getTemplate());
+            newLink.setIsActive(true);
+            templateLinkRepo.save(newLink);
+        });
 
         auditService.log(AuditContext.builder()
                 .tableName("privacy_documents")
@@ -608,14 +687,6 @@ public class PrivacyDocumentService {
 
     // ── Validaciones de negocio ───────────────────────────────────────────────────
 
-    private void validateTemplateActive(UUID templateId) {
-        var template = templatesRepo.findById(templateId)
-                .orElseThrow(() -> new java.util.NoSuchElementException("La template " + templateId + " no existe"));
-        if (!Boolean.TRUE.equals(template.getIsActive())) {
-            throw new BusinessValidationException("La template " + templateId + " no está activa");
-        }
-    }
-
     private void validatePurposeApproved(UUID purposeId) {
         var purpose = purposesRepo.findById(purposeId)
                 .orElseThrow(() -> new PurposeNotFoundException(purposeId));
@@ -628,9 +699,6 @@ public class PrivacyDocumentService {
     private void validateReadyForReview(PrivacyDocuments doc) {
         if (doc.getContent() == null || doc.getContent().isBlank()) {
             throw new BusinessValidationException("El contenido no puede estar vacío antes de enviar a revisión");
-        }
-        if (doc.getTemplateId() == null) {
-            throw new BusinessValidationException("Debe asignar una Template antes de enviar a revisión");
         }
         List<DocumentPurposes> purposes = purposeRepo.findByDocument_IdAndIsActiveTrue(doc.getId());
         if (purposes.isEmpty()) {

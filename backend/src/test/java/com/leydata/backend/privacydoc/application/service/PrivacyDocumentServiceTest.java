@@ -2,6 +2,7 @@ package com.leydata.backend.privacydoc.application.service;
 
 import com.leydata.backend.audit.application.service.AuditService;
 import com.leydata.backend.entity.DocumentPurposes;
+import com.leydata.backend.entity.DocumentTemplates;
 import com.leydata.backend.entity.Domains;
 import com.leydata.backend.entity.PrivacyDocuments;
 import com.leydata.backend.entity.PurposeRequests;
@@ -21,6 +22,7 @@ import com.leydata.backend.privacydoc.domain.exception.DocumentNotFoundException
 import com.leydata.backend.privacydoc.domain.exception.InvalidTransitionException;
 import com.leydata.backend.privacydoc.infrastructure.pdf.PdfGeneratorService;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
+import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentTemplatesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
 import com.leydata.backend.purposerequest.infrastructure.persistence.PurposeRequestsRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
@@ -56,6 +58,7 @@ class PrivacyDocumentServiceTest {
 
     @Mock private PrivacyDocumentsRepository documentRepo;
     @Mock private DocumentPurposesRepository purposeRepo;
+    @Mock private DocumentTemplatesRepository templateLinkRepo;
     @Mock private DomainsRepository domainsRepo;
     @Mock private PurposesRepository purposesRepo;
     @Mock private PurposeRequestsRepository purposeRequestsRepo;
@@ -108,7 +111,6 @@ class PrivacyDocumentServiceTest {
         return PrivacyDocuments.builder()
                 .id(documentId)
                 .documentFamilyId(documentId)
-                .templateId(templateId)
                 .category(DocumentCategory.MARKETING_DIRECTO)
                 .status(status)
                 .version(1)
@@ -123,6 +125,15 @@ class PrivacyDocumentServiceTest {
         t.setId(templateId);
         t.setIsActive(true);
         return t;
+    }
+
+    private DocumentTemplates activeTemplateLink(PrivacyDocuments doc, Templates template) {
+        DocumentTemplates link = new DocumentTemplates();
+        link.setId(new DocumentTemplates.DocumentTemplatesId(doc.getId(), template.getId()));
+        link.setDocument(doc);
+        link.setTemplate(template);
+        link.setIsActive(true);
+        return link;
     }
 
     private Purposes approvedActivePurpose() {
@@ -157,21 +168,6 @@ class PrivacyDocumentServiceTest {
         assertThat(response.getStatus()).isEqualTo(DocumentStatus.DRAFT);
         assertThat(response.getVersion()).isEqualTo(1);
         assertThat(response.getDocumentFamilyId()).isEqualTo(documentId);
-    }
-
-    @Test
-    void create_lanzaExcepcion_siLaTemplateNoEstaActiva() {
-        Templates inactive = activeTemplate();
-        inactive.setIsActive(false);
-        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(inactive));
-
-        CreateDocumentRequest req = new CreateDocumentRequest();
-        req.setCategory(DocumentCategory.MARKETING_DIRECTO);
-        req.setName("Doc");
-        req.setTemplateId(templateId);
-
-        assertThatThrownBy(() -> service.create(req))
-                .isInstanceOf(BusinessValidationException.class);
     }
 
     // ── getById() ────────────────────────────────────────────────────────────────
@@ -330,6 +326,76 @@ class PrivacyDocumentServiceTest {
                 .isInstanceOf(BusinessValidationException.class);
     }
 
+    // ── addTemplate() ────────────────────────────────────────────────────────────
+
+    @Test
+    void addTemplate_vinculaTemplateAlDocumentoEnCualquierEstado() {
+        when(documentRepo.findById(documentId)).thenReturn(Optional.of(document(DocumentStatus.PUBLISHED)));
+        when(templateLinkRepo.existsByDocument_IdAndTemplate_IdAndIsActiveTrue(documentId, templateId)).thenReturn(false);
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(activeTemplate()));
+        when(templateLinkRepo.findByDocument_IdAndTemplate_Id(documentId, templateId)).thenReturn(Optional.empty());
+
+        service.addTemplate(documentId, templateId);
+
+        verify(templateLinkRepo).save(any(DocumentTemplates.class));
+    }
+
+    @Test
+    void addTemplate_noExigeQueElTemplateEsteActive() {
+        when(documentRepo.findById(documentId)).thenReturn(Optional.of(document(DocumentStatus.DRAFT)));
+        when(templateLinkRepo.existsByDocument_IdAndTemplate_IdAndIsActiveTrue(documentId, templateId)).thenReturn(false);
+        Templates inactive = activeTemplate();
+        inactive.setIsActive(false);
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(inactive));
+        when(templateLinkRepo.findByDocument_IdAndTemplate_Id(documentId, templateId)).thenReturn(Optional.empty());
+
+        service.addTemplate(documentId, templateId);
+
+        verify(templateLinkRepo).save(any(DocumentTemplates.class));
+    }
+
+    @Test
+    void addTemplate_lanzaExcepcion_siYaEstaVinculadoActivamente() {
+        when(documentRepo.findById(documentId)).thenReturn(Optional.of(document(DocumentStatus.DRAFT)));
+        when(templateLinkRepo.existsByDocument_IdAndTemplate_IdAndIsActiveTrue(documentId, templateId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.addTemplate(documentId, templateId))
+                .isInstanceOf(BusinessValidationException.class);
+    }
+
+    @Test
+    void addTemplate_lanzaExcepcion_siElTemplateNoExiste() {
+        when(documentRepo.findById(documentId)).thenReturn(Optional.of(document(DocumentStatus.DRAFT)));
+        when(templateLinkRepo.existsByDocument_IdAndTemplate_IdAndIsActiveTrue(documentId, templateId)).thenReturn(false);
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.addTemplate(documentId, templateId))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    // ── removeTemplate() ─────────────────────────────────────────────────────────
+
+    @Test
+    void removeTemplate_desvinculaConSoftDeleteEnCualquierEstado() {
+        PrivacyDocuments doc = document(DocumentStatus.PUBLISHED);
+        DocumentTemplates link = activeTemplateLink(doc, activeTemplate());
+        when(documentRepo.findById(documentId)).thenReturn(Optional.of(doc));
+        when(templateLinkRepo.findByDocument_IdAndTemplate_Id(documentId, templateId)).thenReturn(Optional.of(link));
+
+        service.removeTemplate(documentId, templateId);
+
+        assertThat(link.getIsActive()).isFalse();
+    }
+
+    @Test
+    void removeTemplate_lanzaExcepcion_siNoHayVinculoActivo() {
+        when(documentRepo.findById(documentId)).thenReturn(Optional.of(document(DocumentStatus.DRAFT)));
+        when(templateLinkRepo.findByDocument_IdAndTemplate_Id(documentId, templateId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.removeTemplate(documentId, templateId))
+                .isInstanceOf(BusinessValidationException.class);
+    }
+
     // ── submit() ─────────────────────────────────────────────────────────────────
 
     @Test
@@ -363,13 +429,15 @@ class PrivacyDocumentServiceTest {
     }
 
     @Test
-    void submit_lanzaExcepcion_siNoTieneTemplateAsignada() {
+    void submit_noExigeTemplateAsignado_puedePublicarseSinNingunTemplate() {
         PrivacyDocuments doc = document(DocumentStatus.DRAFT);
-        doc.setTemplateId(null);
         when(documentRepo.findById(documentId)).thenReturn(Optional.of(doc));
+        when(purposeRepo.findByDocument_IdAndIsActiveTrue(documentId))
+                .thenReturn(List.of(activeLink(doc, approvedActivePurpose())));
 
-        assertThatThrownBy(() -> service.submit(documentId))
-                .isInstanceOf(BusinessValidationException.class);
+        PrivacyDocumentResponse response = service.submit(documentId);
+
+        assertThat(response.getStatus()).isEqualTo(DocumentStatus.IN_REVIEW);
     }
 
     @Test
@@ -457,8 +525,6 @@ class PrivacyDocumentServiceTest {
         Purposes purpose = approvedActivePurpose();
         when(documentRepo.findById(documentId)).thenReturn(Optional.of(doc));
         when(purposeRepo.findByDocument_IdAndIsActiveTrue(documentId)).thenReturn(List.of(activeLink(doc, purpose)));
-        when(documentRepo.findByTemplateIdAndStatusAndIsActiveTrue(templateId, DocumentStatus.PUBLISHED))
-                .thenReturn(Optional.empty());
         when(pdfGenerator.generate(doc)).thenReturn(new PdfGeneratorService.PdfResult(new byte[]{1, 2, 3}, "hash-pdf"));
         when(domainsRepo.findById(domainId)).thenReturn(Optional.of(new Domains()));
 
@@ -472,13 +538,17 @@ class PrivacyDocumentServiceTest {
     void publish_archivaAutomaticamenteLaVersionPublishedAnteriorDelMismoTemplate() {
         PrivacyDocuments doc = document(DocumentStatus.APPROVED);
         Purposes purpose = approvedActivePurpose();
+        Templates template = activeTemplate();
         PrivacyDocuments previous = document(DocumentStatus.PUBLISHED);
         previous.setId(UUID.randomUUID());
 
         when(documentRepo.findById(documentId)).thenReturn(Optional.of(doc));
         when(purposeRepo.findByDocument_IdAndIsActiveTrue(documentId)).thenReturn(List.of(activeLink(doc, purpose)));
-        when(documentRepo.findByTemplateIdAndStatusAndIsActiveTrue(templateId, DocumentStatus.PUBLISHED))
-                .thenReturn(Optional.of(previous));
+        when(templateLinkRepo.findByDocument_IdAndIsActiveTrue(documentId))
+                .thenReturn(List.of(activeTemplateLink(doc, template)));
+        when(templateLinkRepo.findByTemplate_IdAndIsActiveTrueAndDocument_StatusAndDocument_IsActiveTrue(
+                templateId, DocumentStatus.PUBLISHED))
+                .thenReturn(List.of(activeTemplateLink(previous, template)));
         when(pdfGenerator.generate(doc)).thenReturn(new PdfGeneratorService.PdfResult(new byte[]{1}, "hash-pdf"));
         when(domainsRepo.findById(domainId)).thenReturn(Optional.of(new Domains()));
 
@@ -500,8 +570,6 @@ class PrivacyDocumentServiceTest {
 
         when(documentRepo.findById(documentId)).thenReturn(Optional.of(doc));
         when(purposeRepo.findByDocument_IdAndIsActiveTrue(documentId)).thenReturn(List.of(activeLink(doc, purpose)));
-        when(documentRepo.findByTemplateIdAndStatusAndIsActiveTrue(templateId, DocumentStatus.PUBLISHED))
-                .thenReturn(Optional.empty());
         when(pdfGenerator.generate(doc)).thenReturn(new PdfGeneratorService.PdfResult(new byte[]{1}, "hash-pdf"));
         when(domainsRepo.findById(domainId)).thenReturn(Optional.of(new Domains()));
         when(purposeRequestsRepo.findById(purposeRequestId)).thenReturn(Optional.of(pr));

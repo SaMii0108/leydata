@@ -9,7 +9,7 @@ import com.leydata.backend.entity.Templates;
 import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
 import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
-import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
+import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentTemplatesRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.template.application.dto.*;
@@ -40,7 +40,7 @@ public class TemplateService {
     private final TemplatePurposesRepository templatePurposesRepo;
     private final PurposesRepository purposesRepo;
     private final DomainsRepository domainsRepo;
-    private final PrivacyDocumentsRepository privacyDocumentsRepo;
+    private final DocumentTemplatesRepository documentTemplatesRepo;
     private final SecurityContextHelper securityContextHelper;
     private final AuditService auditService;
 
@@ -187,9 +187,12 @@ public class TemplateService {
                 .orElseThrow(() -> new BusinessValidationException(
                         "No hay una versión activa para el template " + templateKey + " en este dominio"));
 
-        UUID documentId = privacyDocumentsRepo
-                .findByTemplateIdAndStatusAndIsActiveTrue(template.getId(), DocumentStatus.PUBLISHED)
-                .map(doc -> doc.getId())
+        UUID documentId = documentTemplatesRepo
+                .findByTemplate_IdAndIsActiveTrueAndDocument_StatusAndDocument_IsActiveTrue(
+                        template.getId(), DocumentStatus.PUBLISHED)
+                .stream()
+                .findFirst()
+                .map(link -> link.getDocument().getId())
                 .orElse(null);
 
         return TemplateResolutionResponse.builder()

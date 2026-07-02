@@ -41,10 +41,4 @@ public interface PrivacyDocumentsRepository extends JpaRepository<PrivacyDocumen
 
     /** Comprueba si ya existe un borrador activo en la misma familia. */
     boolean existsByDocumentFamilyIdAndStatusAndIsActiveTrue(UUID documentFamilyId, DocumentStatus status);
-
-    /**
-     * El documento PUBLISHED vigente de un template — a lo sumo uno, ya que publish()
-     * archiva automáticamente cualquier versión anterior con el mismo template_id.
-     */
-    Optional<PrivacyDocuments> findByTemplateIdAndStatusAndIsActiveTrue(UUID templateId, DocumentStatus status);
 }

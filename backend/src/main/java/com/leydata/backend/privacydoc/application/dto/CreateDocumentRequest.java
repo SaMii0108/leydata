@@ -6,8 +6,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
-import java.util.UUID;
-
 @Data
 @Schema(description = "Datos para crear un nuevo documento de privacidad en estado DRAFT")
 public class CreateDocumentRequest {
@@ -28,9 +26,4 @@ public class CreateDocumentRequest {
             example = "Este documento describe las condiciones bajo las cuales [Organización] trata los datos personales...",
             nullable = true)
     private String content;
-
-    @Schema(description = "UUID de la Template visual para el portal del titular. Requerido antes de enviar a revisión.",
-            example = "550e8400-e29b-41d4-a716-446655440099",
-            nullable = true)
-    private UUID templateId;
 }
