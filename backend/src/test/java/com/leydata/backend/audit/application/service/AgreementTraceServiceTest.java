@@ -14,6 +14,7 @@ import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocument
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.template.application.service.TemplateService;
 import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -41,48 +42,47 @@ class AgreementTraceServiceTest {
     @Mock private TemplateService templateService;
 
     @InjectMocks
-    private AgreementTraceService traceService;
+    private AgreementTraceService service;
 
     private final UUID agreementId = UUID.randomUUID();
     private final UUID documentId = UUID.randomUUID();
     private final UUID templateId = UUID.randomUUID();
     private final UUID purposeId = UUID.randomUUID();
-    private final UUID dataSubjectId = UUID.randomUUID();
 
     private Agreements agreement() {
         Agreements a = new Agreements();
         a.setId(agreementId);
-        a.setDataSubjectId(dataSubjectId);
+        a.setDataSubjectId(UUID.randomUUID());
         a.setDocumentId(documentId);
         a.setTemplateId(templateId);
         a.setCreatedAt(LocalDateTime.now());
         return a;
     }
 
-    private PrivacyDocuments document(String storedHash) {
+    private PrivacyDocuments document(String hash) {
         PrivacyDocuments d = new PrivacyDocuments();
         d.setId(documentId);
-        d.setVersion(3);
-        d.setHashSha256(storedHash);
+        d.setVersion(1);
+        d.setHashSha256(hash);
         return d;
     }
 
-    private Templates template(String storedHash) {
+    private Templates template(String hash) {
         Templates t = new Templates();
         t.setId(templateId);
-        t.setTemplateKey("CONSENT_MARKETING");
-        t.setVersion(2);
-        t.setHashSha256(storedHash);
+        t.setTemplateKey("CONSENT_X");
+        t.setVersion(1);
+        t.setHashSha256(hash);
         return t;
     }
 
-    private AgreementsPurposes agreementPurpose(String storedHash) {
+    private AgreementsPurposes agreementPurpose(String snapshotHash) {
         AgreementsPurposes ap = new AgreementsPurposes();
         ap.setAgreementId(agreementId);
         ap.setPurposeId(purposeId);
+        ap.setPurposeCode("MARKETING");
         ap.setAccepted(true);
-        ap.setPurposeCode("MKT_EMAIL");
-        ap.setPurposeHash(storedHash);
+        ap.setPurposeHash(snapshotHash);
         return ap;
     }
 
@@ -95,95 +95,177 @@ class AgreementTraceServiceTest {
         return p;
     }
 
-    @Test
-    void trace_lanzaAgreementNotFoundException_siNoExiste() {
-        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> traceService.trace(agreementId))
-                .isInstanceOf(AgreementNotFoundException.class);
+    private void mockValidChain() {
+        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("doc-hash")));
+        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("doc-hash");
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash");
+        when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of(agreementPurpose("purpose-hash")));
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose("purpose-hash")));
     }
 
     @Test
-    void trace_overallIntegrityOK_cuandoTodosLosEslabonesSonValidos() {
-        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
-        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("hash-doc")));
-        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("hash-doc");
-        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("hash-template")));
-        when(templateService.recalculateHash(templateId)).thenReturn("hash-template");
-        when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of(agreementPurpose("hash-purpose")));
-        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose("hash-purpose")));
+    void trace_todaLaCadenaValida_devuelveOverallIntegrityOk() {
+        mockValidChain();
 
-        AgreementTraceResponse response = traceService.trace(agreementId);
+        AgreementTraceResponse response = service.trace(agreementId);
 
-        assertThat(response.getAgreementId()).isEqualTo(agreementId);
+        assertThat(response.getOverallIntegrity()).isEqualTo("OK");
         assertThat(response.getDocument().getIsValid()).isTrue();
         assertThat(response.getTemplate().getIsValid()).isTrue();
         assertThat(response.getPurposes()).hasSize(1);
         assertThat(response.getPurposes().get(0).getIsValid()).isTrue();
         assertThat(response.getPurposes().get(0).getIntegrityStatus()).isEqualTo("OK");
-        assertThat(response.getOverallIntegrity()).isEqualTo("OK");
     }
 
     @Test
-    void trace_overallIntegrityMismatch_cuandoElTemplateFueAlterado() {
-        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
-        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("hash-doc")));
-        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("hash-doc");
-        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("hash-guardado")));
-        when(templateService.recalculateHash(templateId)).thenReturn("hash-alterado");
-        when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of(agreementPurpose("hash-purpose")));
-        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose("hash-purpose")));
+    void trace_agreementInexistente_lanzaAgreementNotFoundException() {
+        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.empty());
 
-        AgreementTraceResponse response = traceService.trace(agreementId);
+        assertThatThrownBy(() -> service.trace(agreementId))
+                .isInstanceOf(AgreementNotFoundException.class);
+    }
+
+    @Test
+    void trace_documentoConHashAlterado_devuelveOverallIntegrityMismatch() {
+        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("doc-hash-original")));
+        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("doc-hash-alterado");
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash");
+        when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of());
+
+        AgreementTraceResponse response = service.trace(agreementId);
+
+        assertThat(response.getDocument().getIsValid()).isFalse();
+        assertThat(response.getOverallIntegrity()).isEqualTo("MISMATCH");
+    }
+
+    @Test
+    void trace_templateConHashAlterado_devuelveOverallIntegrityMismatch() {
+        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("doc-hash")));
+        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("doc-hash");
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash-original")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash-alterado");
+        when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of());
+
+        AgreementTraceResponse response = service.trace(agreementId);
 
         assertThat(response.getTemplate().getIsValid()).isFalse();
         assertThat(response.getOverallIntegrity()).isEqualTo("MISMATCH");
     }
 
     @Test
-    void trace_overallIntegrityPartial_cuandoElDocumentoNoTieneHashCalculable() {
+    void trace_purposeConDriftPosteriorAlConsentimiento_devuelveIntegrityMismatch() {
         when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
-        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document(null)));
-        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("hash-template")));
-        when(templateService.recalculateHash(templateId)).thenReturn("hash-template");
-        when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of(agreementPurpose("hash-purpose")));
-        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose("hash-purpose")));
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("doc-hash")));
+        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("doc-hash");
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash");
+        when(agreementsPurposesRepo.findByAgreementId(agreementId))
+                .thenReturn(List.of(agreementPurpose("purpose-hash-al-consentir")));
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose("purpose-hash-actual-modificado")));
 
-        AgreementTraceResponse response = traceService.trace(agreementId);
+        AgreementTraceResponse response = service.trace(agreementId);
+
+        assertThat(response.getPurposes().get(0).getIsValid()).isFalse();
+        assertThat(response.getPurposes().get(0).getIntegrityStatus()).isEqualTo("INTEGRITY_MISMATCH");
+        assertThat(response.getOverallIntegrity()).isEqualTo("MISMATCH");
+    }
+
+    @Test
+    void trace_documentoInexistente_devuelvePartialConEslabonUnknown() {
+        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.empty());
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash");
+        when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of());
+
+        AgreementTraceResponse response = service.trace(agreementId);
 
         assertThat(response.getDocument().getIsValid()).isFalse();
         assertThat(response.getOverallIntegrity()).isEqualTo("PARTIAL");
     }
 
     @Test
-    void trace_purposeIntegrityStatusUnknown_cuandoLaPurposeFueEliminada() {
+    void trace_purposeInexistente_devuelveIntegrityStatusUnknown() {
         when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
-        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("hash-doc")));
-        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("hash-doc");
-        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("hash-template")));
-        when(templateService.recalculateHash(templateId)).thenReturn("hash-template");
-        when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of(agreementPurpose("hash-purpose")));
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("doc-hash")));
+        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("doc-hash");
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash");
+        when(agreementsPurposesRepo.findByAgreementId(agreementId))
+                .thenReturn(List.of(agreementPurpose("purpose-hash")));
         when(purposesRepo.findById(purposeId)).thenReturn(Optional.empty());
 
-        AgreementTraceResponse response = traceService.trace(agreementId);
+        AgreementTraceResponse response = service.trace(agreementId);
+
+        assertThat(response.getPurposes().get(0).getIsValid()).isFalse();
+        assertThat(response.getPurposes().get(0).getIntegrityStatus()).isEqualTo("UNKNOWN");
+        assertThat(response.getOverallIntegrity()).isEqualTo("PARTIAL");
+    }
+
+    @Test
+    void trace_purposeHashNuloEnElSnapshot_seConsideraUnknown() {
+        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("doc-hash")));
+        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("doc-hash");
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash");
+        when(agreementsPurposesRepo.findByAgreementId(agreementId))
+                .thenReturn(List.of(agreementPurpose(null)));
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose("cualquier-hash")));
+
+        AgreementTraceResponse response = service.trace(agreementId);
 
         assertThat(response.getPurposes().get(0).getIntegrityStatus()).isEqualTo("UNKNOWN");
         assertThat(response.getOverallIntegrity()).isEqualTo("PARTIAL");
     }
 
     @Test
-    void trace_noEscribeEnNingunRepositorioDeLog() {
+    void trace_mismatchTienePrioridadSobreUnknown_enElOverallIntegrity() {
+        // Documento inexistente (UNKNOWN) + template con hash alterado (MISMATCH) en la misma traza
         when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
-        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("hash-doc")));
-        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("hash-doc");
-        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("hash-template")));
-        when(templateService.recalculateHash(templateId)).thenReturn("hash-template");
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.empty());
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash-original")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash-alterado");
         when(agreementsPurposesRepo.findByAgreementId(agreementId)).thenReturn(List.of());
 
-        AgreementTraceResponse response = traceService.trace(agreementId);
+        AgreementTraceResponse response = service.trace(agreementId);
 
-        // Regla 13: /trace es de solo lectura. No hay ningún repositorio de logs inyectado
-        // en este service — la ausencia de ese mock ya es la prueba estructural de la regla.
-        assertThat(response.getPurposes()).isEmpty();
+        assertThat(response.getOverallIntegrity()).isEqualTo("MISMATCH");
+    }
+
+    @Test
+    void trace_variasPurposes_incluyeTodasEnLaRespuesta() {
+        UUID purposeId2 = UUID.randomUUID();
+        AgreementsPurposes ap2 = new AgreementsPurposes();
+        ap2.setAgreementId(agreementId);
+        ap2.setPurposeId(purposeId2);
+        ap2.setPurposeCode("ANALYTICS");
+        ap2.setAccepted(false);
+        ap2.setPurposeHash("hash-2");
+        Purposes purpose2 = new Purposes();
+        purpose2.setId(purposeId2);
+        purpose2.setPurposeFamilyId(purposeId2);
+        purpose2.setVersion(1);
+        purpose2.setHashSha256("hash-2");
+
+        when(agreementsRepo.findById(agreementId)).thenReturn(Optional.of(agreement()));
+        when(privacyDocumentsRepo.findById(documentId)).thenReturn(Optional.of(document("doc-hash")));
+        when(privacyDocumentService.recalculateHash(documentId)).thenReturn("doc-hash");
+        when(templatesRepo.findById(templateId)).thenReturn(Optional.of(template("tpl-hash")));
+        when(templateService.recalculateHash(templateId)).thenReturn("tpl-hash");
+        when(agreementsPurposesRepo.findByAgreementId(agreementId))
+                .thenReturn(List.of(agreementPurpose("purpose-hash"), ap2));
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose("purpose-hash")));
+        when(purposesRepo.findById(purposeId2)).thenReturn(Optional.of(purpose2));
+
+        AgreementTraceResponse response = service.trace(agreementId);
+
+        assertThat(response.getPurposes()).hasSize(2);
+        assertThat(response.getOverallIntegrity()).isEqualTo("OK");
     }
 }

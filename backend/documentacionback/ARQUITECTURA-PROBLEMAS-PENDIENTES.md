@@ -1,8 +1,8 @@
 # LeyData — Problemas Arquitectónicos y Deuda Técnica Pendiente
 
 **Fecha de análisis:** 2026-06-27  
-**Última actualización:** 2026-06-28  
-**Branch:** infra/postgres-replica-pgbouncer  
+**Última actualización:** 2026-06-30  
+**Branch:** feature/orchestrator-module  
 **Contexto:** Evaluación pre-producción. La Ley 21.719 entra en vigor en diciembre de 2026.
 
 ---
@@ -45,11 +45,19 @@
 - `5434` → PostgreSQL replica (solo lectura, standby)
 - `5435` → PgBouncer (punto de entrada recomendado para el backend en producción)
 
-**Pendiente — Fase 2b (deuda técnica):**
-Enrutar lecturas de Spring Boot a la replica via `AbstractRoutingDataSource`. Requiere:
-- Dos `DataSource` beans: `writeDataSource` (→ primary/pgbouncer) y `readDataSource` (→ replica)
-- Un `ReadWriteRoutingDataSource extends AbstractRoutingDataSource` que inspeccione `TransactionSynchronizationManager.isCurrentTransactionReadOnly()`
-- Anotar las queries de solo lectura con `@Transactional(readOnly=true)`
+**✅ Fase 2b — RESUELTO:**
+Lecturas de Spring Boot enrutadas automáticamente a la réplica vía `AbstractRoutingDataSource`.
+
+**Archivos creados:**
+- `config/DataSourceType.java` — enum `WRITE / READ`
+- `config/ReadWriteRoutingDataSource.java` — routing por `TransactionSynchronizationManager.isCurrentTransactionReadOnly()`
+- `config/DataSourceConfig.java` — dos pools HikariCP + `LazyConnectionDataSourceProxy` como `@Primary DataSource`
+
+**`application.properties`:** bloque `spring.datasource.*` reemplazado por `spring.datasource.write.*` (→ PgBouncer :5435) y `spring.datasource.read.*` (→ réplica :5434).
+
+**Cómo funciona:** cualquier método anotado con `@Transactional(readOnly = true)` recibe conexión del pool de la réplica. Todos los services de lectura ya tenían esta anotación.
+
+Ver doc completo: [`DATASOURCE-ROUTING.md`](DATASOURCE-ROUTING.md)
 
 **Pendiente — Fase 3 (deuda técnica):**
 Failover automático con **Patroni** (coordina etcd + PostgreSQL para promover la replica automáticamente si el primary cae sin intervención humana). Recomendado para producción antes del go-live de diciembre 2026.
@@ -97,14 +105,21 @@ log_format main '$remote_addr - $request_id - $request - $status';
 
 ---
 
-### 🟠 Ventana de inconsistencia en caché de consentimientos (Redis)
+### ✅ ~~Ventana de inconsistencia en caché de consentimientos (Redis)~~ — RESUELTO
 
-**Problema:** El plan de invalidar Redis únicamente cuando se revoca un consentimiento crea una **ventana de inconsistencia ilimitada** si la invalidación falla (ej. timeout de red entre el servicio que revoca y Redis). Un sistema externo podría recibir "consentimiento vigente" para un consentimiento ya revocado durante horas.
+**Fix aplicado:** Doble mecanismo de consistencia implementado.
 
-**Solución propuesta:**
-- Usar **TTL corto (30–60 segundos)** en todas las keys de consentimiento, combinado con invalidación activa en la revocación.
-- El peor caso de inconsistencia queda acotado al TTL, documentable ante el CPDT como "latencia técnica de propagación".
-- Implementar un **evento de dominio** (`ConsentimientoRevocadoEvent`) que dispare la invalidación de Redis de forma explícita y logueable.
+1. **TTL duro de 300 segundos** en todas las keys `consent:{subjectId}:{purposeId}` del Orquestador. El peor caso de desincronización queda acotado a 5 minutos, documentable ante el CPDT como "latencia técnica de propagación".
+
+2. **`AgreementRevocationCacheListener`** (`AFTER_COMMIT`): al revocar vía `PATCH /api/agreements/{id}/revoke` directamente en el backend, se publica `AgreementRevokedEvent` y el listener elimina las keys de Redis **solo después de que Postgres haga commit**. Si Postgres hace rollback, el evento no se despacha — Redis nunca queda desincronizado.
+
+3. **Orquestador escribe REVOKED activamente**: cuando la revocación llega vía `POST /consent/revoke` del Orquestador, este escribe el estado `REVOKED` en Redis inmediatamente tras confirmar la persistencia en Postgres.
+
+**Archivos creados:**
+- `agreement/domain/event/AgreementRevokedEvent.java` — Spring event record con `subjectIdentifier` + `List<UUID> purposeIds`
+- `agreement/application/service/AgreementRevocationCacheListener.java` — `@TransactionalEventListener(phase = AFTER_COMMIT)`
+
+Ver explicación completa en `agreement/domain/event/README.md`.
 
 ---
 
@@ -126,16 +141,42 @@ log_format main '$remote_addr - $request_id - $request - $status';
 
 ---
 
-### 🟡 Falta endpoint de consulta de consentimiento para sistemas externos (Propagación B2B)
+### ✅ ~~Falta endpoint de consulta de consentimiento para sistemas externos (Propagación B2B)~~ — RESUELTO
 
-**Problema:** No existe un endpoint optimizado para la consulta de consentimiento B2B — el caso de uso principal del sistema: "¿puede el sistema X procesar el dato del titular Y para la finalidad Z?". Los sistemas externos tendrían que construir esta lógica ellos mismos interpretando múltiples endpoints.
+**Fix aplicado:** Módulo **Orquestador** implementado como servicio independiente (puerto 8081).
 
-**Solución propuesta:**
+**Endpoints disponibles:**
 ```
-GET /api/consent/check?titularId={id}&purposeId={id}&dataCategory={cat}
-→ { "permitted": true/false, "validUntil": "...", "legalBasis": "...", "cachedAt": "..." }
+GET  /consent/check?subjectId={id}&purposeId={uuid}  → { status: ALLOWED|REVOKED|DENIED|PENDING, legalBasisCode, validUntil }
+POST /consent/capture                                  → captura acuerdo + pre-warms Redis
+POST /consent/revoke                                   → revoca acuerdo + actualiza Redis
 ```
-Este endpoint debe ser el único punto de integración B2B, servido desde Redis (caché con TTL 30-60s), con autenticación por API Key (no JWT de usuario).
+
+**Flujo de seguridad:**
+- **Inbound:** JWT del IdP externo validado contra JWKS en `EXTERNAL_JWKS_URI`
+- **Outbound:** M2M `client_credentials` hacia Keycloak realm `leydata` — el backend nunca recibe el token del cliente externo
+
+**Patrón findOrCreate para titulares:** el campo `subjectId` del Orquestador es un string opaco (RUT, UUID externo, etc.). Al capturar un consentimiento el backend hace `findOrCreate` en `data_subjects` por `identifier`. Los sistemas externos nunca necesitan conocer el UUID interno.
+
+Ver guía completa: [`orchestrator/INTEGRATION.md`](../../orchestrator/INTEGRATION.md)
+
+---
+
+### ✅ ~~`POST /consent/capture` exigía que el CRM ya conociera `templateId`/`documentId` internos~~ — RESUELTO
+
+**Problema original:** el diseño previsto era que el sistema cliente solo necesitara conocer un identificador de negocio del template (ej. `ONBOARDING_CLIENTE`); en cambio, `CaptureConsentRequest` exigía `templateId` (UUID interno) y `documentId` directamente — el Orquestador actuaba como simple "pasamanos" en vez de resolver esos IDs por su cuenta. Identificado y corregido en la rama `feature/orchestrator-module`, junto con el aislamiento por dominio de `Templates` (ver sección de Templates en [`docs/templates-module.md`](../../docs/templates-module.md)).
+
+**Fix aplicado:**
+- `Templates.domainId` (FK a `Domains`, con unicidad compuesta `domain_id + template_key + version`) — un mismo `templateKey` de negocio ya no colisiona entre dominios distintos.
+- Nuevo endpoint interno `GET /api/templates/resolve?domainId=&templateKey=` (`TemplateController`, `@PreAuthorize("isAuthenticated()")` — no requiere rol DPO/ADMIN, lo llama el Orquestador con su propia identidad de servicio M2M).
+- `PrivacyDocumentService.publish()` ahora archiva automáticamente cualquier documento `PUBLISHED` previo con el mismo `templateId` — garantiza que "el documento vigente de un template" sea una búsqueda sin ambigüedad (`PrivacyDocumentsRepository.findByTemplateIdAndStatusAndIsActiveTrue`).
+- `CaptureConsentRequest` del Orquestador cambió `templateId` (UUID) por `templateKey` (String, identificador de negocio); `documentId` pasó a opcional.
+- `ConsentController.extractDomainId()` lee el claim `leydata_domain` del JWT del sistema cliente (configurado por protocol mapper en su IdP, por client) y lo pasa explícito a `ConsentService.capture()` — **el backend nunca ve este claim**, porque el Orquestador llama al backend con su propia identidad de servicio (`client_registration_id: leydata-system`), no con el JWT del cliente. La resolución de dominio ocurre íntegramente dentro del Orquestador.
+- `AgreementService.create()` resuelve `documentId` automáticamente cuando no viene en el request, vía el mismo método de `PrivacyDocumentsRepository`.
+
+**Decisión de diseño descartada:** se evaluó agregar `documentId` como FK directa en `Templates` (Template → Document), pero `PrivacyDocuments.templateId` ya existía en sentido inverso (Document → Template) desde antes de esta iteración — agregar la regla de unicidad sobre el campo existente fue un cambio más chico y evitó una relación bidireccional redundante.
+
+Ver flujo actualizado: [`orchestrator/INTEGRATION.md`](../../orchestrator/INTEGRATION.md), [`docs/orchestrator-module.md`](../../docs/orchestrator-module.md), [`docs/agreements-module.md`](../../docs/agreements-module.md).
 
 ---
 
@@ -148,9 +189,12 @@ Este endpoint debe ser el único punto de integración B2B, servido desde Redis 
 - `GET /api/agreements/active?dataSubjectId=&templateId=` — consulta para el orquestador (200 si existe, 404 si no)
 - `GET /api/agreements` — listado con filtros opcionales
 - `GET /api/agreements/{id}` — detalle completo con purposes
-- `POST /api/agreements/{id}/verify-integrity` — verificación SHA-256 bajo demanda
-- `GET /api/agreements/{id}/integrity-log` — historial de verificaciones
-- `GET /api/agreements/integrity-log/failed` — verificaciones fallidas para auditoría
+
+**Verificación de integridad** — centralizada en el módulo `audit/` (branch feature/trazabilidad):
+- `POST /api/audit/integrity/verify` — verificación SHA-256 bajo demanda para AGREEMENT, TEMPLATE, DOCUMENT o PURPOSE
+- `GET  /api/audit/integrity/log?entityType=&entityId=` — historial de verificaciones
+- `GET  /api/audit/integrity/failed?entityType=` — verificaciones fallidas para auditoría
+- `GET  /api/audit/trace/agreement/{id}` — traza completa: template + documento + purposes con drift check
 
 **Integridad:** cada agreement calcula un SHA-256 encadenado al agreement anterior (ledger análogo al de `system_audit_log`).
 
@@ -158,26 +202,18 @@ Este endpoint debe ser el único punto de integración B2B, servido desde Redis 
 
 ---
 
-### 🔴 Falta el ciclo de revocación de consentimiento
+### ✅ ~~Falta el ciclo de revocación de consentimiento~~ — RESUELTO
 
-**Problema:** No existe el flujo donde un titular revoca un consentimiento previamente otorgado. La Ley 21.719 exige que la revocación sea tan fácil como el otorgamiento y que tenga efecto inmediato.
+**Fix aplicado:** Endpoint `PATCH /api/agreements/{id}/revoke` implementado con invalidación activa de Redis tras commit de Postgres.
 
-**Lo que falta implementar:**
+**Archivos modificados/creados:**
+- `agreement/web/AgreementController.java` — endpoint `PATCH /{id}/revoke`, resuelve IP real desde header `X-Internal-Real-IP` (inyectado por el Orquestador; WAF/NGINX debe stripear el original)
+- `agreement/application/service/AgreementService.java` — método `revoke()`: valida que el agreement sea ACTIVE y pertenezca al `subjectId` del request; marca agreement y purposes como REVOKED; registra en audit log con IP; publica `AgreementRevokedEvent`
+- `agreement/domain/event/AgreementRevokedEvent.java` *(nuevo)* — record con `subjectIdentifier` y `List<UUID> purposeIds`
+- `agreement/application/service/AgreementRevocationCacheListener.java` *(nuevo)* — `@TransactionalEventListener(phase = AFTER_COMMIT)`: borra las keys `consent:{subjectId}:{purposeId}` de Redis **solo después de que Postgres haga commit**. Si Redis falla, la revocación legal ya está persistida — se loguea WARN sin rollback.
 
-```
-Flujo de revocación:
-1. Titular (autenticado con rol TITULAR) solicita revocar → PATCH /api/agreements/{id}/revoke
-2. Backend valida que el acuerdo pertenece al titular autenticado
-3. Marca el acuerdo como revocado:
-   - revokedAt = now()
-   - revokedBy = keycloakId del TITULAR
-   - revocationReason (opcional, libre)
-4. Invalida la key en Redis para que sistemas externos reciban "permitted: false" de inmediato
-5. Dispara ConsentimientoRevocadoEvent → notificación al DPO/responsable del dominio
-6. AuditService registra la revocación con todos los campos de trazabilidad
-```
-
-**Punto crítico con Redis:** la revocación debe invalidar la key `consent:{titularId}:{purposeId}` en Redis **dentro de la misma transacción** (o como compensación si Redis falla), para que el endpoint B2B `/api/consent/check` refleje el cambio de inmediato. Sin esto, la ventana de inconsistencia es el TTL completo (30-60s).
+**Por qué `AFTER_COMMIT` y no dentro de `@Transactional`:**
+Si se borra Redis dentro de la transacción y luego Postgres hace rollback, Redis queda sin la key pero Postgres dice ACTIVE — inconsistencia silenciosa. Con `AFTER_COMMIT`, el evento no se despacha si hay rollback.
 
 ---
 
@@ -199,7 +235,7 @@ Estado actual del diseño vs. lo que se necesita:
 [PgBouncer :5435]                    ✅ implementado en docker-compose
     │
 [PostgreSQL Primary :5433] → [Replica :5434]   ✅ streaming replication implementada
-                                     ⚠️  routing de reads a replica pendiente (Fase 2b)
+                                     ✅ routing de reads a replica (AbstractRoutingDataSource — Fase 2b)
                                      ❌ failover automático (Patroni) pendiente (Fase 3)
     │
   [Redis Master]                     ✅ implementado
@@ -246,6 +282,7 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 | ~~Usuarios de prueba JEFE_DOMINIO y DPO no existían en el script~~ | ✅ Resuelto — `setup-keycloak.sh` ahora crea `jefe@test.cl` (JEFE_DOMINIO) y `dpo@leydata.cl` (DPO). | `scripts/setup-keycloak.sh` |
 | `AuditService` es un god node (26 edges en el grafo) | Considerar separar en `AuditWriter` (persistencia) y `AuditHashChain` (integridad) para facilitar testing unitario y futura migración a un servicio separado. | `AuditService.java` |
 | `ddl-auto=update` en producción | Hibernate gestiona el esquema automáticamente — válido para desarrollo, peligroso en producción (no hay rollback, no hay historial, riesgo con múltiples instancias). Antes del go-live migrar a **Flyway**: (1) exportar esquema actual como `V1__baseline.sql`, (2) cambiar a `ddl-auto=validate`, (3) todo cambio futuro en scripts `V2__...sql`. | `application.properties` |
+| `DomainsPage.tsx` permite asignar un jefe de dominio que ya lidera otro dominio sin advertirlo | El backend (`UserService.assignUserDomains()`/`createUser()`) ahora rechaza con 400 si a un usuario `JEFE_DOMINIO` se le intenta asignar más de un dominio (regla: un jefe de dominio = un dominio). El flujo "Asignar responsable" de `DomainsPage.tsx` (función `handleAssignSave`, ~línea 140-181) sigue armando el payload `domainIds` por **agregación** (`[...currentDomainIds, assignDomain.id]`) en vez de **reemplazo** — si un admin intenta asignar a un jefe que ya administra otro dominio, el request falla con un 400 poco claro en vez de mostrar la advertencia adecuada o reemplazar la asignación. Pendiente: (1) cambiar la llamada a `updateUser(newJefeId, { domainIds: [assignDomain.id] }, ...)` para que reemplace en vez de agregar, (2) en el `<select>` de "Responsable asignado" (~línea 394-407), marcar visualmente a los jefes que ya administran otro dominio para que el admin entienda que reasignarlos los mueve de dominio. | `frontend/src/pages/DomainsPage.tsx` |
 
 ---
 
@@ -256,16 +293,17 @@ Ver reporte completo: [`endpoint-test-report.md`](endpoint-test-report.md)
 - [x] Agregar `X-Request-ID` al audit log y a la entidad `SystemAuditLog`
 - [x] Mover `UserStatusFilter` a consultar Redis en vez de Postgres (cache-aside implementado)
 - [x] Implementar ciclo de captura de consentimiento (`agreement/` — `POST /api/agreements`, ledger SHA-256, reconsent automático)
-- [ ] Implementar ciclo de revocación de consentimiento (`PATCH /api/agreements/{id}/revoke` — flujo en sección 3)
-- [ ] Crear endpoint `GET /api/consent/check` para integración B2B
-- [ ] Implementar `ConsentimientoRevocadoEvent` para invalidación activa de Redis
-- [ ] Migrar gestión de esquema de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)
+- [x] Implementar ciclo de revocación de consentimiento (`PATCH /api/agreements/{id}/revoke` — `AgreementService.revoke()`, audit log, IP real desde Orquestador)
+- [x] Crear endpoint de consulta de consentimiento B2B (`GET /consent/check` en el Orquestador, con caché Redis y JWT externo)
+- [x] Implementar `AgreementRevokedEvent` para invalidación activa de Redis (`AgreementRevocationCacheListener` con `@TransactionalEventListener(phase = AFTER_COMMIT)`)
+- [x] Migraciones Flyway V5–V7 agregadas (feature/trazabilidad): trigger de inmutabilidad para `entity_integrity_log`, backfill de versionado de purposes, drop de UNIQUE en `purposes.code` — **aplicar manualmente** con psql (ver `docs/audit-module.md`)
+- [ ] Migrar gestión de esquema completo de `ddl-auto=update` a Flyway (`ddl-auto=validate` + scripts `V1__baseline.sql`, `V2__...`)
 - [ ] Correr corrida completa de pruebas de endpoints post todos los fixes
 
 ### Infraestructura
 - [x] Configurar PostgreSQL Streaming Replica (`db-replica` en docker-compose, `docker/postgres-primary/` y `docker/postgres-replica/`)
 - [x] Agregar PgBouncer al Docker Compose (puerto 5435, pool → primary)
-- [ ] Enrutar lecturas Spring Boot a la replica (`AbstractRoutingDataSource`) — Fase 2b
+- [x] Enrutar lecturas Spring Boot a la replica (`AbstractRoutingDataSource`) — Fase 2b
 - [ ] Failover automático con Patroni — Fase 3
 - [x] Agregar Redis al Docker Compose (redis:7-alpine, puerto 6379)
 - [ ] Configurar Redis Sentinel o Cluster (para producción)

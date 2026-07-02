@@ -18,9 +18,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.leydata.backend.template.application.dto.ActivateTemplateRequest;
 import com.leydata.backend.template.application.dto.AddTemplatePurposeRequest;
 import com.leydata.backend.template.application.dto.CreateTemplateRequest;
 import com.leydata.backend.template.application.dto.TemplatePurposeResponse;
+import com.leydata.backend.template.application.dto.TemplateResolutionResponse;
 import com.leydata.backend.template.application.dto.TemplateResponse;
 import com.leydata.backend.template.application.dto.TemplateVerifyResponse;
 import com.leydata.backend.template.application.dto.UpdateTemplatePurposeRequest;
@@ -65,25 +67,36 @@ public class TemplateController {
     @GetMapping
     @Operation(summary = "Listar templates con filtros opcionales [DPO, ADMIN]")
     public List<TemplateResponse> list(
+            @RequestParam(required = false) UUID domainId,
             @RequestParam(required = false) String templateKey,
             @RequestParam(required = false) Boolean isActive,
             @RequestParam(required = false) String createdBy,
             @RequestParam(required = false) String approvedBy,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdAfter,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdBefore) {
-        return service.list(templateKey, isActive, createdBy, approvedBy, createdAfter, createdBefore);
+        return service.list(domainId, templateKey, isActive, createdBy, approvedBy, createdAfter, createdBefore);
     }
 
     @GetMapping("/family/{templateKey}")
-    @Operation(summary = "Historial de versiones de un TEMPLATE_KEY [DPO, ADMIN]")
-    public List<TemplateResponse> getHistory(@PathVariable String templateKey) {
-        return service.getHistory(templateKey);
+    @Operation(summary = "Historial de versiones de un TEMPLATE_KEY dentro de un dominio [DPO, ADMIN]")
+    public List<TemplateResponse> getHistory(@PathVariable String templateKey, @RequestParam UUID domainId) {
+        return service.getHistory(domainId, templateKey);
     }
 
     @GetMapping("/active/{templateKey}")
-    @Operation(summary = "Obtener la versión activa de un TEMPLATE_KEY [DPO, ADMIN]")
-    public TemplateResponse getActive(@PathVariable String templateKey) {
-        return service.getActive(templateKey);
+    @Operation(summary = "Obtener la versión activa de un TEMPLATE_KEY dentro de un dominio [DPO, ADMIN]")
+    public TemplateResponse getActive(@PathVariable String templateKey, @RequestParam UUID domainId) {
+        return service.getActive(domainId, templateKey);
+    }
+
+    // ── B2B (uso interno — Orquestador) ─────────────────────────────────────────────
+
+    @GetMapping("/resolve")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Resolver template activo + documento publicado por templateKey y domainId " +
+            "[uso interno B2B — llamado por el Orquestador con su identidad de servicio]")
+    public TemplateResolutionResponse resolve(@RequestParam UUID domainId, @RequestParam String templateKey) {
+        return service.resolveForCapture(domainId, templateKey);
     }
 
     // ── INTEGRIDAD ───────────────────────────────────────────────────────────────
@@ -103,9 +116,12 @@ public class TemplateController {
     }
 
     @PostMapping("/{id}/activate")
-    @Operation(summary = "Activar template — desactiva la versión anterior del mismo TEMPLATE_KEY [DPO, ADMIN]")
-    public TemplateResponse activate(@PathVariable UUID id) {
-        return service.activate(id);
+    @Operation(summary = "Activar template — desactiva la versión anterior del mismo TEMPLATE_KEY [DPO, ADMIN]",
+               description = "forceReconsent=true obliga a todos los titulares con acuerdos en versiones anteriores a re-consentir (Ley 21.719 cambios sustanciales)")
+    public TemplateResponse activate(@PathVariable UUID id,
+                                     @RequestBody(required = false) ActivateTemplateRequest req) {
+        boolean forceReconsent = req != null && Boolean.TRUE.equals(req.getForceReconsent());
+        return service.activate(id, forceReconsent);
     }
 
     // ── PURPOSES ─────────────────────────────────────────────────────────────────

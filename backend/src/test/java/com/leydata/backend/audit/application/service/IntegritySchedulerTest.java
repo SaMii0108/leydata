@@ -8,9 +8,9 @@ import com.leydata.backend.entity.Templates;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.template.infrastructure.persistence.TemplatesRepository;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,7 +20,6 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,70 +35,71 @@ class IntegritySchedulerTest {
     @InjectMocks
     private IntegrityScheduler scheduler;
 
-    private Agreements agreementWithId(UUID id) {
+    private Agreements agreement(UUID id) {
         Agreements a = new Agreements();
         a.setId(id);
         return a;
     }
 
-    private Templates templateWithId(UUID id) {
+    private Templates template(UUID id) {
         Templates t = new Templates();
         t.setId(id);
         return t;
     }
 
-    private PrivacyDocuments documentWithId(UUID id) {
+    private PrivacyDocuments document(UUID id) {
         PrivacyDocuments d = new PrivacyDocuments();
         d.setId(id);
         return d;
     }
 
-    private Purposes purposeWithId(UUID id) {
+    private Purposes purpose(UUID id) {
         Purposes p = new Purposes();
         p.setId(id);
         return p;
     }
 
     @Test
-    void verifyAllEntities_recorreLasCuatroEntidadesYLlamaVerifyConCheckTypeScheduled() {
+    void verifyAllEntities_verificaCadaAgreementTemplateDocumentoYPurpose() {
         UUID agreementId = UUID.randomUUID();
         UUID templateId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID purposeId = UUID.randomUUID();
 
-        when(agreementsRepo.findAll()).thenReturn(List.of(agreementWithId(agreementId)));
-        when(templatesRepo.findAll()).thenReturn(List.of(templateWithId(templateId)));
-        when(privacyDocumentsRepo.findAll()).thenReturn(List.of(documentWithId(documentId)));
-        when(purposesRepo.findAll()).thenReturn(List.of(purposeWithId(purposeId)));
+        when(agreementsRepo.findAll()).thenReturn(List.of(agreement(agreementId)));
+        when(templatesRepo.findAll()).thenReturn(List.of(template(templateId)));
+        when(privacyDocumentsRepo.findAll()).thenReturn(List.of(document(documentId)));
+        when(purposesRepo.findAll()).thenReturn(List.of(purpose(purposeId)));
 
         scheduler.verifyAllEntities();
 
-        verify(integrityVerifier, times(1)).verify(eq("AGREEMENT"), eq(agreementId), eq("SCHEDULED"), eq(null));
-        verify(integrityVerifier, times(1)).verify(eq("TEMPLATE"), eq(templateId), eq("SCHEDULED"), eq(null));
-        verify(integrityVerifier, times(1)).verify(eq("DOCUMENT"), eq(documentId), eq("SCHEDULED"), eq(null));
-        verify(integrityVerifier, times(1)).verify(eq("PURPOSE"), eq(purposeId), eq("SCHEDULED"), eq(null));
+        verify(integrityVerifier).verify(eq("AGREEMENT"), eq(agreementId), eq("SCHEDULED"), eq(null));
+        verify(integrityVerifier).verify(eq("TEMPLATE"), eq(templateId), eq("SCHEDULED"), eq(null));
+        verify(integrityVerifier).verify(eq("DOCUMENT"), eq(documentId), eq("SCHEDULED"), eq(null));
+        verify(integrityVerifier).verify(eq("PURPOSE"), eq(purposeId), eq("SCHEDULED"), eq(null));
     }
 
     @Test
-    void verifyAllEntities_siUnaVerificacionFalla_continuaConElResto() {
+    void verifyAllEntities_siUnaVerificacionFalla_continuaConLasSiguientes() {
         UUID agreementId1 = UUID.randomUUID();
         UUID agreementId2 = UUID.randomUUID();
-        when(agreementsRepo.findAll()).thenReturn(List.of(agreementWithId(agreementId1), agreementWithId(agreementId2)));
+
+        when(agreementsRepo.findAll()).thenReturn(List.of(agreement(agreementId1), agreement(agreementId2)));
         when(templatesRepo.findAll()).thenReturn(List.of());
         when(privacyDocumentsRepo.findAll()).thenReturn(List.of());
         when(purposesRepo.findAll()).thenReturn(List.of());
 
         when(integrityVerifier.verify(eq("AGREEMENT"), eq(agreementId1), any(), any()))
-                .thenThrow(new RuntimeException("error inesperado"));
+                .thenThrow(new RuntimeException("fallo simulado"));
 
         scheduler.verifyAllEntities();
 
-        verify(integrityVerifier, times(1)).verify(eq("AGREEMENT"), eq(agreementId1), any(), any());
-        verify(integrityVerifier, times(1)).verify(eq("AGREEMENT"), eq(agreementId2), any(), any());
+        verify(integrityVerifier).verify(eq("AGREEMENT"), eq(agreementId1), eq("SCHEDULED"), eq(null));
+        verify(integrityVerifier).verify(eq("AGREEMENT"), eq(agreementId2), eq("SCHEDULED"), eq(null));
     }
 
     @Test
-    void verifyAllEntities_noFallaSiNoHayEntidades() {
+    void verifyAllEntities_sinEntidades_noLlamaAVerify() {
         when(agreementsRepo.findAll()).thenReturn(List.of());
         when(templatesRepo.findAll()).thenReturn(List.of());
         when(privacyDocumentsRepo.findAll()).thenReturn(List.of());
@@ -107,7 +107,6 @@ class IntegritySchedulerTest {
 
         scheduler.verifyAllEntities();
 
-        ArgumentCaptor<String> entityTypeCaptor = ArgumentCaptor.forClass(String.class);
-        verify(integrityVerifier, times(0)).verify(entityTypeCaptor.capture(), any(), any(), any());
+        verify(integrityVerifier, org.mockito.Mockito.never()).verify(any(), any(), any(), any());
     }
 }

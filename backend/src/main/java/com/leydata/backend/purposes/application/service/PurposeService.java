@@ -13,6 +13,7 @@ import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurpose
 import com.leydata.backend.purposes.application.dto.CreatePurposeRequest;
 import com.leydata.backend.purposes.application.dto.PurposeResponse;
 import com.leydata.backend.purposes.application.dto.UpdatePurposeRequest;
+import com.leydata.backend.agreement.infrastructure.persistence.AgreementsRepository;
 import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
 import com.leydata.backend.purposes.domain.exception.PurposeNotLockedException;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;

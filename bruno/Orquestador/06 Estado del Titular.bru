@@ -1,0 +1,23 @@
+meta {
+  name: Estado del Titular (Portal de Preferencias)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{orchestratorUrl}}/consent/subject/<opaque-subject-id>
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{externalToken}}
+}
+
+docs {
+  Devuelve el estado actual de todas las finalidades del titular en el dominio del sistema cliente.
+  Diseñado para renderizar un portal de preferencias con switches activo/revocado por finalidad (Caso 3a).
+  El Orquestador extrae domainId del JWT y llama a GET /api/agreements/subject-summary en LeyData.
+  Respuesta: lista de acuerdos activos con estado (accepted, status) por cada purpose.
+  Requiere JWT del sistema externo (realm empresa-cliente) con claim leydata_domain.
+}

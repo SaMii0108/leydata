@@ -2,10 +2,14 @@ package com.leydata.backend.template.application.service;
 
 import com.leydata.backend.audit.application.dto.AuditContext;
 import com.leydata.backend.audit.application.service.AuditService;
+import com.leydata.backend.entity.Domains;
 import com.leydata.backend.entity.Purposes;
 import com.leydata.backend.entity.TemplatePurposes;
 import com.leydata.backend.entity.Templates;
+import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
+import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
+import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.template.application.dto.*;
@@ -35,6 +39,8 @@ public class TemplateService {
     private final TemplatesRepository templatesRepo;
     private final TemplatePurposesRepository templatePurposesRepo;
     private final PurposesRepository purposesRepo;
+    private final DomainsRepository domainsRepo;
+    private final PrivacyDocumentsRepository privacyDocumentsRepo;
     private final SecurityContextHelper securityContextHelper;
     private final AuditService auditService;
 
@@ -44,9 +50,17 @@ public class TemplateService {
         securityContextHelper.requireDpoOrAdmin();
         String actorId = securityContextHelper.getKeycloakId();
 
+        Domains domain = domainsRepo.findById(req.getDomainId())
+                .orElseThrow(() -> new BusinessValidationException(
+                        "Dominio no encontrado: " + req.getDomainId()));
+        if (!Boolean.TRUE.equals(domain.getActive())) {
+            throw new BusinessValidationException("El dominio está desactivado: " + domain.getName());
+        }
+
         String templateKey = req.getTemplateKey().toUpperCase();
 
         Templates entity = new Templates();
+        entity.setDomainId(req.getDomainId());
         entity.setTemplateKey(templateKey);
         entity.setVersion(1);
         entity.setName(req.getName());
@@ -65,6 +79,7 @@ public class TemplateService {
                 .oldData(null)
                 .newData(Map.of(
                         "id",          String.valueOf(saved.getId()),
+                        "domainId",    String.valueOf(saved.getDomainId()),
                         "templateKey", saved.getTemplateKey(),
                         "version",     saved.getVersion()))
                 .actorId(actorId)
@@ -79,14 +94,16 @@ public class TemplateService {
         Templates source = findOrThrow(sourceId);
         String actorId = securityContextHelper.getKeycloakId();
 
-        // Regla 1: mismo TEMPLATE_KEY, versión incremental
-        int nextVersion = templatesRepo.findByTemplateKeyOrderByVersionDesc(source.getTemplateKey())
+        // Regla 1: mismo dominio + TEMPLATE_KEY, versión incremental
+        int nextVersion = templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(
+                        source.getDomainId(), source.getTemplateKey())
                 .stream()
                 .mapToInt(Templates::getVersion)
                 .max()
                 .orElse(source.getVersion()) + 1;
 
         Templates newTemplate = new Templates();
+        newTemplate.setDomainId(source.getDomainId());
         newTemplate.setTemplateKey(source.getTemplateKey());
         newTemplate.setVersion(nextVersion);
         newTemplate.setName(source.getName());
@@ -122,12 +139,13 @@ public class TemplateService {
     }
 
     @Transactional(readOnly = true)
-    public List<TemplateResponse> list(String templateKey, Boolean isActive,
+    public List<TemplateResponse> list(UUID domainId, String templateKey, Boolean isActive,
                                         String createdBy, String approvedBy,
                                         OffsetDateTime createdAfter, OffsetDateTime createdBefore) {
         securityContextHelper.requireDpoOrAdmin();
         Specification<Templates> spec = Specification
-                .where(TemplateSpecifications.hasTemplateKey(templateKey))
+                .where(TemplateSpecifications.hasDomainId(domainId))
+                .and(TemplateSpecifications.hasTemplateKey(templateKey))
                 .and(TemplateSpecifications.isActive(isActive))
                 .and(TemplateSpecifications.createdBy(createdBy))
                 .and(TemplateSpecifications.approvedBy(approvedBy))
@@ -140,21 +158,47 @@ public class TemplateService {
     }
 
     @Transactional(readOnly = true)
-    public List<TemplateResponse> getHistory(String templateKey) {
+    public List<TemplateResponse> getHistory(UUID domainId, String templateKey) {
         securityContextHelper.requireDpoOrAdmin();
-        return templatesRepo.findByTemplateKeyOrderByVersionDesc(templateKey.toUpperCase())
+        return templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(domainId, templateKey.toUpperCase())
                 .stream()
                 .map(TemplateResponse::from)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public TemplateResponse getActive(String templateKey) {
+    public TemplateResponse getActive(UUID domainId, String templateKey) {
         securityContextHelper.requireDpoOrAdmin();
-        return templatesRepo.findByTemplateKeyAndIsActiveTrue(templateKey.toUpperCase())
+        return templatesRepo.findByDomainIdAndTemplateKeyAndIsActiveTrue(domainId, templateKey.toUpperCase())
                 .map(TemplateResponse::from)
                 .orElseThrow(() -> new BusinessValidationException(
-                        "No hay una versión activa para el template " + templateKey));
+                        "No hay una versión activa para el template " + templateKey + " en este dominio"));
+    }
+
+    /**
+     * Resolución B2B: a partir de un templateKey (identificador de negocio) y un domainId
+     * (extraído por el Orquestador del JWT del sistema cliente), devuelve el template ACTIVE
+     * y el documentId publicado vinculado a él. No requiere rol DPO/ADMIN — la llama el
+     * Orquestador con su propia identidad de servicio, no un operador humano.
+     */
+    @Transactional(readOnly = true)
+    public TemplateResolutionResponse resolveForCapture(UUID domainId, String templateKey) {
+        Templates template = templatesRepo.findByDomainIdAndTemplateKeyAndIsActiveTrue(domainId, templateKey.toUpperCase())
+                .orElseThrow(() -> new BusinessValidationException(
+                        "No hay una versión activa para el template " + templateKey + " en este dominio"));
+
+        UUID documentId = privacyDocumentsRepo
+                .findByTemplateIdAndStatusAndIsActiveTrue(template.getId(), DocumentStatus.PUBLISHED)
+                .map(doc -> doc.getId())
+                .orElse(null);
+
+        return TemplateResolutionResponse.builder()
+                .templateId(template.getId())
+                .domainId(template.getDomainId())
+                .templateKey(template.getTemplateKey())
+                .version(template.getVersion())
+                .documentId(documentId)
+                .build();
     }
 
     // ── WORKFLOW ─────────────────────────────────────────────────────────────────
@@ -192,7 +236,7 @@ public class TemplateService {
         return TemplateResponse.from(saved);
     }
 
-    public TemplateResponse activate(UUID id) {
+    public TemplateResponse activate(UUID id, boolean forceReconsent) {
         securityContextHelper.requireDpoOrAdmin();
         Templates template = findOrThrow(id);
 
@@ -200,7 +244,8 @@ public class TemplateService {
             throw new BusinessValidationException("El template ya está activo");
         }
         // Regla 11: no se puede activar una versión obsoleta
-        int maxVersion = templatesRepo.findByTemplateKeyOrderByVersionDesc(template.getTemplateKey())
+        int maxVersion = templatesRepo.findByDomainIdAndTemplateKeyOrderByVersionDesc(
+                        template.getDomainId(), template.getTemplateKey())
                 .stream()
                 .mapToInt(Templates::getVersion)
                 .max()
@@ -222,8 +267,8 @@ public class TemplateService {
         String actorId = securityContextHelper.getKeycloakId();
         String[] previousHash = new String[1];
 
-        // Regla 2: desactivar la versión anterior del mismo TEMPLATE_KEY en la misma transacción
-        templatesRepo.findByTemplateKeyAndIsActiveTrue(template.getTemplateKey())
+        // Regla 2: desactivar la versión anterior del mismo dominio + TEMPLATE_KEY en la misma transacción
+        templatesRepo.findByDomainIdAndTemplateKeyAndIsActiveTrue(template.getDomainId(), template.getTemplateKey())
                 .ifPresent(previous -> {
                     previousHash[0] = previous.getHashSha256();
                     previous.setIsActive(false);
@@ -241,6 +286,7 @@ public class TemplateService {
                 });
 
         template.setIsActive(true);
+        template.setForceReconsent(forceReconsent);
         if (template.getActivationDate() == null) {
             template.setActivationDate(OffsetDateTime.now());
         }
@@ -257,8 +303,9 @@ public class TemplateService {
                 .action("ACTIVAR_TEMPLATE")
                 .oldData(Map.of("isActive", false))
                 .newData(Map.of(
-                        "isActive",   true,
-                        "hashSha256", saved.getHashSha256()))
+                        "isActive",       true,
+                        "forceReconsent", forceReconsent,
+                        "hashSha256",     saved.getHashSha256()))
                 .actorId(actorId)
                 .actorRole(securityContextHelper.getActorRole())
                 .build());

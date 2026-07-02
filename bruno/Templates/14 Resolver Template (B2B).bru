@@ -1,0 +1,28 @@
+meta {
+  name: Resolver Template (B2B)
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/templates/resolve?domainId={{domainId}}&templateKey=<templateKey>
+  body: none
+  auth: bearer
+}
+
+params:query {
+  domainId: {{domainId}}
+  templateKey: <templateKey>
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Uso interno B2B — lo llama el Orquestador con su identidad de servicio M2M.
+  Resuelve el templateId ACTIVE y el documentId PUBLISHED vigente para un templateKey + domainId.
+  No requiere rol DPO/ADMIN, solo autenticación (@PreAuthorize("isAuthenticated()")) — cualquier
+  token válido sirve para probarlo manualmente.
+  Retorna documentId: null si el template activo todavía no tiene documento publicado asociado.
+}

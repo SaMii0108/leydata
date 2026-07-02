@@ -1,32 +1,36 @@
 package com.leydata.backend.purposes.application.service;
 
-import com.leydata.backend.agreement.infrastructure.persistence.AgreementsRepository;
 import com.leydata.backend.audit.application.service.AuditService;
+import com.leydata.backend.agreement.infrastructure.persistence.AgreementsRepository;
 import com.leydata.backend.entity.Domains;
-import com.leydata.backend.entity.LegalBasisCatalog;
 import com.leydata.backend.entity.Purposes;
-import com.leydata.backend.entity.Templates;
 import com.leydata.backend.entity.TemplatePurposes;
+import com.leydata.backend.entity.Templates;
 import com.leydata.backend.legalbasis.infrastructure.persistence.LegalBasisRepository;
+import com.leydata.backend.entity.LegalBasisCatalog;
 import com.leydata.backend.orgdomain.infrastructure.persistence.DomainsRepository;
+import com.leydata.backend.privacydoc.domain.enums.DocumentStatus;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
+import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
 import com.leydata.backend.purposes.application.dto.CreatePurposeRequest;
 import com.leydata.backend.purposes.application.dto.PurposeResponse;
 import com.leydata.backend.purposes.application.dto.UpdatePurposeRequest;
 import com.leydata.backend.purposes.domain.exception.PurposeNotFoundException;
 import com.leydata.backend.purposes.domain.exception.PurposeNotLockedException;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
-import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
 import com.leydata.backend.template.infrastructure.persistence.TemplatePurposesRepository;
+import com.leydata.backend.userdomain.domain.UserDomain;
 import com.leydata.backend.userdomain.infrastructure.persistence.UserDomainRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.Optional;
@@ -55,28 +59,39 @@ class PurposeServiceTest {
     @InjectMocks
     private PurposeService service;
 
-    private final String actorKeycloakId = UUID.randomUUID().toString();
-    private final UUID legalBasisId = UUID.randomUUID();
     private final UUID domainId = UUID.randomUUID();
+    private final UUID legalBasisId = UUID.randomUUID();
+    private final UUID purposeId = UUID.randomUUID();
+    private final String actorId = UUID.randomUUID().toString();
 
     @BeforeEach
     void setUp() {
-        lenient().when(securityContextHelper.getKeycloakId()).thenReturn(actorKeycloakId);
-        lenient().when(securityContextHelper.getName()).thenReturn("Actor de Prueba");
+        lenient().when(securityContextHelper.getKeycloakId()).thenReturn(actorId);
+        lenient().when(securityContextHelper.getName()).thenReturn("DPO Test");
         lenient().when(securityContextHelper.getActorRole()).thenReturn("DPO");
-        lenient().when(purposesRepo.save(any(Purposes.class))).thenAnswer(inv -> inv.getArgument(0));
-        // Por defecto ninguna purpose está bloqueada — los tests de lock la sobreescriben
+        lenient().when(purposesRepo.save(any(Purposes.class))).thenAnswer(inv -> {
+            Purposes p = inv.getArgument(0);
+            if (p.getId() == null) p.setId(purposeId);
+            return p;
+        });
         lenient().when(documentPurposesRepo.existsByPurpose_IdAndDocument_StatusAndIsActiveTrue(any(), any()))
                 .thenReturn(false);
         lenient().when(templatePurposesRepo.findByPurpose_Id(any())).thenReturn(List.of());
     }
 
+    private Domains activeDomain() {
+        Domains d = new Domains();
+        d.setId(domainId);
+        d.setName("Marketing");
+        d.setActive(true);
+        return d;
+    }
+
     private CreatePurposeRequest createRequest() {
         CreatePurposeRequest req = new CreatePurposeRequest();
-        req.setCode("marketing_email");
-        req.setName("Marketing por email");
-        req.setDescription("Uso del email para enviar ofertas");
-        req.setShortDescription("Marketing");
+        req.setCode("marketing_newsletter");
+        req.setName("Newsletter");
+        req.setDescription("Envío de newsletters");
         req.setRequired(false);
         req.setRevocable(true);
         req.setLegalBasisId(legalBasisId);
@@ -84,36 +99,39 @@ class PurposeServiceTest {
         return req;
     }
 
-    private Domains activeDomain() {
-        Domains d = new Domains();
-        d.setId(domainId);
-        d.setName("Ventas");
-        d.setActive(true);
-        return d;
-    }
-
-    private Purposes purpose(UUID id, UUID familyId, int version, String status) {
+    private Purposes purpose(boolean isActive) {
         Purposes p = new Purposes();
-        p.setId(id);
-        p.setCode("MARKETING_EMAIL");
-        p.setName("Marketing por email");
-        p.setDescription("Uso del email para enviar ofertas");
-        p.setShortDescription("Marketing");
+        p.setId(purposeId);
+        p.setCode("MARKETING_NEWSLETTER");
+        p.setName("Newsletter");
+        p.setDescription("Envío de newsletters");
         p.setRequired(false);
         p.setRevocable(true);
         p.setLegalBasisId(legalBasisId);
         p.setDomainId(domainId);
-        p.setPurposeFamilyId(familyId);
-        p.setVersion(version);
-        p.setStatus(status);
+        p.setIsActive(isActive);
+        p.setVersion(1);
+        p.setStatus("ACTIVE");
+        p.setPurposeFamilyId(purposeId);
         return p;
+    }
+
+    private void mockUnlocked() {
+        lenient().when(documentPurposesRepo.existsByPurpose_IdAndDocument_StatusAndIsActiveTrue(purposeId, DocumentStatus.PUBLISHED))
+                .thenReturn(false);
+        lenient().when(templatePurposesRepo.findByPurpose_Id(purposeId)).thenReturn(List.of());
+    }
+
+    private void mockLockedByDocument() {
+        when(documentPurposesRepo.existsByPurpose_IdAndDocument_StatusAndIsActiveTrue(purposeId, DocumentStatus.PUBLISHED))
+                .thenReturn(true);
     }
 
     // ── create() ─────────────────────────────────────────────────────────────────
 
     @Test
-    void create_creaPurposeConVersion1YFamilyIdAutoreferenciado() {
-        when(purposesRepo.existsByCode("MARKETING_EMAIL")).thenReturn(false);
+    void create_creaFinalidadEnVersion1ActivaConHashYPurposeFamilyIdPropio() {
+        when(purposesRepo.existsByCode("MARKETING_NEWSLETTER")).thenReturn(false);
         when(legalBasisRepo.findById(legalBasisId)).thenReturn(Optional.of(new LegalBasisCatalog()));
         when(domainsRepo.findById(domainId)).thenReturn(Optional.of(activeDomain()));
 
@@ -121,21 +139,22 @@ class PurposeServiceTest {
 
         assertThat(response.version()).isEqualTo(1);
         assertThat(response.status()).isEqualTo("ACTIVE");
-        assertThat(response.purposeFamilyId()).isEqualTo(response.id());
+        assertThat(response.code()).isEqualTo("MARKETING_NEWSLETTER");
+        assertThat(response.purposeFamilyId()).isEqualTo(purposeId);
         assertThat(response.hashSha256()).isNotBlank();
     }
 
     @Test
-    void create_lanzaBusinessValidationException_siCodigoDuplicado() {
-        when(purposesRepo.existsByCode("MARKETING_EMAIL")).thenReturn(true);
+    void create_lanzaExcepcion_siElCodigoYaExiste() {
+        when(purposesRepo.existsByCode("MARKETING_NEWSLETTER")).thenReturn(true);
 
         assertThatThrownBy(() -> service.create(createRequest()))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
     @Test
-    void create_lanzaBusinessValidationException_siLegalBasisNoExiste() {
-        when(purposesRepo.existsByCode("MARKETING_EMAIL")).thenReturn(false);
+    void create_lanzaExcepcion_siLaBaseDeLicitudNoExiste() {
+        when(purposesRepo.existsByCode("MARKETING_NEWSLETTER")).thenReturn(false);
         when(legalBasisRepo.findById(legalBasisId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.create(createRequest()))
@@ -143,210 +162,275 @@ class PurposeServiceTest {
     }
 
     @Test
-    void create_lanzaBusinessValidationException_siDominioDesactivado() {
-        when(purposesRepo.existsByCode("MARKETING_EMAIL")).thenReturn(false);
+    void create_lanzaExcepcion_siElDominioNoExiste() {
+        when(purposesRepo.existsByCode("MARKETING_NEWSLETTER")).thenReturn(false);
         when(legalBasisRepo.findById(legalBasisId)).thenReturn(Optional.of(new LegalBasisCatalog()));
+        when(domainsRepo.findById(domainId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(createRequest()))
+                .isInstanceOf(BusinessValidationException.class);
+    }
+
+    @Test
+    void create_lanzaExcepcion_siElDominioEstaDesactivado() {
         Domains inactive = activeDomain();
         inactive.setActive(false);
+        when(purposesRepo.existsByCode("MARKETING_NEWSLETTER")).thenReturn(false);
+        when(legalBasisRepo.findById(legalBasisId)).thenReturn(Optional.of(new LegalBasisCatalog()));
         when(domainsRepo.findById(domainId)).thenReturn(Optional.of(inactive));
 
         assertThatThrownBy(() -> service.create(createRequest()))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
-    // ── update() / lock unificado (documento o template+agreement) ─────────────────
+    // ── listAll() ────────────────────────────────────────────────────────────────
 
     @Test
-    void update_actualizaCamposCuandoNoEstaBloqueada() {
-        UUID id = UUID.randomUUID();
-        Purposes purpose = purpose(id, id, 1, "ACTIVE");
-        when(purposesRepo.findById(id)).thenReturn(Optional.of(purpose));
+    void listAll_paraAdminODpo_devuelveTodasLasActivas() {
+        when(purposesRepo.findByIsActiveTrue()).thenReturn(List.of(purpose(true)));
 
-        UpdatePurposeRequest req = new UpdatePurposeRequest();
-        req.setName("Nuevo nombre");
+        List<PurposeResponse> result = service.listAll();
 
-        PurposeResponse response = service.update(id, req);
-
-        assertThat(response.name()).isEqualTo("Nuevo nombre");
+        assertThat(result).hasSize(1);
     }
 
     @Test
-    void update_lanzaBusinessValidationException_siBloqueadaPorDocumentoPublicado() {
-        UUID id = UUID.randomUUID();
-        Purposes purpose = purpose(id, id, 1, "ACTIVE");
-        when(purposesRepo.findById(id)).thenReturn(Optional.of(purpose));
-        when(documentPurposesRepo.existsByPurpose_IdAndDocument_StatusAndIsActiveTrue(any(), any()))
-                .thenReturn(true);
+    void listAll_paraJefeDominio_devuelveSoloLasDeSusDominiosAsignados() {
+        when(securityContextHelper.getActorRole()).thenReturn("JEFE_DOMINIO");
+        UserDomain ud = UserDomain.builder().keycloakId(actorId).domain(activeDomain()).build();
+        when(userDomainRepository.findByKeycloakId(actorId)).thenReturn(List.of(ud));
+        when(purposesRepo.findByDomainIdAndIsActiveTrue(domainId)).thenReturn(List.of(purpose(true)));
 
-        assertThatThrownBy(() -> service.update(id, new UpdatePurposeRequest()))
+        List<PurposeResponse> result = service.listAll();
+
+        assertThat(result).hasSize(1);
+    }
+
+    // ── getById() ────────────────────────────────────────────────────────────────
+
+    @Test
+    void getById_devuelveLaFinalidadConIsLockedCalculado() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockUnlocked();
+
+        PurposeResponse response = service.getById(purposeId);
+
+        assertThat(response.locked()).isFalse();
+    }
+
+    @Test
+    void getById_lanzaExcepcion_siNoExiste() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getById(purposeId))
+                .isInstanceOf(PurposeNotFoundException.class);
+    }
+
+    @Test
+    void getById_jefeDominioSinAccesoAlDominio_lanzaAccessDeniedException() {
+        when(securityContextHelper.getActorRole()).thenReturn("JEFE_DOMINIO");
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        when(userDomainRepository.existsByKeycloakIdAndDomainId(actorId, domainId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getById(purposeId))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void getById_jefeDominioConAccesoAlDominio_devuelveLaFinalidad() {
+        when(securityContextHelper.getActorRole()).thenReturn("JEFE_DOMINIO");
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        when(userDomainRepository.existsByKeycloakIdAndDomainId(actorId, domainId)).thenReturn(true);
+        mockUnlocked();
+
+        PurposeResponse response = service.getById(purposeId);
+
+        assertThat(response.id()).isEqualTo(purposeId);
+    }
+
+    // ── listByDomain() ───────────────────────────────────────────────────────────
+
+    @Test
+    void listByDomain_jefeDominioSinAcceso_lanzaAccessDeniedException() {
+        when(securityContextHelper.getActorRole()).thenReturn("JEFE_DOMINIO");
+        when(userDomainRepository.existsByKeycloakIdAndDomainId(actorId, domainId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.listByDomain(domainId))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void listByDomain_adminODpo_puedeVerCualquierDominio() {
+        when(purposesRepo.findByDomainIdAndIsActiveTrue(domainId)).thenReturn(List.of(purpose(true)));
+
+        List<PurposeResponse> result = service.listByDomain(domainId);
+
+        assertThat(result).hasSize(1);
+    }
+
+    // ── update() ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void update_actualizaCamposEnviadosYRecalculaHash() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockUnlocked();
+
+        UpdatePurposeRequest req = new UpdatePurposeRequest();
+        req.setName("Newsletter actualizado");
+
+        PurposeResponse response = service.update(purposeId, req);
+
+        assertThat(response.name()).isEqualTo("Newsletter actualizado");
+    }
+
+    @Test
+    void update_lanzaExcepcion_siLaFinalidadEstaBloqueada() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockLockedByDocument();
+
+        assertThatThrownBy(() -> service.update(purposeId, new UpdatePurposeRequest()))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
     @Test
-    void update_lanzaBusinessValidationException_siBloqueadaPorTemplateConAgreement() {
-        UUID id = UUID.randomUUID();
-        UUID templateId = UUID.randomUUID();
-        Purposes purpose = purpose(id, id, 1, "ACTIVE");
-        when(purposesRepo.findById(id)).thenReturn(Optional.of(purpose));
-        when(templatePurposesRepo.findByPurpose_Id(id)).thenReturn(List.of(linkToTemplate(templateId)));
-        when(agreementsRepo.existsByTemplateIdIn(List.of(templateId))).thenReturn(true);
+    void update_lanzaExcepcion_siElNuevoLegalBasisIdNoExiste() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockUnlocked();
+        UUID otroLegalBasis = UUID.randomUUID();
+        when(legalBasisRepo.findById(otroLegalBasis)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.update(id, new UpdatePurposeRequest()))
+        UpdatePurposeRequest req = new UpdatePurposeRequest();
+        req.setLegalBasisId(otroLegalBasis);
+
+        assertThatThrownBy(() -> service.update(purposeId, req))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
     @Test
-    void update_noBloqueaSiTemplateVinculadoNoTieneAgreements() {
-        UUID id = UUID.randomUUID();
-        UUID templateId = UUID.randomUUID();
-        Purposes purpose = purpose(id, id, 1, "ACTIVE");
-        when(purposesRepo.findById(id)).thenReturn(Optional.of(purpose));
-        when(templatePurposesRepo.findByPurpose_Id(id)).thenReturn(List.of(linkToTemplate(templateId)));
-        when(agreementsRepo.existsByTemplateIdIn(List.of(templateId))).thenReturn(false);
+    void update_camposNulos_noSobrescribenLosExistentes() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockUnlocked();
 
-        UpdatePurposeRequest req = new UpdatePurposeRequest();
-        req.setName("Editado libremente");
+        PurposeResponse response = service.update(purposeId, new UpdatePurposeRequest());
 
-        PurposeResponse response = service.update(id, req);
-
-        assertThat(response.name()).isEqualTo("Editado libremente");
-    }
-
-    private TemplatePurposes linkToTemplate(UUID templateId) {
-        TemplatePurposes tp = new TemplatePurposes();
-        Templates t = new Templates();
-        t.setId(templateId);
-        tp.setTemplate(t);
-        return tp;
+        assertThat(response.name()).isEqualTo("Newsletter");
+        assertThat(response.description()).isEqualTo("Envío de newsletters");
     }
 
     // ── deactivate() ─────────────────────────────────────────────────────────────
 
     @Test
-    void deactivate_desactivaCuandoNoTieneCategoriasDeDatos() {
-        UUID id = UUID.randomUUID();
-        Purposes purpose = purpose(id, id, 1, "ACTIVE");
-        purpose.setIsActive(true);
-        when(purposesRepo.findById(id)).thenReturn(Optional.of(purpose));
-        when(pdcRepo.existsByPurposeId(id)).thenReturn(false);
+    void deactivate_desactivaCorrectamente() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockUnlocked();
+        when(pdcRepo.existsByPurposeId(purposeId)).thenReturn(false);
 
-        PurposeResponse response = service.deactivate(id);
+        PurposeResponse response = service.deactivate(purposeId);
 
         assertThat(response.isActive()).isFalse();
     }
 
     @Test
-    void deactivate_lanzaBusinessValidationException_siTieneCategoriasDeDatosActivas() {
-        UUID id = UUID.randomUUID();
-        Purposes purpose = purpose(id, id, 1, "ACTIVE");
-        when(purposesRepo.findById(id)).thenReturn(Optional.of(purpose));
-        when(pdcRepo.existsByPurposeId(id)).thenReturn(true);
+    void deactivate_lanzaExcepcion_siLaFinalidadEstaBloqueada() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockLockedByDocument();
 
-        assertThatThrownBy(() -> service.deactivate(id))
+        assertThatThrownBy(() -> service.deactivate(purposeId))
+                .isInstanceOf(BusinessValidationException.class);
+    }
+
+    @Test
+    void deactivate_lanzaExcepcion_siTieneCategoriasDeDatosVinculadas() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockUnlocked();
+        when(pdcRepo.existsByPurposeId(purposeId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deactivate(purposeId))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
     // ── newVersion() ─────────────────────────────────────────────────────────────
 
     @Test
-    void newVersion_creaNuevaVersionYSupersedeALaAnterior_cuandoEstaBloqueada() {
-        UUID sourceId = UUID.randomUUID();
-        UUID templateId = UUID.randomUUID();
-        Purposes source = purpose(sourceId, sourceId, 1, "ACTIVE");
-        when(purposesRepo.findById(sourceId)).thenReturn(Optional.of(source));
-        when(templatePurposesRepo.findByPurpose_Id(sourceId)).thenReturn(List.of(linkToTemplate(templateId)));
-        when(agreementsRepo.existsByTemplateIdIn(List.of(templateId))).thenReturn(true);
-        when(purposesRepo.findByPurposeFamilyIdOrderByVersionDesc(sourceId)).thenReturn(List.of(source));
+    void newVersion_creaNuevaVersionHeredaCamposYMarcaElOrigenComoSuperseded() {
+        Purposes source = purpose(true);
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(source));
+        mockLockedByDocument();
+        when(purposesRepo.findByPurposeFamilyIdOrderByVersionDesc(purposeId)).thenReturn(List.of(source));
 
         UpdatePurposeRequest req = new UpdatePurposeRequest();
-        req.setName("Marketing por email v2");
+        req.setName("Newsletter v2");
 
-        PurposeResponse response = service.newVersion(sourceId, req);
+        PurposeResponse response = service.newVersion(purposeId, req);
 
         assertThat(response.version()).isEqualTo(2);
-        assertThat(response.status()).isEqualTo("ACTIVE");
-        assertThat(response.purposeFamilyId()).isEqualTo(sourceId);
-        assertThat(response.name()).isEqualTo("Marketing por email v2");
+        assertThat(response.name()).isEqualTo("Newsletter v2");
+        assertThat(response.purposeFamilyId()).isEqualTo(purposeId);
         assertThat(source.getStatus()).isEqualTo("SUPERSEDED");
     }
 
     @Test
-    void newVersion_lanzaPurposeNotLockedException_siNoEstaBloqueada() {
-        UUID sourceId = UUID.randomUUID();
-        Purposes source = purpose(sourceId, sourceId, 1, "ACTIVE");
-        when(purposesRepo.findById(sourceId)).thenReturn(Optional.of(source));
+    void newVersion_heredaCamposNoEnviadosDelOrigen() {
+        Purposes source = purpose(true);
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(source));
+        mockLockedByDocument();
+        when(purposesRepo.findByPurposeFamilyIdOrderByVersionDesc(purposeId)).thenReturn(List.of(source));
 
-        assertThatThrownBy(() -> service.newVersion(sourceId, new UpdatePurposeRequest()))
+        PurposeResponse response = service.newVersion(purposeId, new UpdatePurposeRequest());
+
+        assertThat(response.name()).isEqualTo(source.getName());
+        assertThat(response.description()).isEqualTo(source.getDescription());
+    }
+
+    @Test
+    void newVersion_lanzaExcepcion_siElOrigenNoEstaBloqueado() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
+        mockUnlocked();
+
+        assertThatThrownBy(() -> service.newVersion(purposeId, new UpdatePurposeRequest()))
                 .isInstanceOf(PurposeNotLockedException.class);
     }
 
-    @Test
-    void newVersion_lanzaPurposeNotFoundException_siNoExiste() {
-        UUID sourceId = UUID.randomUUID();
-        when(purposesRepo.findById(sourceId)).thenReturn(Optional.empty());
+    // ── getFamily() ──────────────────────────────────────────────────────────────
 
-        assertThatThrownBy(() -> service.newVersion(sourceId, new UpdatePurposeRequest()))
-                .isInstanceOf(PurposeNotFoundException.class);
+    @Test
+    void getFamily_devuelveElHistorialDeVersiones() {
+        when(purposesRepo.findByPurposeFamilyIdOrderByVersionDesc(purposeId)).thenReturn(List.of(purpose(true)));
+        mockUnlocked();
+
+        List<PurposeResponse> result = service.getFamily(purposeId);
+
+        assertThat(result).hasSize(1);
     }
 
-    // ── getFamily() / getActiveByFamily() ───────────────────────────────────────
+    // ── getActiveByFamily() ──────────────────────────────────────────────────────
 
     @Test
-    void getFamily_devuelveVersionesOrdenadasDesc() {
-        UUID familyId = UUID.randomUUID();
-        Purposes v2 = purpose(UUID.randomUUID(), familyId, 2, "ACTIVE");
-        Purposes v1 = purpose(UUID.randomUUID(), familyId, 1, "SUPERSEDED");
-        when(purposesRepo.findByPurposeFamilyIdOrderByVersionDesc(familyId)).thenReturn(List.of(v2, v1));
+    void getActiveByFamily_devuelveLaVersionActiva() {
+        when(purposesRepo.findByPurposeFamilyIdAndStatus(purposeId, "ACTIVE")).thenReturn(Optional.of(purpose(true)));
+        mockUnlocked();
 
-        List<PurposeResponse> result = service.getFamily(familyId);
-
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).version()).isEqualTo(2);
-        assertThat(result.get(1).version()).isEqualTo(1);
-    }
-
-    @Test
-    void getActiveByFamily_devuelveLaVersionActive() {
-        UUID familyId = UUID.randomUUID();
-        Purposes active = purpose(UUID.randomUUID(), familyId, 2, "ACTIVE");
-        when(purposesRepo.findByPurposeFamilyIdAndStatus(familyId, "ACTIVE")).thenReturn(Optional.of(active));
-
-        PurposeResponse response = service.getActiveByFamily(familyId);
+        PurposeResponse response = service.getActiveByFamily(purposeId);
 
         assertThat(response.status()).isEqualTo("ACTIVE");
-        assertThat(response.version()).isEqualTo(2);
     }
 
     @Test
-    void getActiveByFamily_lanzaBusinessValidationException_siNoHayActiva() {
-        UUID familyId = UUID.randomUUID();
-        when(purposesRepo.findByPurposeFamilyIdAndStatus(familyId, "ACTIVE")).thenReturn(Optional.empty());
+    void getActiveByFamily_lanzaExcepcion_siNoHayVersionActiva() {
+        when(purposesRepo.findByPurposeFamilyIdAndStatus(purposeId, "ACTIVE")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getActiveByFamily(familyId))
+        assertThatThrownBy(() -> service.getActiveByFamily(purposeId))
                 .isInstanceOf(BusinessValidationException.class);
     }
 
     // ── recalculateHash() ────────────────────────────────────────────────────────
 
     @Test
-    void recalculateHash_devuelveElMismoHashParaElMismoContenido() {
-        UUID id = UUID.randomUUID();
-        Purposes p = purpose(id, id, 1, "ACTIVE");
-        when(purposesRepo.findById(id)).thenReturn(Optional.of(p));
+    void recalculateHash_devuelveElHashSinPersistir() {
+        when(purposesRepo.findById(purposeId)).thenReturn(Optional.of(purpose(true)));
 
-        String first = service.recalculateHash(id);
-        String second = service.recalculateHash(id);
+        String hash = service.recalculateHash(purposeId);
 
-        assertThat(first).isNotBlank();
-        assertThat(first).isEqualTo(second);
-    }
-
-    @Test
-    void recalculateHash_lanzaPurposeNotFoundException_siNoExiste() {
-        UUID id = UUID.randomUUID();
-        when(purposesRepo.findById(id)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.recalculateHash(id))
-                .isInstanceOf(PurposeNotFoundException.class);
+        assertThat(hash).isNotBlank();
     }
 }

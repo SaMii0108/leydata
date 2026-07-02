@@ -11,15 +11,20 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "templates")
+@Table(name = "templates", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"domain_id", "template_key", "version"})
+})
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter
@@ -29,6 +34,13 @@ public class Templates {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "domain_id", insertable = false, updatable = false)
+    private Domains domain;
+
+    @Column(name = "domain_id")
+    private UUID domainId;
 
     @Column(name = "template_key", nullable = false)
     private String templateKey;
@@ -67,6 +79,9 @@ public class Templates {
 
     @Column(name = "activation_date")
     private OffsetDateTime activationDate;
+
+    @Column(name = "force_reconsent", nullable = false, columnDefinition = "boolean default false")
+    private Boolean forceReconsent = false;
 
     @Column(name = "hash_sha256", unique = true)
     private String hashSha256;

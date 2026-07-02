@@ -121,8 +121,8 @@ public class AgreementTraceService {
         }
 
         // El snapshot tomado al consentir (ap.getPurposeHash()) es el "stored hash" de este
-        // eslabón — se compara contra el hash actual de la purpose, no contra purpose.getHashSha256()
-        // recién leído, para detectar tanto alteración directa en BD como drift post-consentimiento.
+        // eslabón — se compara contra el hash actual de la purpose para detectar drift
+        // post-consentimiento.
         LinkState state = resolveState(ap.getPurposeHash(), () -> purpose.getHashSha256());
         linkStates.add(state);
 

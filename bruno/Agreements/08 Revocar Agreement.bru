@@ -1,0 +1,28 @@
+meta {
+  name: Revocar Agreement
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/api/agreements/<uuid-agreement>/revoke
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "subjectId": "<uuid-titular>"
+  }
+}
+
+docs {
+  Revoca un agreement ACTIVE. Cambia su estado a REVOKED y todas sus AgreementsPurposes a REVOKED.
+  El evento AgreementRevokedEvent dispara AgreementRevocationCacheListener (AFTER_COMMIT) que elimina
+  las claves consent:{subjectId}:{purposeId} del Redis del Orquestador.
+  Autenticado. Cualquier rol.
+}

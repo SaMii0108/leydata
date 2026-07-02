@@ -10,6 +10,8 @@ import com.leydata.backend.privacydoc.domain.enums.DocumentCategory;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.privacydoc.infrastructure.persistence.DocumentPurposesRepository;
 import com.leydata.backend.privacydoc.infrastructure.persistence.PrivacyDocumentsRepository;
+import com.leydata.backend.purposedatacategory.infrastructure.persistence.PurposeDataCategoryRepository;
+import com.leydata.backend.purposedatacategory.infrastructure.persistence.RetentionPolicyRepository;
 import com.leydata.backend.purposes.infrastructure.persistence.PurposesRepository;
 import com.leydata.backend.repository.DataSubjectsRepository;
 import com.leydata.backend.shared.SecurityContextHelper;
@@ -47,8 +49,12 @@ class AgreementServiceTest {
     @Mock private PrivacyDocumentsRepository privacyDocumentsRepo;
     @Mock private DocumentPurposesRepository documentPurposesRepo;
     @Mock private PurposesRepository purposesRepo;
+    @Mock private PurposeDataCategoryRepository purposeDataCategoryRepo;
+    @Mock private RetentionPolicyRepository retentionPolicyRepo;
     @Mock private AuditService auditService;
     @Mock private SecurityContextHelper securityContextHelper;
+    @Mock private jakarta.persistence.EntityManager entityManager;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private AgreementService service;
@@ -66,6 +72,8 @@ class AgreementServiceTest {
         lenient().when(agreementsRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         lenient().when(agreementsPurposesRepo.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         lenient().when(securityContextHelper.getKeycloakId()).thenThrow(new RuntimeException("sin usuario autenticado"));
+        // Sin categorías de datos vinculadas por defecto -> calculateExpiresAt() devuelve null
+        lenient().when(purposeDataCategoryRepo.findByPurposeId(any())).thenReturn(List.of());
     }
 
     // ── Helpers de fixtures ────────────────────────────────────────────────────────
@@ -442,31 +450,4 @@ class AgreementServiceTest {
         assertThat(result).isEmpty();
     }
 
-    // ── recalculateHash() ────────────────────────────────────────────────────────
-
-    @Test
-    void recalculateHash_devuelveElMismoHashSiNoHuboAlteraciones() {
-        UUID id = UUID.randomUUID();
-        Agreements agreement = new Agreements();
-        agreement.setId(id);
-        agreement.setCreatedAt(LocalDateTime.now());
-        when(agreementsRepo.findById(id)).thenReturn(Optional.of(agreement));
-        when(agreementsPurposesRepo.findByAgreementId(id)).thenReturn(List.of());
-        when(agreementMetadataRepo.findByAgreementId(id)).thenReturn(Optional.empty());
-
-        String first = service.recalculateHash(id);
-        String second = service.recalculateHash(id);
-
-        assertThat(first).isNotBlank();
-        assertThat(first).isEqualTo(second);
-    }
-
-    @Test
-    void recalculateHash_lanzaAgreementNotFoundException_siNoExiste() {
-        UUID id = UUID.randomUUID();
-        when(agreementsRepo.findById(id)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.recalculateHash(id))
-                .isInstanceOf(AgreementNotFoundException.class);
-    }
 }

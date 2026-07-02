@@ -1,5 +1,28 @@
 package com.leydata.backend.template.web;
 
+import java.util.List;
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.leydata.backend.config.GlobalExceptionHandler;
 import com.leydata.backend.privacydoc.domain.exception.BusinessValidationException;
 import com.leydata.backend.template.application.dto.AddTemplatePurposeRequest;
@@ -10,29 +33,8 @@ import com.leydata.backend.template.application.dto.UpdateTemplatePurposeRequest
 import com.leydata.backend.template.application.service.TemplateService;
 import com.leydata.backend.template.domain.exception.TemplateNotFoundException;
 import com.leydata.backend.userstatus.infrastructure.persistence.UserStatusRepository;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+
 import tools.jackson.databind.ObjectMapper;
-
-import java.util.List;
-import java.util.UUID;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TemplateController.class)
 @org.springframework.context.annotation.Import(GlobalExceptionHandler.class)
@@ -69,6 +71,7 @@ class TemplateControllerTest {
     @Test
     void create_devuelve201ConTemplateCreado() throws Exception {
         CreateTemplateRequest req = new CreateTemplateRequest();
+        req.setDomainId(UUID.randomUUID());
         req.setTemplateKey("consent_x");
         req.setName("Consentimiento X");
 
@@ -108,20 +111,18 @@ class TemplateControllerTest {
     }
 
     @Test
-    void getById_devuelve500_porFaltaDeHandlerParaTemplateNotFoundException() throws Exception {
-        // NOTA: TemplateNotFoundException no está registrada en GlobalExceptionHandler,
-        // por lo que cae en el handler genérico de RuntimeException y responde 500 en vez de 404.
+    void getById_devuelve404_siNoExiste() throws Exception {
         UUID id = UUID.randomUUID();
         when(service.getById(id)).thenThrow(new TemplateNotFoundException(id));
 
         mockMvc.perform(get("/api/templates/{id}", id))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isNotFound());
     }
 
     @Test
     void list_devuelve200ConListaDeTemplates() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.list(any(), any(), any(), any(), any(), any()))
+        when(service.list(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(draftResponse(id)));
 
         mockMvc.perform(get("/api/templates"))
@@ -131,27 +132,30 @@ class TemplateControllerTest {
 
     @Test
     void getHistory_devuelve200ConVersionesOrdenadas() throws Exception {
-        when(service.getHistory("CONSENT_X")).thenReturn(List.of(draftResponse(UUID.randomUUID())));
+        when(service.getHistory(any(), eq("CONSENT_X"))).thenReturn(List.of(draftResponse(UUID.randomUUID())));
 
-        mockMvc.perform(get("/api/templates/family/{templateKey}", "CONSENT_X"))
+        mockMvc.perform(get("/api/templates/family/{templateKey}", "CONSENT_X")
+                        .param("domainId", UUID.randomUUID().toString()))
                 .andExpect(status().isOk());
     }
 
     @Test
     void getActive_devuelve200ConVersionActiva() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.getActive("CONSENT_X")).thenReturn(draftResponse(id));
+        when(service.getActive(any(), eq("CONSENT_X"))).thenReturn(draftResponse(id));
 
-        mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X"))
+        mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X")
+                        .param("domainId", UUID.randomUUID().toString()))
                 .andExpect(status().isOk());
     }
 
     @Test
     void getActive_devuelve422_siNoHayVersionActiva() throws Exception {
-        when(service.getActive("CONSENT_X"))
+        when(service.getActive(any(), eq("CONSENT_X")))
                 .thenThrow(new BusinessValidationException("No hay una versión activa para el template CONSENT_X"));
 
-        mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X"))
+        mockMvc.perform(get("/api/templates/active/{templateKey}", "CONSENT_X")
+                        .param("domainId", UUID.randomUUID().toString()))
                 .andExpect(status().isUnprocessableEntity());
     }
 
@@ -177,7 +181,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve200ConTemplateActivado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id)).thenReturn(draftResponse(id));
+        when(service.activate(eq(id), anyBoolean())).thenReturn(draftResponse(id));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))
                 .andExpect(status().isOk());
@@ -186,7 +190,7 @@ class TemplateControllerTest {
     @Test
     void activate_devuelve422_siTemplateNoAprobado() throws Exception {
         UUID id = UUID.randomUUID();
-        when(service.activate(id)).thenThrow(new BusinessValidationException(
+        when(service.activate(eq(id), anyBoolean())).thenThrow(new BusinessValidationException(
                 "El template debe estar aprobado antes de activarse"));
 
         mockMvc.perform(post("/api/templates/{id}/activate", id).with(csrf()))

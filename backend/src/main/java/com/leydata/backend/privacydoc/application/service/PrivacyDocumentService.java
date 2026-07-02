@@ -364,6 +364,27 @@ public class PrivacyDocumentService {
                 "Todas las finalidades vinculadas deben estar en estado APPROVED para publicar el documento.");
         }
 
+        // Regla: a lo sumo un documento PUBLISHED por template. Si ya existe uno, se archiva
+        // automáticamente — mismo patrón que TemplateService.activate() con isActive.
+        if (doc.getTemplateId() != null) {
+            documentRepo.findByTemplateIdAndStatusAndIsActiveTrue(doc.getTemplateId(), DocumentStatus.PUBLISHED)
+                    .filter(previous -> !previous.getId().equals(doc.getId()))
+                    .ifPresent(previous -> {
+                        previous.setStatus(DocumentStatus.ARCHIVED);
+                        documentRepo.save(previous);
+
+                        auditService.log(AuditContext.builder()
+                                .tableName("privacy_documents")
+                                .recordId(previous.getId())
+                                .action("DOCUMENT_ARCHIVED_POR_NUEVA_VERSION")
+                                .oldData(Map.of("status", "PUBLISHED"))
+                                .newData(Map.of("status", "ARCHIVED"))
+                                .actorId(publishedBy)
+                                .actorRole(securityContextHelper.getActorRole())
+                                .build());
+                    });
+        }
+
         // Generar PDF en memoria y almacenar bytes + hash
         doc.setPublishAt(LocalDateTime.now());
         PdfGeneratorService.PdfResult result = pdfGenerator.generate(doc);
