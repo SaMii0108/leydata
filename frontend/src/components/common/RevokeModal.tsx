@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import Modal from './Modal';
 import Button from './Button';
-import type { ConsentRecord } from '../../utils/mockData';
+import type { AgreementResponse } from '../../api/agreementsApi';
 import styles from './RevokeModal.module.css';
 
 interface RevokeModalProps {
-  record: ConsentRecord | null;
+  record: AgreementResponse | null;
   onClose: () => void;
   onConfirm: (recordId: string, reason: string) => void;
 }
@@ -24,6 +24,8 @@ const RevokeModal = ({ record, onClose, onConfirm }: RevokeModalProps) => {
     onClose();
   };
 
+  const firstPurpose = record?.purposes?.[0];
+
   return (
     <Modal open={record !== null} onClose={handleClose} variant="center">
       {record && (
@@ -39,10 +41,10 @@ const RevokeModal = ({ record, onClose, onConfirm }: RevokeModalProps) => {
           <div className={styles.infoBox}>
             <p className={styles.infoLabel}>ID</p>
             <p className={styles.infoValue}>{record.id}</p>
-            <p className={styles.infoLabel}>Área</p>
-            <p className={styles.infoValue}>{record.area}</p>
             <p className={styles.infoLabel}>Finalidad</p>
-            <p className={styles.infoValue}>{record.finalidad}</p>
+            <p className={styles.infoValue}>{firstPurpose?.purposeName ?? '—'}</p>
+            <p className={styles.infoLabel}>Base legal</p>
+            <p className={styles.infoValue}>{firstPurpose?.legalBasisCode ?? '—'}</p>
           </div>
 
           <div className={styles.field}>

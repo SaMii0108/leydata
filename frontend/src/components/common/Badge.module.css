@@ -14,7 +14,6 @@
   flex-shrink: 0;
 }
 
-.activo    { background: var(--color-success-bg); color: var(--color-success); }
-.revocado  { background: var(--color-danger-bg);  color: var(--color-danger); }
-.pendiente { background: var(--color-warning-bg); color: var(--color-warning); }
-.expirado  { background: var(--color-border);     color: var(--color-text-secondary); }
+.ACTIVE  { background: var(--color-success-bg); color: var(--color-success); }
+.REVOKED { background: var(--color-danger-bg);  color: var(--color-danger); }
+.EXPIRED { background: var(--color-border);     color: var(--color-text-secondary); }

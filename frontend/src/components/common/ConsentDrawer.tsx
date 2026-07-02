@@ -1,12 +1,12 @@
 import Modal from './Modal';
 import Badge from './Badge';
 import Button from './Button';
-import type { ConsentRecord } from '../../utils/mockData';
+import type { AgreementResponse } from '../../api/agreementsApi';
 import { formatDateLong } from '../../utils/formatters';
 import styles from './ConsentDrawer.module.css';
 
 interface ConsentDrawerProps {
-  record: ConsentRecord | null;
+  record: AgreementResponse | null;
   onClose: () => void;
 }
 
@@ -17,18 +17,19 @@ const ConsentDrawer = ({ record, onClose }: ConsentDrawerProps) => (
         <div className={styles.header}>
           <div>
             <p className={styles.recordId}>{record.id}</p>
-            <p className={styles.recordArea}>{record.area}</p>
+            <p className={styles.recordArea}>
+              {record.purposes?.[0]?.purposeName ?? '—'}
+            </p>
           </div>
           <button className={styles.closeBtn} onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
 
         <div className={styles.statusBanner}>
-          <Badge status={record.estado} />
+          <Badge status={record.status} />
           <span className={styles.statusHint}>
-            {record.estado === 'activo'    && 'Consentimiento vigente'}
-            {record.estado === 'revocado'  && 'Consentimiento revocado por el titular'}
-            {record.estado === 'pendiente' && 'Pendiente de validación'}
-            {record.estado === 'expirado'  && 'Consentimiento vencido sin renovar'}
+            {record.status === 'ACTIVE'  && 'Consentimiento vigente'}
+            {record.status === 'REVOKED' && 'Consentimiento revocado por el titular'}
+            {record.status === 'EXPIRED' && 'Consentimiento vencido sin renovar'}
           </span>
         </div>
 
@@ -36,10 +37,10 @@ const ConsentDrawer = ({ record, onClose }: ConsentDrawerProps) => (
           <section className={styles.section}>
             <h3 className={styles.sectionTitle}>Consentimiento</h3>
             <dl className={styles.grid}>
-              <Field label="Área"          value={record.area} />
-              <Field label="Finalidad"     value={record.finalidad} />
-              <Field label="Otorgamiento"  value={formatDateLong(record.fechaOtorgamiento)} />
-              <Field label="Expiración"    value={formatDateLong(record.fechaExpiracion)} />
+              <Field label="Finalidad"    value={record.purposes?.[0]?.purposeName ?? '—'} />
+              <Field label="Versión"      value={`v${record.templateVersion}`} />
+              <Field label="Otorgamiento" value={formatDateLong(record.createdAt)} />
+              <Field label="Expiración"   value={record.expiration ? formatDateLong(record.expiration) : '—'} />
             </dl>
           </section>
 
@@ -47,7 +48,10 @@ const ConsentDrawer = ({ record, onClose }: ConsentDrawerProps) => (
             <h3 className={styles.sectionTitle}>Marco legal</h3>
             <dl className={styles.grid}>
               <Field label="Normativa"  value="Ley 21.719 — Protección de datos personales (Chile)" />
-              <Field label="Base legal" value="Consentimiento expreso del titular (Art. 12)" />
+              <Field
+                label="Base legal"
+                value={record.purposes?.[0]?.legalBasisCode ?? 'Consentimiento expreso del titular (Art. 12)'}
+              />
             </dl>
           </section>
         </div>

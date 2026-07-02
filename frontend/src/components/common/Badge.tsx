@@ -1,15 +1,15 @@
-import type { ConsentStatus } from '../../utils/mockData';
 import styles from './Badge.module.css';
 
+export type BadgeStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
+
 interface BadgeProps {
-  status: ConsentStatus;
+  status: BadgeStatus;
 }
 
-const labels: Record<ConsentStatus, string> = {
-  activo:    'Activo',
-  revocado:  'Revocado',
-  pendiente: 'Pendiente',
-  expirado:  'Expirado',
+const labels: Record<BadgeStatus, string> = {
+  ACTIVE:  'Activo',
+  REVOKED: 'Revocado',
+  EXPIRED: 'Expirado',
 };
 
 const IconCheck = () => (
@@ -24,22 +24,15 @@ const IconX = () => (
   </svg>
 );
 
-const IconClock = () => (
-  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-  </svg>
-);
-
 const IconMinus = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
     <line x1="5" y1="12" x2="19" y2="12"/>
   </svg>
 );
 
-const StatusIcon = ({ status }: { status: ConsentStatus }) => {
-  if (status === 'activo')    return <IconCheck />;
-  if (status === 'revocado')  return <IconX />;
-  if (status === 'pendiente') return <IconClock />;
+const StatusIcon = ({ status }: { status: BadgeStatus }) => {
+  if (status === 'ACTIVE')  return <IconCheck />;
+  if (status === 'REVOKED') return <IconX />;
   return <IconMinus />;
 };
 

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { DataItem } from '../../utils/mockData';
 import styles from './ConsentPreview.module.css';
 
 export interface TemplateConfig {
@@ -15,9 +14,16 @@ export interface TemplateConfig {
   requiredFields: string[];
 }
 
+export interface ConsentPurposeItem {
+  id: string;
+  nombre: string;
+  obligatorio: boolean;
+  descripcionTitular: string;
+}
+
 interface ConsentPreviewProps {
   config: TemplateConfig;
-  dataItems?: DataItem[];
+  dataItems?: ConsentPurposeItem[];
   templateName?: string;
   interactive?: boolean;
   showLabel?: boolean;
@@ -94,7 +100,7 @@ const ConsentPreview = ({
           <p className={styles.formPurpose}>{config.purpose}</p>
         )}
 
-        {/* DataItems como checkboxes */}
+        {/* Finalidades como checkboxes */}
         {useItems && (
           <div className={styles.fieldsSection}>
             <p className={styles.fieldsLabel}>Datos que se solicitarán:</p>

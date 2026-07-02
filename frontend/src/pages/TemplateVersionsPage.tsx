@@ -38,7 +38,7 @@ const TemplateVersionsPage = () => {
       try {
         const tpl    = await getTemplate(id, accessToken);
         if (cancelled) return;
-        const family = await getTemplateFamily(tpl.templateKey, accessToken);
+        const family = await getTemplateFamily(tpl.templateKey, tpl.domainId, accessToken);
         if (cancelled) return;
         setVersions(family.sort((a, b) => b.version - a.version));
       } catch (err) {

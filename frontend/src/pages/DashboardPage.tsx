@@ -1,7 +1,15 @@
 import Badge from '../components/common/Badge';
+import type { BadgeStatus } from '../components/common/Badge';
 import Button from '../components/common/Button';
 import { summaryCards, chartData, consentRecords } from '../utils/mockData';
-import type { SummaryCard } from '../utils/mockData';
+import type { SummaryCard, ConsentStatus } from '../utils/mockData';
+
+const STATUS_BADGE: Record<ConsentStatus, BadgeStatus> = {
+  activo:    'ACTIVE',
+  revocado:  'REVOKED',
+  expirado:  'EXPIRED',
+  pendiente: 'ACTIVE',
+};
 import { usePermissions } from '../features/auth/usePermissions';
 import { useNavigate } from 'react-router-dom';
 import { formatDate } from '../utils/formatters';
@@ -202,7 +210,7 @@ const DashboardPage = () => {
                 <td className={styles.cellId}>{r.id}</td>
                 <td className={styles.cellMuted}>{r.area}</td>
                 <td className={styles.cellMuted}>{r.finalidad}</td>
-                <td><Badge status={r.estado} /></td>
+                <td><Badge status={STATUS_BADGE[r.estado]} /></td>
                 <td className={styles.cellMuted}>{formatDate(r.fechaOtorgamiento)}</td>
               </tr>
             ))}

@@ -4,9 +4,11 @@ import Button from '../components/common/Button';
 import { useAuth } from '../features/auth/AuthContext';
 import { createTemplate, addTemplatePurpose, ApiError } from '../api/templatesApi';
 import { getPurposes, type PurposeResponse } from '../api/purposesApi';
+import { getActiveDomains, type DomainDto } from '../api/domainsApi';
 import styles from './CreateTemplatePage.module.css';
 
 interface FormState {
+  domainId: string;
   templateKey: string;
   name: string;
   description: string;
@@ -17,7 +19,7 @@ type FormErrors = Partial<Record<keyof FormState, string>>;
 
 const TEMPLATE_KEY_RE = /^[a-z0-9][a-z0-9_-]*$/;
 
-const EMPTY: FormState = { templateKey: '', name: '', description: '', title: '' };
+const EMPTY: FormState = { domainId: '', templateKey: '', name: '', description: '', title: '' };
 
 const CreateTemplatePage = () => {
   const { accessToken } = useAuth();
@@ -28,12 +30,32 @@ const CreateTemplatePage = () => {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  const [allDomains, setAllDomains]             = useState<DomainDto[]>([]);
+  const [domainsLoading, setDomainsLoading]     = useState(true);
+  const [domainsLoadError, setDomainsLoadError] = useState<string | null>(null);
+
   const [allPurposes, setAllPurposes]                     = useState<PurposeResponse[]>([]);
   const [selectedPurposeIds, setSelectedPurposeIds]       = useState<string[]>([]);
   const [purposesLoading, setPurposesLoading]             = useState(true);
   const [purposesLoadError, setPurposesLoadError]         = useState<string | null>(null);
   const [purposeSelectionError, setPurposeSelectionError] = useState<string | null>(null);
   const [createdTemplateId, setCreatedTemplateId]         = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDomainsLoading(true);
+    setDomainsLoadError(null);
+    getActiveDomains(accessToken)
+      .then((data) => { if (!cancelled) setAllDomains(data); })
+      .catch((err) => {
+        if (!cancelled)
+          setDomainsLoadError(
+            err instanceof ApiError ? err.message : 'No se pudieron cargar los dominios disponibles.',
+          );
+      })
+      .finally(() => { if (!cancelled) setDomainsLoading(false); });
+    return () => { cancelled = true; };
+  }, [accessToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +89,8 @@ const CreateTemplatePage = () => {
 
   const validate = (): boolean => {
     const e: FormErrors = {};
+    if (!form.domainId)
+      e.domainId = 'El dominio es obligatorio.';
     if (!form.name.trim())
       e.name = 'El nombre es obligatorio.';
     if (!form.templateKey.trim())
@@ -97,6 +121,7 @@ const CreateTemplatePage = () => {
     try {
       tpl = await createTemplate(
         {
+          domainId: form.domainId,
           templateKey: form.templateKey.trim(),
           name: form.name.trim(),
           ...(form.description.trim() ? { description: form.description.trim() } : {}),
@@ -157,6 +182,28 @@ const CreateTemplatePage = () => {
 
       <div className={styles.formBody}>
         <FormSection title="Identificación">
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              Dominio <span className={styles.required}>*</span>
+            </label>
+            {domainsLoadError ? (
+              <p className={styles.submitError}>{domainsLoadError}</p>
+            ) : (
+              <select
+                className={[styles.input, errors.domainId ? styles.inputError : ''].join(' ')}
+                value={form.domainId}
+                onChange={(e) => set('domainId', e.target.value)}
+                disabled={loading || domainsLoading}
+              >
+                <option value="">{domainsLoading ? 'Cargando dominios…' : 'Selecciona un dominio'}</option>
+                {allDomains.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            )}
+            {errors.domainId && <span className={styles.errorMsg}>{errors.domainId}</span>}
+          </div>
+
           <div className={styles.fieldGroup}>
             <label className={styles.label}>
               Nombre <span className={styles.required}>*</span>
@@ -300,7 +347,7 @@ const CreateTemplatePage = () => {
               variant="primary"
               size="sm"
               onClick={handleSubmit}
-              disabled={loading || purposesLoading || allPurposes.length === 0}
+              disabled={loading || domainsLoading || purposesLoading || allPurposes.length === 0}
             >
               {loading ? 'Creando…' : 'Crear Plantilla'}
             </Button>
