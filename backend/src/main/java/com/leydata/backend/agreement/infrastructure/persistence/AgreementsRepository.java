@@ -20,7 +20,6 @@ public interface AgreementsRepository extends JpaRepository<Agreements, UUID> {
     boolean existsByDataSubjectIdAndTemplateIdAndStatus(UUID dataSubjectId, UUID templateId, String status);
     boolean existsByTemplateIdIn(Collection<UUID> templateIds);
     Optional<Agreements> findTopByOrderByCreatedAtDesc();
-    boolean existsByTemplateIdIn(Collection<UUID> templateIds);
 
     /** Acuerdo activo buscado por identificador opaco del titular + templateId (para el Orquestador B2B). */
     @Query("""

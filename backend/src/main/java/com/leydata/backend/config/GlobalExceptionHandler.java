@@ -141,14 +141,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
-    // ── MÓDULO AGREEMENTS ────────────────────────────────────────────────────────
-
-    @ExceptionHandler(AgreementNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleAgreementNotFound(AgreementNotFoundException ex) {
-        Map<String, Object> body = buildErrorResponse("NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
-    }
-
     // ── MÓDULO PURPOSES
     // ───────────────────────────────────────────────────────────
 
@@ -183,12 +175,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RetentionPolicyLockedException.class)
     public ResponseEntity<Map<String, Object>> handleRetentionLocked(RetentionPolicyLockedException ex) {
         Map<String, Object> body = buildErrorResponse("RETENTION_LOCKED", ex.getMessage(), HttpStatus.CONFLICT);
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
-    }
-
-    @ExceptionHandler(PurposeNotLockedException.class)
-    public ResponseEntity<Map<String, Object>> handlePurposeNotLocked(PurposeNotLockedException ex) {
-        Map<String, Object> body = buildErrorResponse("PURPOSE_NOT_LOCKED", ex.getMessage(), HttpStatus.CONFLICT);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
