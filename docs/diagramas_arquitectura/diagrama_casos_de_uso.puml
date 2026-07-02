@@ -1,0 +1,145 @@
+@startuml diagrama_casos_de_uso
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1.2
+
+skinparam usecase {
+    BackgroundColor #F8F8F8
+    BorderColor #888888
+    FontSize 11
+}
+
+skinparam actor {
+    BackgroundColor #FFFFFF
+    BorderColor #555555
+    FontSize 12
+}
+
+skinparam rectangle {
+    BackgroundColor #FAFAFA
+    BorderColor #888888
+    FontSize 13
+    FontStyle bold
+}
+
+title Diagrama de Casos de Uso — Sistema de Consentimiento Ley 21.719
+
+' ══ ACTORES ══
+actor "Titular\nde Datos"          as titular
+actor "Admin"                       as admin
+actor "DPO"                         as dpo
+actor "Jefe de\nDominio"            as jefe
+actor "Agente\nFiscalizador\n(solo lectura)" as fiscalizador
+
+' ══ SISTEMA ══
+rectangle "Sistema de Consentimiento — Ley 21.719" as sistema {
+
+    ' ── TITULAR DE DATOS ──
+    package "Consentimiento del titular" as pkg_titular #EAF4FB {
+        usecase "Otorgar consentimiento\ngranular"           as UC_otorgar
+        usecase "Ver finalidad\ndel tratamiento"             as UC_ver_finalidad
+        usecase "Aceptar / rechazar\nfinalidades"            as UC_aceptar
+        usecase "Confirmar y enviar\ndecisión"               as UC_confirmar
+        usecase "Revocar\nconsentimiento"                    as UC_revocar
+    }
+
+    ' ── ADMIN ──
+    package "Gestión de plantillas" as pkg_admin #EAF7EA {
+        usecase "Gestionar plantillas\nde consentimiento"    as UC_gestionar_plantillas
+        usecase "Crear / editar\nplantilla"                  as UC_crear_plantilla
+        usecase "Activar versión\nde plantilla"              as UC_activar_version
+        usecase "Gestionar usuarios\ny roles"                as UC_gestionar_usuarios
+        usecase "Ver métricas\ndashboard"                    as UC_metricas
+    }
+
+    ' ── DPO ──
+    package "Supervisión y cumplimiento" as pkg_dpo #FEF9E7 {
+        usecase "Supervisar cumplimiento\ny finalidades"     as UC_supervisar
+        usecase "Aprobar / rechazar\nfinalidades"            as UC_aprobar_finalidades
+        usecase "Configurar\nbases legales"                  as UC_bases_legales
+        usecase "Aprobar políticas\nde retención"            as UC_retenciones
+        usecase "Verificar integridad\nde acuerdos"          as UC_verificar_integridad
+    }
+
+    ' ── JEFE DE DOMINIO ──
+    package "Gestión de dominio" as pkg_jefe #F5EEF8 {
+        usecase "Gestionar finalidades\ndel dominio"         as UC_gestionar_dominio
+        usecase "Solicitar nueva\nfinalidad"                 as UC_solicitar_finalidad
+        usecase "Consultar estado\nde solicitud"             as UC_estado_solicitud
+        usecase "Asociar template\na dominio"                as UC_asociar_template
+    }
+
+    ' ── AGENTE FISCALIZADOR ──
+    package "Consulta y evidencia (solo lectura)" as pkg_fiscal #FEF0F0 {
+        usecase "Consultar logs y evidencia\nde consentimiento" as UC_consultar_logs
+        usecase "Buscar por\nRUT / fecha"                    as UC_buscar
+        usecase "Ver detalle\nde registro"                   as UC_ver_detalle
+        usecase "Descargar evidencia\n(PDF / hash)"          as UC_descargar
+    }
+}
+
+' ══ RELACIONES ACTORES → CASOS DE USO PRINCIPALES ══
+titular      --> UC_otorgar
+titular      --> UC_revocar
+admin        --> UC_gestionar_plantillas
+admin        --> UC_gestionar_usuarios
+admin        --> UC_metricas
+dpo          --> UC_supervisar
+jefe         --> UC_gestionar_dominio
+fiscalizador --> UC_consultar_logs
+
+' ══ INCLUDES — TITULAR ══
+UC_otorgar ..> UC_ver_finalidad  : <<include>>
+UC_otorgar ..> UC_aceptar        : <<include>>
+UC_otorgar ..> UC_confirmar      : <<include>>
+
+' ══ INCLUDES — ADMIN ══
+UC_gestionar_plantillas ..> UC_crear_plantilla   : <<include>>
+UC_gestionar_plantillas ..> UC_activar_version   : <<include>>
+
+' ══ INCLUDES — DPO ══
+UC_supervisar ..> UC_aprobar_finalidades  : <<include>>
+UC_supervisar ..> UC_bases_legales        : <<include>>
+UC_supervisar ..> UC_retenciones          : <<include>>
+UC_supervisar ..> UC_verificar_integridad : <<include>>
+
+' ══ INCLUDES — JEFE DE DOMINIO ══
+UC_gestionar_dominio ..> UC_solicitar_finalidad : <<include>>
+UC_gestionar_dominio ..> UC_estado_solicitud    : <<include>>
+UC_gestionar_dominio ..> UC_asociar_template    : <<include>>
+
+' ══ INCLUDES y EXTENDS — AGENTE FISCALIZADOR ══
+UC_consultar_logs ..> UC_buscar      : <<include>>
+UC_consultar_logs ..> UC_ver_detalle : <<include>>
+UC_descargar      .up.> UC_ver_detalle : <<extend>>
+
+' ══ NOTAS ══
+note bottom of UC_revocar
+  Art. 12 Ley 21.719:
+  revocación tan sencilla
+  como otorgar el consentimiento.
+  STATUS = 'REVOKED' en AGREEMENTS.
+end note
+
+note bottom of UC_aprobar_finalidades
+  Flujo PURPOSE_REQUEST:
+  JEFE_DOMINIO solicita →
+  DPO aprueba / rechaza →
+  PURPOSE creada si aprobada.
+end note
+
+note bottom of UC_descargar
+  <<extend>>: acción opcional.
+  El fiscalizador puede consultar
+  sin necesidad de descargar.
+end note
+
+note bottom of UC_activar_version
+  Solo una versión activa
+  por TEMPLATE_KEY a la vez.
+  (UX_TEMPLATE_TEMPLATE_KEY_ACTIVE)
+end note
+
+@enduml

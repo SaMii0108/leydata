@@ -109,8 +109,8 @@ Este flujo ocurre en segundo plano. El sistema cliente nunca ve ni tiene acceso 
 |---|---|---|
 | `REDIS_PORT` | `6379` | Puerto de Redis |
 | `KC_ORCHESTRATOR_CLIENT_ID` | `leydata-orchestrator` | Client ID del Orquestador en Keycloak |
-| `LEYDATA_CONSENT_CACHE_TTL_SECONDS` | `300` | TTL duro del estado en Redis (segundos) |
-| `LEYDATA_CONSENT_CACHE_SOFT_TTL_SECONDS` | `240` | TTL suave — inicia refresco anticipado |
+
+> **⚠️ `LEYDATA_CONSENT_CACHE_TTL_SECONDS` y `LEYDATA_CONSENT_CACHE_SOFT_TTL_SECONDS` no son configurables actualmente.** `application.yml` hardcodea `cache-ttl-seconds: 300` y `cache-soft-ttl-seconds: 240` sin leer ninguna variable de entorno — el TTL real es siempre 300s. Además, el "refresco anticipado" (soft TTL) descrito abajo **no está implementado**: la propiedad se lee pero `ConsentService` nunca la usa. Es un bug de código pendiente de resolución, no una opción de configuración disponible hoy.
 
 ### Entorno de desarrollo local
 
@@ -233,6 +233,161 @@ Content-Type: application/json
 ```
 
 **Garantía de consistencia:** el Orquestador sigue el patrón LeyData-primero. Primero persiste la revocación en el registro inmutable de LeyData y, solo si recibe confirmación, actualiza Redis. Si LeyData falla, el cliente recibe un error y puede reintentar — el estado nunca queda inconsistente.
+
+---
+
+### `GET /consent/template-content`
+
+Obtiene los datos del template activo (incluyendo el `documentId` del documento de privacidad publicado) para un `templateKey`, resuelto contra el dominio del JWT.
+
+**Request:**
+```
+GET /consent/template-content?templateKey=ONBOARDING_CLIENTE
+Authorization: Bearer <token>
+```
+
+**Response `200 OK`:**
+```json
+{
+  "templateId": "uuid",
+  "domainId": "uuid",
+  "templateKey": "ONBOARDING_CLIENTE",
+  "version": 2,
+  "name": null,
+  "title": null,
+  "description": null,
+  "documentId": "uuid",
+  "purposes": [
+    {
+      "purposeId": "uuid",
+      "purposeCode": "MARKETING",
+      "purposeName": "Envío de comunicaciones comerciales",
+      "purposeDescription": "...",
+      "purposeShortDescription": "...",
+      "required": true,
+      "revocable": true,
+      "legalBasisCode": "ART_12_CONSENTIMIENTO"
+    }
+  ]
+}
+```
+
+**⚠️ Importante:** `name`, `title` y `description` siempre vienen `null` — es un bug de código pendiente (el servicio los construye como `null` explícito). Este endpoint **no** trae el texto legal a mostrar al titular pese a su propósito declarado. Hoy solo es útil para obtener `documentId` y la lista de `purposes`.
+
+---
+
+### `GET /consent/subject/{subjectId}`
+
+Devuelve el estado de todas las finalidades consentidas por un titular en el dominio del sistema cliente. Pensado para un portal de preferencias.
+
+**Request:**
+```
+GET /consent/subject/u-8f3a2c
+Authorization: Bearer <token>
+```
+
+**Response `200 OK`:**
+```json
+[
+  {
+    "subjectIdentifier": "u-8f3a2c",
+    "domainId": "uuid",
+    "agreementId": "uuid",
+    "templateId": "uuid",
+    "templateKey": "ONBOARDING_CLIENTE",
+    "templateVersion": 2,
+    "documentId": "uuid",
+    "purposes": [
+      {
+        "purposeId": "uuid", "purposeCode": "MARKETING", "purposeName": "Marketing",
+        "accepted": true, "status": "ACTIVE",
+        "expiresAt": "2026-12-31T23:59:59", "acceptedAt": "2026-01-15T10:00:00",
+        "required": false, "revocable": true
+      }
+    ]
+  }
+]
+```
+
+---
+
+### `POST /consent/revoke-purpose`
+
+Revoca una finalidad individual sin afectar las demás del mismo agreement. Internamente hace re-consentimiento (nuevo agreement) en vez de modificar el existente, para no romper el hash SHA-256 de integridad.
+
+**Request:**
+```
+POST /consent/revoke-purpose
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+```json
+{
+  "subjectId": "u-8f3a2c",
+  "purposeId": "550e8400-e29b-41d4-a716-446655440000",
+  "templateKey": "ONBOARDING_CLIENTE"
+}
+```
+
+**Response `200 OK`:**
+```json
+{
+  "subjectId": "u-8f3a2c",
+  "agreementId": "uuid-del-nuevo-agreement",
+  "status": "REVOKED"
+}
+```
+
+Falla con `400` si la purpose no es revocable, es requerida, o no hay ningún agreement activo del titular con ese `templateKey`/`purposeId`.
+
+---
+
+### `GET /consent/pending-deletions`
+
+Lista las finalidades vencidas cuyos datos asociados aún no han sido eliminados por el sistema cliente, en el dominio del JWT.
+
+**Request:**
+```
+GET /consent/pending-deletions
+Authorization: Bearer <token>
+```
+
+**Response `200 OK`:**
+```json
+[
+  {
+    "subjectIdentifier": "u-8f3a2c",
+    "purposeId": "uuid",
+    "purposeCode": "MARKETING",
+    "purposeName": "Envío de comunicaciones comerciales",
+    "agreementId": "uuid",
+    "expiredAt": "2026-01-15T00:00:00",
+    "anonymizeAfter": false
+  }
+]
+```
+
+---
+
+### `POST /consent/confirm-deletion`
+
+El sistema cliente confirma que eliminó o anonimizó los datos del titular para una finalidad vencida. Queda registrado en el `system_audit_log` del backend como evidencia de cumplimiento.
+
+**Request:**
+```
+POST /consent/confirm-deletion
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+```json
+{
+  "subjectId": "u-8f3a2c",
+  "purposeId": "550e8400-e29b-41d4-a716-446655440000",
+  "deletedAt": "2026-06-30T10:00:00"
+}
+```
+
+**Response:** `204 No Content`
 
 ---
 

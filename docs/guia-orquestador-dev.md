@@ -585,16 +585,29 @@ curl -s -X POST http://localhost:8081/consent/capture \
 
 ## 7. Flujo de ciclo de vida
 
-El ciclo de vida del consentimiento se evalúa **de forma lazy** en cada CHECK cuando hay cache miss en Redis. No hay batch jobs. Los cuatro estados posibles son:
+> **⚠️ Nota importante:** `GET /consent/check` **no** evalúa ciclo de vida contra `/api/agreements/lifecycle-check`. Llama a `GET /api/agreements/active` y mapea el `status` del agreement directamente (`ConsentService.check()` → `buildEnrichedResponse()`). Existe un método `ConsentService.checkWithLifecycle()` que sí implementa la lógica de `EXPIRED`/`REQUIRES_RECONSENT` descrita abajo, pero **no está conectado a ningún endpoint** — es código muerto hoy. Los pasos de esta sección para forzar `REQUIRES_RECONSENT` **no van a funcionar** contra `/consent/check` tal como está el código actualmente; se documentan igual porque describen la lógica de negocio ya implementada (solo falta cablearla al controller) y porque el backend sí expone `GET /api/agreements/lifecycle-check` directamente (ver `docs/modules-specifications/agreements-module.md`).
 
-| Estado | Qué significa | Acción esperada del CRM |
+### Estados reales de `GET /consent/check` (lo que corre hoy)
+
+| `agreement.status` (backend) | Estado devuelto | Acción esperada del CRM |
 |---|---|---|
-| `ALLOWED` | Consentimiento activo y vigente | Permitir acceso a los datos |
-| `EXPIRED` | Vencido según política de retención | Bloquear acceso, iniciar flujo de eliminación |
-| `REQUIRES_RECONSENT` | El DPO activó nueva versión del template con `forceReconsent=true` | Mostrar nuevo formulario al titular antes del próximo acceso |
-| `PENDING` | No existe consentimiento registrado | Mostrar formulario inicial de captura |
+| `ACTIVE` | `ALLOWED` | Permitir acceso a los datos |
+| `REVOKED` | `REVOKED` | No procesar el dato |
+| `EXPIRED` | `DENIED` | Bloquear acceso, iniciar flujo de eliminación |
+| (sin agreement) | `PENDING` | Mostrar formulario inicial de captura |
 
-### Probar el estado REQUIRES_RECONSENT
+### Estados del modelo de ciclo de vida (implementado en `checkWithLifecycle()`, no conectado)
+
+| Estado | Qué significa |
+|---|---|
+| `ALLOWED` | Consentimiento activo y vigente |
+| `EXPIRED` | Vencido según política de retención |
+| `REQUIRES_RECONSENT` | El DPO activó nueva versión del template con `forceReconsent=true` |
+| `PENDING` | No existe consentimiento registrado |
+
+### Probar el estado REQUIRES_RECONSENT (contra el backend directamente, no vía Orquestador)
+
+Como `/consent/check` no usa esta lógica, para probarla hay que llamar al endpoint del backend directamente:
 
 ```bash
 # 1. Crear una nueva versión del template con forceReconsent=true
@@ -611,18 +624,18 @@ curl -s -X POST "http://localhost:8080/api/templates/$NEW_TEMPLATE_ID/activate" 
   -H "Authorization: Bearer $DPO_TOKEN" -H 'Content-Type: application/json' \
   -d '{"forceReconsent": true}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('version:', d['version'], '| forceReconsent:', d['forceReconsent'])"
 
-# 2. Invalidar la caché del agreement anterior en Redis (TTL caduca sola en 15 min, o forzar)
-docker exec leydata-redis redis-cli DEL "consent:test-user-001:$PURPOSE_ID"
-
-# 3. El próximo CHECK debe devolver REQUIRES_RECONSENT
-curl -s "http://localhost:8081/consent/check?subjectId=test-user-001&purposeId=$PURPOSE_ID" \
-  -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
+# 2. Consultar el estado de ciclo de vida directo en el backend (no vía Orquestador)
+curl -s "http://localhost:8080/api/agreements/lifecycle-check?subjectIdentifier=test-user-001&domainId=$DOMAIN_ID&templateKey=MI_TEMPLATE" \
+  -H "Authorization: Bearer $DPO_TOKEN" | python3 -m json.tool
 # { "status": "REQUIRES_RECONSENT", ... }
+
+# El equivalente vía Orquestador (GET /consent/check) NO reflejará esto hoy —
+# seguirá devolviendo ALLOWED/REVOKED/DENIED/PENDING según el agreement activo.
 ```
 
 ### Probar el estado EXPIRED
 
-El estado EXPIRED depende de que la finalidad tenga una política de retención configurada (`DataRetentionPolicies`). La lógica calcula `expiresAt = fechaCaptura + retentionPeriod` en el momento de crear el agreement.
+El estado `EXPIRED` del backend (que el Orquestador mapea a `DENIED` en `/consent/check`) depende de que la finalidad tenga una política de retención configurada (`DataRetentionPolicies`). La lógica calcula `expiresAt = fechaCaptura + retentionPeriod` en el momento de crear el agreement.
 
 Para probar sin esperar que venza naturalmente, se puede modificar directamente en la BD:
 
@@ -638,12 +651,12 @@ UPDATE agreements_purposes
 
 Luego:
 ```bash
-# Invalidar caché y verificar
+# Invalidar caché y verificar (vía Orquestador — devuelve DENIED, no EXPIRED)
 docker exec leydata-redis redis-cli DEL "consent:test-user-001:$PURPOSE_ID"
 
 curl -s "http://localhost:8081/consent/check?subjectId=test-user-001&purposeId=$PURPOSE_ID" \
   -H "Authorization: Bearer $EXTERNAL_TOKEN" | python3 -m json.tool
-# { "status": "EXPIRED", ... }
+# { "status": "DENIED", ... }
 
 # Consultar datos pendientes de eliminación
 curl -s "http://localhost:8081/consent/pending-deletions" \
@@ -681,9 +694,11 @@ curl -s -X POST http://localhost:8081/consent/confirm-deletion \
 
 ---
 
-### El CHECK devuelve `REQUIRES_RECONSENT` inesperadamente
+### El backend (`/api/agreements/lifecycle-check`) devuelve `REQUIRES_RECONSENT` inesperadamente
 
-El DPO activó una nueva versión del template con `forceReconsent=true`. El CRM debe mostrar el formulario de consentimiento actualizado al titular antes de permitir el acceso.
+> Nota: esto aplica al endpoint del **backend**, no a `GET /consent/check` del Orquestador — ese último no puede devolver `REQUIRES_RECONSENT` hoy (ver sección 7).
+
+El DPO activó una nueva versión del template con `forceReconsent=true`. El sistema que consuma `lifecycle-check` directamente debe mostrar el formulario de consentimiento actualizado al titular antes de permitir el acceso.
 
 ```bash
 # Ver la versión actual del template activo
@@ -701,9 +716,9 @@ La solución es que el titular firme el nuevo consentimiento vía `POST /consent
 
 ---
 
-### El CHECK devuelve `EXPIRED` aunque el titular consintió recientemente
+### El CHECK devuelve `DENIED` aunque el titular consintió recientemente
 
-El acuerdo tiene `expiresAt` en el pasado. Esto ocurre cuando la finalidad tiene una política de retención corta en `DataRetentionPolicies`.
+(Vía Orquestador el estado se llama `DENIED`, no `EXPIRED` — ver sección 7). El acuerdo tiene `expiresAt` en el pasado. Esto ocurre cuando la finalidad tiene una política de retención corta en `DataRetentionPolicies`.
 
 ```bash
 # Ver cuándo vence la finalidad en el acuerdo

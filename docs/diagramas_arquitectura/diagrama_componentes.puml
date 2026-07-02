@@ -1,0 +1,101 @@
+@startuml diagrama_componentes
+skinparam componentStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1.2
+
+skinparam component {
+    BackgroundColor #F8F8F8
+    BorderColor #888888
+    FontSize 12
+}
+
+skinparam node {
+    BackgroundColor #FFFDE7
+    BorderColor #F9A825
+}
+
+skinparam rectangle {
+    BackgroundColor #F5F5F5
+    BorderColor #AAAAAA
+}
+
+skinparam database {
+    BackgroundColor #FFF8E1
+    BorderColor #F9A825
+}
+
+title Diagrama de Componentes — Sistema de Consentimiento Ley 21.719
+
+' ══ ACTORES EXTERNOS ══
+actor "Titular de Datos" as titular
+actor "DPO / Admin\nJefe de Dominio" as admin_actor
+
+' ══ NGINX — PUNTO DE ENTRADA ÚNICO ══
+rectangle "Proxy Inverso Nginx\n<size:10>TLS 1.3 · cipher suites modernas · elimina TLS 1.0/1.1</size>" as nginx #E8EAF6 {
+}
+
+titular -down-> nginx : HTTPS TLS 1.3
+admin_actor -down-> nginx : HTTPS TLS 1.3
+
+' ══ DOCKER COMPOSE CONTAINER ══
+rectangle "Docker Compose — Infraestructura local (RNF.07 / RNF.22)" as docker #F1F8E9 {
+
+    ' ── Widget Consentimiento ──
+    rectangle "Widget Consentimiento\n<size:10>React · Bundle JS/CSS embebible</size>" as widget #E3F2FD {
+        [Formulario de consentimiento] as form
+        [Módulo de revocación] as revoke
+        [Embebible en sitios externos] as embed
+    }
+
+    ' ── Panel Backoffice ──
+    rectangle "Panel Backoffice\n<size:10>React · SPA autenticada · JWT RS256</size>" as backoffice #E8F5E9 {
+        [Gestión de templates] as tmpl_mgmt
+        [Aprobación de finalidades (DPO)] as purpose_approval
+        [Dashboard / métricas] as dashboard
+    }
+
+    ' ── API REST ──
+    rectangle "API REST\n<size:10>Java 21 · Spring Boot · JWT RS256</size>" as api #E8F5E9 {
+        [Controladores · filtros JWT · RBAC] as controllers
+        [Servicios · lógica de negocio · hashes] as services
+        [Repositorios · JPA / JDBC] as repos
+    }
+
+    ' ── PostgreSQL ──
+    database "PostgreSQL 16\n<size:10>pgcrypto · sin transmisión a terceros (RNF.07)</size>" as db #FFF9C4 {
+        rectangle "Consentimientos\n<size:10>agreements · purposes\ntemplates · data_subjects</size>" as mod_consent #FFF3E0
+        rectangle "Seguridad\n<size:10>users · roles · domains\nuser_domains · user_roles</size>" as mod_security #FFF3E0
+        rectangle "Integridad\n<size:10>agreement_integrity_log\nentity_integrity_log</size>" as mod_integrity #FFF3E0
+        rectangle "Auditoría\n<size:10>audit_log\ntreatment_records</size>" as mod_audit #FFF3E0
+        rectangle "Integridad criptográfica transversal\n<size:10>HASH_SHA256 + PREVIOUS_HASH_SHA256 en agreements · purposes · audit_log · retention_policies\nGENERATE_AGREEMENT_HASH() · TRG_SET_PURPOSE_HASH() · pgcrypto SHA-256</size>" as crypto_note #FFFDE7
+    }
+}
+
+' ══ INTERFACES Y CONEXIONES ══
+
+' Nginx → componentes (enrutamiento)
+nginx -down-> widget   : /consent/*\nHTTPS
+nginx -down-> api      : /api/*\nHTTPS
+nginx -down-> backoffice : /admin/*\nHTTPS · JWT
+
+' Widget ←→ API
+widget -right-> api : REST /consent\nHTTPS
+
+' Backoffice ←→ API
+backoffice -left-> api : REST /admin\nHTTPS · JWT RS256
+
+' API ←→ PostgreSQL
+api -down-> db : JDBC\ninterno · no expuesto
+
+' Nota de seguridad
+note bottom of db
+  RNF.05: seudonimización HMAC-SHA256 + AES-256-GCM
+  RNF.07: BD solo en infraestructura local
+  RNF.08: TLS 1.3 en todas las comunicaciones
+  RNF.09: autenticación JWT RS256
+end note
+
+@enduml

@@ -29,7 +29,8 @@ orchestrator/src/main/java/com/leydata/orchestrator/
 │   ├── SecurityConfig.java           ← SecurityWebFilterChain reactivo, JWKS externo
 │   ├── WebClientConfig.java          ← WebClient con OAuth2 M2M automático
 │   ├── ConsentCacheProperties.java   ← @ConfigurationProperties("leydata.consent")
-│   └── OAuth2ClientConfig.java       ← ReactiveClientRegistrationRepository
+│   ├── OAuth2ClientConfig.java       ← ReactiveClientRegistrationRepository
+│   └── GlobalExceptionHandler.java   ← @RestControllerAdvice: 422/400/proxy de errores del backend
 └── consent/
     ├── ConsentController.java
     ├── ConsentService.java
@@ -74,13 +75,14 @@ Todos los endpoints requieren un JWT válido del sistema cliente externo (CRM/ER
 
 El CRM consulta si un titular tiene consentimiento activo para una finalidad específica. Es el endpoint de mayor volumen: todos los accesos a datos personales deberían pasar por aquí.
 
-**Flujo:**
+**Flujo real (`ConsentService.check()`):**
 1. Busca `consent:{subjectId}:{purposeId}` en Redis
 2. Cache hit → retorna `ConsentCheckResponse` inmediatamente (~1ms)
-3. Cache miss → llama `GET /api/agreements/lifecycle-check?subjectIdentifier=&domainId=` al backend
-4. El backend evalúa el estado del ciclo de vida (evaluación lazy)
-5. Escribe resultado en Redis con TTL `cacheTtlSeconds` (default 900s / 15 min)
-6. Retorna `ConsentCheckResponse`
+3. Cache miss → llama `GET /api/agreements/active?dataSubjectId={subjectId}&templateId={purposeId}` al backend (el parámetro se llama `templateId` en la firma del WebClient pero recibe el `purposeId`)
+4. Si el backend responde 404/vacío → `PENDING`
+5. Si responde con un agreement, mapea su `status` al estado del Orquestador (ver tabla abajo) y arma `legalBasisCode`/`validUntil` a partir del purpose específico dentro del agreement
+6. Escribe resultado en Redis con TTL `cacheTtlSeconds` (300s por defecto — ver nota de variables de entorno)
+7. Retorna `ConsentCheckResponse`
 
 **Respuesta:**
 ```json
@@ -93,20 +95,16 @@ El CRM consulta si un titular tiene consentimiento activo para una finalidad esp
 }
 ```
 
-**Estados posibles:**
+**Estados posibles (mapeo real, `ConsentService.buildEnrichedResponse()`):**
 
-| Estado | Significado |
-|---|---|
-| `ALLOWED` | Consentimiento activo y vigente |
-| `EXPIRED` | Vencido según política de retención de la finalidad (`expiresAt < now`) |
-| `REQUIRES_RECONSENT` | El template tiene una versión nueva con `forceReconsent = true` y el agreement es de una versión anterior |
-| `PENDING` | No existe consentimiento registrado para este titular y finalidad |
+| `agreement.status` (backend) | Estado devuelto | Significado |
+|---|---|---|
+| `ACTIVE` | `ALLOWED` | Consentimiento activo y vigente |
+| `REVOKED` | `REVOKED` | El titular revocó explícitamente |
+| `EXPIRED` | `DENIED` | Vencido según política de retención de la finalidad |
+| (sin agreement / cualquier otro valor) | `PENDING` | No existe consentimiento registrado para este titular y finalidad |
 
-**Lógica de evaluación (en el backend, evaluación lazy):**
-1. Si no existe agreement ACTIVE → `PENDING`
-2. Si `agreement.earliestExpiresAt != null AND earliestExpiresAt < now` → `EXPIRED`
-3. Si `currentTemplate.version > agreement.templateVersion AND currentTemplate.forceReconsent = true` → `REQUIRES_RECONSENT`
-4. Si no → `ALLOWED`
+> **⚠️ Discrepancia código/diseño detectada:** `ConsentService` también tiene un método `checkWithLifecycle()` que llama a `GET /api/agreements/lifecycle-check` y devuelve un modelo de estados distinto (`ALLOWED | EXPIRED | REQUIRES_RECONSENT | PENDING`, con lógica de forzar re-consentimiento por nueva versión de template). Ese método **no está conectado a ningún endpoint del `ConsentController`** — es código muerto. El endpoint real `/consent/check` nunca devuelve `REQUIRES_RECONSENT`. Si el comportamiento de ciclo de vida (reconsentimiento forzado por versión de template) es un requisito de negocio, hace falta conectar `checkWithLifecycle()` al controller; si no, ese método y su DTO (`LifecycleCheckBackendResponse`) pueden eliminarse. Esto es una decisión de código, no de documentación — se deja anotada aquí para que quien la resuelva.
 
 ---
 
@@ -115,30 +113,38 @@ El CRM consulta si un titular tiene consentimiento activo para una finalidad esp
 
 El CRM obtiene los textos legales del template activo para mostrárselos al titular antes de firmar el consentimiento. El `domainId` viene del claim del JWT — el CRM no puede acceder a templates de otros dominios.
 
-**Flujo:**
-1. Llama `GET /api/templates/active/{templateKey}` al backend con `domainId` del JWT
-2. Para cada purpose del template, obtiene la lista vía `GET /api/templates/{id}/purposes`
-3. Construye `TemplateContentResponse` con título, contenido y lista de purposes
+**Flujo real (`ConsentService.getTemplateContent()`):**
+1. Llama `GET /api/templates/resolve?domainId=&templateKey=` al backend (no `GET /api/templates/active/{templateKey}`)
+2. Con el `templateId` resuelto, obtiene la lista de purposes vía `GET /api/templates/{id}/purposes`
+3. Construye `TemplateContentResponse`
 
 **Respuesta:**
 ```json
 {
   "templateId": "uuid",
+  "domainId": "uuid",
   "templateKey": "ONBOARDING_CLIENTE",
-  "title": "Consentimiento de datos personales",
-  "content": "Texto legal completo...",
   "version": 2,
+  "name": null,
+  "title": null,
+  "description": null,
+  "documentId": "uuid",
   "purposes": [
     {
       "purposeId": "uuid",
       "purposeCode": "MARKETING",
       "purposeName": "Envío de comunicaciones comerciales",
-      "legalBasisCode": "ART_12_CONSENTIMIENTO",
-      "required": true
+      "purposeDescription": "...",
+      "purposeShortDescription": "...",
+      "required": true,
+      "revocable": true,
+      "legalBasisCode": "ART_12_CONSENTIMIENTO"
     }
   ]
 }
 ```
+
+> **⚠️ Bug funcional detectado:** `name`, `title` y `description` se construyen como `null` explícito en `ConsentService.getTemplateContent()` (`return new TemplateContentResponse(..., null, null, null, ...)`). El endpoint nunca devuelve el texto legal del template pese a ser su propósito declarado ("obtener textos legales"). Lo único que sí trae contenido real es `documentId`, que el CRM tendría que resolver por su cuenta contra otro endpoint del backend para obtener el texto. Esto es un bug de código, no de documentación — se deja anotado para quien lo resuelva.
 
 ---
 
@@ -159,15 +165,17 @@ El titular firma el consentimiento. El CRM envía las decisiones por finalidad.
 **Body:**
 ```json
 {
-  "subjectIdentifier": "RUT:12345678-9",
+  "subjectId": "RUT:12345678-9",
   "templateKey": "ONBOARDING_CLIENTE",
+  "documentId": null,
   "purposes": [
     { "purposeId": "uuid", "accepted": true },
     { "purposeId": "uuid2", "accepted": false }
-  ],
-  "captureChannel": "WEB"
+  ]
 }
 ```
+
+> Nota: `CaptureConsentRequest` no tiene campo `captureChannel` — el canal se hardcodea como `"ORCHESTRATOR"` en el metadata que el Orquestador envía al backend (`ConsentService.doCapture()`), no viene del request. `documentId` es opcional (override); si se omite se resuelve automáticamente desde `templateKey`.
 
 ---
 
@@ -185,11 +193,16 @@ Devuelve el estado actual de todas las finalidades consentidas por un titular en
 ```json
 [
   {
+    "subjectIdentifier": "RUT:12345678-9",
+    "domainId": "uuid",
     "agreementId": "uuid",
+    "templateId": "uuid",
     "templateKey": "ONBOARDING_CLIENTE",
+    "templateVersion": 2,
+    "documentId": "uuid",
     "purposes": [
-      { "purposeId": "uuid", "purposeCode": "MARKETING", "purposeName": "Marketing", "accepted": true, "status": "ACTIVE" },
-      { "purposeId": "uuid2", "purposeCode": "ANALYTICS", "purposeName": "Analítica", "accepted": false, "status": "ACTIVE" }
+      { "purposeId": "uuid", "purposeCode": "MARKETING", "purposeName": "Marketing", "accepted": true, "status": "ACTIVE", "expiresAt": "2026-12-31T23:59:59", "acceptedAt": "2026-01-15T10:00:00", "required": false, "revocable": true },
+      { "purposeId": "uuid2", "purposeCode": "ANALYTICS", "purposeName": "Analítica", "accepted": false, "status": "ACTIVE", "expiresAt": null, "acceptedAt": null, "required": false, "revocable": true }
     ]
   }
 ]
@@ -231,11 +244,12 @@ Revoca el agreement completo (todas las finalidades). Equivale a "retirar todo e
 **Body:**
 ```json
 {
-  "agreementId": "uuid-del-agreement",
-  "subjectIdentifier": "RUT:12345678-9",
-  "reason": "TITULAR_SOLICITUD"
+  "subjectId": "RUT:12345678-9",
+  "agreementId": "uuid-del-agreement"
 }
 ```
+
+> Nota: `RevokeConsentRequest` no tiene campo `reason` — no se registra motivo de revocación en este endpoint.
 
 ---
 
@@ -321,7 +335,7 @@ Valor: JSON de `ConsentCheckResponse`:
 }
 ```
 
-TTL default: 900 segundos (15 min). Configurable con `LEYDATA_CONSENT_CACHE_TTL_SECONDS`.
+TTL: 300 segundos (5 min), hardcodeado en `application.yml` (`leydata.consent.cache-ttl-seconds`). No es configurable por variable de entorno actualmente (ver nota en la sección de Variables de entorno).
 
 **Estrategia de invalidación:** nunca se eliminan keys — siempre se sobreescribe el valor. Esto evita split-brain si el listener de revocación del backend llega antes que la escritura del Orquestador. El estado más reciente siempre gana.
 
@@ -338,7 +352,8 @@ TTL default: 900 segundos (15 min). Configurable con `LEYDATA_CONSENT_CACHE_TTL_
 | `REDIS_HOST` | ✅ | — | Host de Redis |
 | `REDIS_PORT` | ❌ | `6379` | Puerto de Redis |
 | `KC_ORCHESTRATOR_CLIENT_ID` | ❌ | `leydata-orchestrator` | Client ID en Keycloak |
-| `LEYDATA_CONSENT_CACHE_TTL_SECONDS` | ❌ | `900` | TTL de keys de consentimiento en segundos |
+
+> **⚠️ `LEYDATA_CONSENT_CACHE_TTL_SECONDS` / `LEYDATA_CONSENT_CACHE_SOFT_TTL_SECONDS` no son configurables hoy.** `application.yml` hardcodea `leydata.consent.cache-ttl-seconds: 300` y `cache-soft-ttl-seconds: 240` sin placeholder `${VAR:...}` — no leen ninguna variable de entorno. El TTL real de las keys de Redis es **300s (5 min)**, no 900s. Además `cacheSoftTtlSeconds` se lee en `ConsentCacheProperties` pero **no se usa en ningún lado** de `ConsentService` — no existe lógica de "refresco anticipado" pese a que el nombre lo sugiere. Es un bug de código (falta el placeholder en `application.yml` y/o falta implementar el soft-TTL), no de documentación.
 
 ---
 

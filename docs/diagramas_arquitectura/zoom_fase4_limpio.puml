@@ -1,0 +1,60 @@
+@startuml zoom_fase4_limpio
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam backgroundColor #FFFFFF
+skinparam sequenceArrowThickness 1.2
+skinparam sequenceGroupBorderThickness 1
+skinparam sequenceLifeLineBorderThickness 1
+
+skinparam participant {
+    BackgroundColor #F8F8F8
+    BorderColor #888888
+    FontSize 12
+}
+
+skinparam sequence {
+    GroupBackgroundColor #F5F5F5
+    GroupBorderColor #AAAAAA
+    GroupHeaderFontSize 12
+    LifeLineBackgroundColor #EEEEEE
+    DividerBackgroundColor #E0E0E0
+}
+
+title Diagrama de Secuencia — Zoom Fase 4\nPersistencia inmutable del acuerdo
+
+note across
+  Zoom del diagrama completo de 6 fases.
+  Las fases anteriores resolvieron la identidad, cargaron el template y capturaron la decisión del titular.
+end note
+
+' ══ PARTICIPANTES ══
+participant "Backend API"   as backend #E8F5E9
+participant "Base de Datos" as db      #FFF9C4
+
+== Fase 4: Persistencia inmutable del acuerdo ==
+
+backend -> backend : Validar base de licitud
+activate backend
+
+backend -> db : Crear acuerdo de consentimiento
+activate db
+
+loop [por cada finalidad del template]
+    backend -> db  : Registrar decisión por finalidad\n(snapshot inmutable)
+    db --> backend : Confirmación
+end
+
+db -> db : Generar hash del acuerdo
+
+db -> db : Encadenar con acuerdo anterior\n(hash previo del titular)
+
+db --> backend : Acuerdo creado y firmado
+deactivate db
+deactivate backend
+
+note across
+  Cada finalidad queda registrada con el estado exacto del momento del consentimiento.
+  El hash encadenado permite detectar cualquier alteración posterior.
+end note
+
+@enduml

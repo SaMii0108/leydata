@@ -53,7 +53,7 @@ services:
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 20
-      AUTH_TYPE: scram-sha-256
+      AUTH_TYPE: md5
     ports:
       - "5435:5432"
     depends_on:

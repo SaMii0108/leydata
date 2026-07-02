@@ -1,0 +1,162 @@
+@startuml diagrama_secuencia_consentimiento
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam backgroundColor #FFFFFF
+skinparam sequenceArrowThickness 1.2
+skinparam sequenceGroupBorderThickness 1
+skinparam sequenceLifeLineBorderThickness 1
+
+skinparam participant {
+    BackgroundColor #F8F8F8
+    BorderColor #888888
+    FontSize 12
+}
+
+skinparam actor {
+    BackgroundColor #FFFFFF
+    BorderColor #888888
+}
+
+skinparam sequence {
+    GroupBackgroundColor #F5F5F5
+    GroupBorderColor #AAAAAA
+    GroupHeaderFontSize 12
+    LifeLineBackgroundColor #EEEEEE
+    DividerBackgroundColor #E0E0E0
+}
+
+title Diagrama de Secuencia — Captura de Consentimiento\nSistema de Consentimiento Ley 21.719
+
+' ══ PARTICIPANTES ══
+actor       "Titular"           as titular
+participant "Frontend\n(React)" as frontend  #E3F2FD
+participant "Backend API\n(Java)" as backend #E8F5E9
+participant "Auth / ID\n(JWT + HMAC)" as auth #EDE7F6
+participant "PostgreSQL\n(BD)"  as db        #FFF9C4
+participant "Integrity\n(SHA-256)" as integrity #FCE4EC
+
+' ══════════════════════════════════════
+' FASE 1 — RESOLUCIÓN DE IDENTIDAD
+' ══════════════════════════════════════
+== Fase 1: Resolución de identidad ==
+
+titular -> frontend : 1. Accede al formulario
+activate frontend
+
+frontend -> backend : 2. GET /consent/form
+activate backend
+
+backend -> auth : 3. Resolver identidad\n(HMAC-SHA256 del identificador)
+activate auth
+
+auth -> db : 4. Buscar / crear DATA_SUBJECT
+activate db
+db --> auth : 5. DATA_SUBJECT_ID
+deactivate db
+
+auth --> backend : 6. Identificador pseudonimizado
+deactivate auth
+
+' ══════════════════════════════════════
+' FASE 2 — CARGA DEL TEMPLATE
+' ══════════════════════════════════════
+== Fase 2: Carga del template activo ==
+
+backend -> db : 7. Consultar template activo + finalidades
+activate db
+
+backend -> db : 8. ¿Existe agreement previo activo?
+
+opt [agreement activo existe]
+    db --> backend : 8b. Retornar agreement existente
+    backend --> frontend : 8c. Sin cambios necesarios
+    frontend --> titular : Sin cambios necesarios
+end
+
+db --> backend : 9. Template + finalidades versionadas
+deactivate db
+
+backend --> frontend : 10. Renderizar formulario
+deactivate backend
+
+frontend --> titular : 11. Formulario con finalidades
+deactivate frontend
+
+' ══════════════════════════════════════
+' FASE 3 — DECISIÓN DEL TITULAR
+' ══════════════════════════════════════
+== Fase 3: Decisión del titular ==
+
+alt [acepta al menos una finalidad]
+    titular -> frontend : 12. Enviar decisiones (acepta/rechaza por finalidad)
+    activate frontend
+    frontend -> backend : 13. POST /consent/submit
+    activate backend
+else [rechaza todas las finalidades]
+    titular -> frontend : 12b. Rechaza todas
+    note right of frontend : Fin del flujo.\nNo se crea agreement.
+end
+
+' ══════════════════════════════════════
+' FASE 4 — PERSISTENCIA INMUTABLE
+' ══════════════════════════════════════
+== Fase 4: Persistencia inmutable del acuerdo ==
+
+backend -> backend : 14. Validar base de licitud\n(TRG_VALIDATE_TEMPLATE_PURPOSE_CONSENT)
+
+backend -> db : 15. INSERT AGREEMENTS\n(IP_ORIGIN, USER_AGENT, TEMPLATE_VERSION,\nDOCUMENT_ID, PREVIOUS_AGREEMENTS_ID)
+activate db
+
+loop [por cada finalidad del template]
+    backend -> db : 16. INSERT AGREEMENTS_PURPOSES\n(snapshot: PURPOSE_CODE, PURPOSE_NAME,\nPURPOSE_HASH, ACCEPTED, LEGAL_BASIS_CODE)
+    db --> backend : 17. Confirmación fila insertada
+end
+
+db -> db : 18. GENERATE_AGREEMENT_HASH()\n(SHA-256 sobre agreement + ordered purpose hashes)
+
+db -> db : 19. UPDATE AGREEMENTS\nSET HASH_SHA256, PREVIOUS_HASH_SHA256\n(encadena con acuerdo anterior del titular)
+
+db --> backend : 20. Agreement_ID + HASH_SHA256 confirmados
+deactivate db
+
+' ══════════════════════════════════════
+' FASE 5 — VERIFICACIÓN DE INTEGRIDAD
+' ══════════════════════════════════════
+== Fase 5: Verificación de integridad ==
+
+backend -> integrity : 21. Verificar integridad (ON_DEMAND)
+activate integrity
+
+integrity -> db : 22. Recalcular hash del acuerdo
+activate db
+db --> integrity : 23. Hash recalculado
+deactivate db
+
+alt [stored_hash == recalculated_hash]
+    integrity -> db : 24a. INSERT AGREEMENT_INTEGRITY_LOG\n(IS_VALID = TRUE)
+    activate db
+    deactivate db
+else [hashes difieren → alerta]
+    integrity -> db : 24b. INSERT AGREEMENT_INTEGRITY_LOG\n(IS_VALID = FALSE, ERROR_DETAIL)
+    activate db
+    deactivate db
+    note right of integrity : Alerta: posible alteración\ndel registro en BD.
+end
+
+integrity --> backend : 25. Resultado verificación
+deactivate integrity
+
+db -> db : 26. TRG → INSERT AUDIT_LOG\n(OLD_DATA / NEW_DATA en JSONB,\nHASH_SHA256, PREVIOUS_HASH_SHA256)
+
+' ══════════════════════════════════════
+' FASE 6 — CONFIRMACIÓN AL TITULAR
+' ══════════════════════════════════════
+== Fase 6: Confirmación ==
+
+backend --> frontend : 27. 200 OK + agreement_id
+deactivate backend
+
+frontend --> titular : 28. Confirmación registrada
+deactivate frontend
+
+@enduml
